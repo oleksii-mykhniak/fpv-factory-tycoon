@@ -24,7 +24,7 @@
 | T2 | Робітник-аватар + його FSM (тап = команда, manual) | `scene/worker.js`, `scene.js`, `main.js` | ✅ 2026-06-20 |
 | T3 | Interaction-driven UI: мінімальний HUD, міні-гра по тапу, заглушка магазину | `ui/`, `main.js` | ✅ 2026-06-20 |
 | T4 | Авто-режим робітника через upgrade-трек | `upgrades.js`, `worker.js` | ✅ 2026-06-20 |
-| M4 | Swap прямокутник↔спрайт + кадри ходьби робітника | `scene.js`, `public/sprites/` | 🔲 |
+| M4 | Swap прямокутник↔спрайт + кадри ходьби робітника | `scene.js`, `public/sprites/` | ✅ 2026-06-20 |
 | M5 | Прибирання 3D-коду + перейменування | `kits.js`, `manifest.test.js`, відаляємо modelCache/blender | 🟡 Частково (3D вже прибрано) |
 
 ---
@@ -54,6 +54,23 @@
 ---
 
 ## Нотатки по під-етапах
+
+### M4 — Shaped sprites + walk animation ✅
+
+**Що зроблено:**
+- `scripts/gen-placeholder-sprites.js` — повністю переписано: RGBA PNG із прозорим фоном + реальні форми: дрон (хрест+мотори+LED), коробка (brown+tape-X), верстак (плашки+текстура), паяльник (ручка+наконечник)
+- `worker_walk.png` (192×48) — 4-frame walk cycle: top-down персонаж (голова, куртка, ноги що чергуються кадр-через-кадр)
+- `manifest.js` — додано запис `worker_walk`
+- `worker.js` — `setupSprite(src)`: будує `SpriteSheet` → `walkAnim`/`idleAnim`, `setMoving(bool, toRight)` перемикає анімацію + `flipHorizontal` для напрямку руху
+- `scene.js` — `worker.setupSprite(getSprite('worker_walk'))` одразу після `createWorker`
+- Fallback незламний: відсутній файл → `null` → no-op → оранжевий прямокутник як і раніше
+
+**Відхилення від плану / рішення:**
+- Art залишається процедурним (план говорив «тимчасово — будь-який PNG») — реальні CC0-спрайти (Kenney) — наступний крок
+- `flipHorizontal` при русі ліворуч/праворуч — через `actor.graphics.flipHorizontal`; для top-down без строгих 4-направлень цього достатньо
+- `Animation.width/height` — read-only в Excalibur; масштаб через `anim.scale = ex.vec(sx, sy)`
+
+---
 
 ### T4 — Авто-режим робітника ✅
 
