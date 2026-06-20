@@ -9,6 +9,7 @@ import {
   calcPrice,
 } from './state/gameState.js'
 import {
+  DELIVERY_DELAY_MS,
   COLD_SOLDER_THRESHOLD, OVERHEAT_CHANCE, SALVAGE_RATE,
   COLD_SOLDER_QUALITY_PENALTY,
   SOLDER_GREEN_HALF,
@@ -18,6 +19,7 @@ import {
 } from './state/config.js'
 import { render } from './ui/domUI.js'
 import { createSolderGame } from './ui/solderGame.js'
+import { initScene, updateScene } from './scene/scene.js'
 
 // ── State init: restore save or start fresh ──────────────
 
@@ -26,12 +28,13 @@ function initState() {
   const saved    = loadGame()
   if (!saved) return { state: defaults, salesLog: [] }
 
-  // Merge: saved values win, but new fields from defaults fill any gaps.
-  const state = {
+  let state = {
     ...defaults,
     ...saved.state,
     upgrades: { ...defaults.upgrades, ...saved.state.upgrades },
   }
+  // Delivery timer ran while the page was closed → deliver immediately on restore.
+  if (state.phase === Phase.ORDERED) state = receiveDelivery(state)
   return { state, salesLog: saved.salesLog }
 }
 
@@ -39,10 +42,32 @@ const loaded   = initState()
 let state      = loaded.state
 const salesLog = loaded.salesLog
 
-let activeGame = null
-let autoTimer  = null
-let warning    = null
+let activeGame    = null
+let autoTimer     = null
+let deliveryTimer = null
+let warning       = null
 const uiRoot   = document.getElementById('ui-root')
+const canvas   = document.getElementById('game-canvas')
+
+// 3D scene — always alive; updateScene() syncs visibility each draw.
+const sceneRefs = initScene(canvas, {
+  onBoxPicked: () => {
+    if (state.phase === Phase.DELIVERY) update(startAssembly(state))
+  },
+})
+
+// ── Delivery timer ───────────────────────────────────────
+
+function clearDeliveryTimer() {
+  if (deliveryTimer !== null) { clearTimeout(deliveryTimer); deliveryTimer = null }
+}
+
+function scheduleDelivery() {
+  deliveryTimer = setTimeout(() => {
+    deliveryTimer = null
+    if (state.phase === Phase.ORDERED) update(receiveDelivery(state))
+  }, DELIVERY_DELAY_MS)
+}
 
 // ── Auto-solder timer ────────────────────────────────────
 
@@ -118,12 +143,16 @@ function draw() {
   if (state.phase === Phase.ASSEMBLY && level === 3 && autoTimer === null) {
     scheduleAutoPoint()
   }
+
+  updateScene(sceneRefs, state.phase)
 }
 
 function update(newState) {
-  if (newState.phase !== Phase.ASSEMBLY) clearAutoTimer()
+  if (newState.phase !== Phase.ORDERED)   clearDeliveryTimer()
+  if (newState.phase !== Phase.ASSEMBLY)  clearAutoTimer()
   state = newState
   saveGame(state, salesLog)
+  if (state.phase === Phase.ORDERED && deliveryTimer === null) scheduleDelivery()
   draw()
 }
 
@@ -131,7 +160,6 @@ function update(newState) {
 
 const handlers = {
   onOrder:   () => update(orderKit(state, 'mini_drone')),
-  onDeliver: () => update(receiveDelivery(state)),
   onStart:   () => update(startAssembly(state)),
   onFinish:  () => update(finishAssembly(state)),
   onAbandon: () => update(abandonBurntDrone(state, SALVAGE_RATE)),

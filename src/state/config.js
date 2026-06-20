@@ -1,3 +1,7 @@
+// ── Delivery ─────────────────────────────────────────────
+// Time from order placement to delivery arrival (ms).
+export const DELIVERY_DELAY_MS = 5000
+
 // ── Economy ──────────────────────────────────────────────
 export const STARTING_MONEY = 120
 

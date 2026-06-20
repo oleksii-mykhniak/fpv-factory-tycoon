@@ -65,7 +65,7 @@ export function render(root, state, handlers, salesLog, warning = null) {
         ` : ''}
 
         ${state.phase === Phase.ORDERED ? `
-          <button class="btn btn--primary" id="btn-deliver">Отримати доставку</button>
+          <div class="delivery-wait">Кур'єр їде до вас…</div>
         ` : ''}
 
         ${state.phase === Phase.DELIVERY ? `
@@ -161,7 +161,6 @@ export function render(root, state, handlers, salesLog, warning = null) {
 
   // Bind events
   root.querySelector('#btn-order')?.addEventListener('click', handlers.onOrder)
-  root.querySelector('#btn-deliver')?.addEventListener('click', handlers.onDeliver)
   root.querySelector('#btn-start')?.addEventListener('click', handlers.onStart)
   root.querySelector('#btn-finish')?.addEventListener('click', handlers.onFinish)
   root.querySelector('#btn-sell')?.addEventListener('click', handlers.onSell)

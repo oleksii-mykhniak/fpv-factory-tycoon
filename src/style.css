@@ -19,6 +19,7 @@ body {
   height: 100%;
   display: block;
   background: #1a1a2e;
+  touch-action: none; /* prevent scroll hijack; Babylon handles touch itself */
 }
 
 #ui-root {
@@ -303,7 +304,8 @@ body {
   letter-spacing: 0.04em;
 }
 
-.auto-notice {
+.auto-notice,
+.delivery-wait {
   font-size: 0.9rem;
   color: #aaa;
   text-align: center;
@@ -369,4 +371,20 @@ body {
 
 .btn--danger:hover {
   background: #9a3a3a;
+}
+
+/* === Mobile layout: bottom-sheet panel, 3D scene visible above === */
+@media (max-width: 640px) {
+  #ui-root {
+    align-items: flex-end;
+    justify-content: center;
+  }
+
+  .panel {
+    width: 100%;
+    max-width: 100%;
+    max-height: 58dvh;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -6px 32px rgba(0, 0, 0, 0.6);
+  }
 }
