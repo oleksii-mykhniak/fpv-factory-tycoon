@@ -14,11 +14,12 @@ import {
   COLD_SOLDER_QUALITY_PENALTY,
 } from './state/config.js'
 import { levelData, SOLDER_MODE } from './state/upgrades.js'
-import { render } from './ui/domUI.js'
-import { createSolderGame } from './ui/solderGame.js'
+import { createHUD } from './ui/hud.js'
+import { createShopModal } from './ui/shopModal.js'
+import { createSolderModal } from './ui/solderModal.js'
 import { initScene, updateScene } from './scene/scene.js'
 
-// ── State init: restore save or start fresh ──────────────
+// ── State init ────────────────────────────────────────────
 
 function initState() {
   const defaults = createState()
@@ -30,7 +31,6 @@ function initState() {
     ...saved.state,
     upgrades: { ...defaults.upgrades, ...saved.state.upgrades },
   }
-  // Delivery timer ran while the page was closed → deliver immediately on restore.
   if (state.phase === Phase.ORDERED) state = receiveDelivery(state)
   return { state, salesLog: saved.salesLog }
 }
@@ -39,42 +39,41 @@ const loaded   = initState()
 let state      = loaded.state
 const salesLog = loaded.salesLog
 
-let activeGame    = null
 let autoTimer     = null
 let deliveryTimer = null
 let warning       = null
-const uiRoot   = document.getElementById('ui-root')
-const canvas   = document.getElementById('game-canvas')
 
-// ── Loading overlay ──────────────────────────────────────
+const uiRoot = document.getElementById('ui-root')
+const canvas = document.getElementById('game-canvas')
+
+// ── UI components ─────────────────────────────────────────
+
+const hud = createHUD(uiRoot, {
+  onShopOpen: () => shopModal.open(state),
+})
+
+const shopModal = createShopModal(uiRoot, {
+  onOrder:      (kitId) => update(orderKit(state, kitId)),
+  onBuyUpgrade: (id)    => update(buyUpgrade(state, id)),
+})
+
+const solderModal = createSolderModal(uiRoot, {
+  onSolderResult: handleSolderResult,
+  onAbandon:      () => update(abandonBurntDrone(state, SALVAGE_RATE)),
+})
+
+// ── Loading overlay ───────────────────────────────────────
 
 const loadOverlay = document.getElementById('load-overlay')
 const loadBar     = document.getElementById('load-bar')
 
 function hideOverlay() {
   loadOverlay.classList.add('hidden')
-  // Remove from DOM after fade so it doesn't block touches.
   loadOverlay.addEventListener('transitionend', () => loadOverlay.remove(), { once: true })
 }
 
-// 2D scene — initScene is async (loads sprites before first draw).
-// sceneRefs starts null; draw() calls updateScene only when ready.
-let sceneRefs = null
-initScene(canvas, {
-  onBoxPicked: () => {
-    if (state.phase === Phase.DELIVERY) update(startAssembly(state))
-  },
-  onSolderRequested: () => { /* T3: open mini-game modal here */ },
-  onLoadProgress: (loaded, total) => {
-    if (loadBar) loadBar.style.width = `${Math.round((loaded / total) * 100)}%`
-  },
-}).then(refs => {
-  sceneRefs = refs
-  hideOverlay()
-  draw()
-})
-
 // ── Debug FPS counter ─────────────────────────────────────
+
 if (import.meta.env.MODE === 'debug') {
   const fpsEl = Object.assign(document.createElement('div'), {
     id: 'fps-counter',
@@ -88,7 +87,53 @@ if (import.meta.env.MODE === 'debug') {
   }, 500)
 }
 
-// ── Delivery timer ───────────────────────────────────────
+// ── Scene ─────────────────────────────────────────────────
+
+let sceneRefs = null
+initScene(canvas, {
+  onBoxPicked: () => {
+    if (state.phase === Phase.DELIVERY) update(startAssembly(state))
+  },
+  onSolderRequested: () => {
+    const level  = state.upgrades.solderingLevel
+    const { mode } = levelData('soldering', level)
+
+    if (mode === SOLDER_MODE.MANUAL) {
+      solderModal.open(state)
+      return
+    }
+    if (mode === SOLDER_MODE.SEMI) {
+      const kit  = KIT_TYPES[state.activeKit]
+      const data = levelData('soldering', level)
+      let s = state
+      while (s.solderPoints.length < kit.solderPointCount) {
+        const q = data.qualityMin + Math.random() * (data.qualityMax - data.qualityMin)
+        s = recordSolderPoint(s, q)
+      }
+      const next = finishAssembly(s)
+      sceneRefs?.worker?.notifySolderDone()
+      update(next)
+      return
+    }
+    // AUTO: solder fires via scheduleAutoPoint — bench tap is no-op
+  },
+  onSellRequested: () => {
+    if (state.phase !== Phase.READY) return
+    const kit   = KIT_TYPES[state.activeKit]
+    const price = calcPrice(kit.basePrice, state.assemblyQuality, state.upgrades.priceMultiplier)
+    salesLog.push({ quality: state.assemblyQuality, price })
+    update(sell(state))
+  },
+  onLoadProgress: (loaded, total) => {
+    if (loadBar) loadBar.style.width = `${Math.round((loaded / total) * 100)}%`
+  },
+}).then(refs => {
+  sceneRefs = refs
+  hideOverlay()
+  draw()
+})
+
+// ── Timers ────────────────────────────────────────────────
 
 function clearDeliveryTimer() {
   if (deliveryTimer !== null) { clearTimeout(deliveryTimer); deliveryTimer = null }
@@ -101,8 +146,6 @@ function scheduleDelivery() {
   }, DELIVERY_DELAY_MS)
 }
 
-// ── Auto-solder timer ────────────────────────────────────
-
 function clearAutoTimer() {
   if (autoTimer !== null) { clearTimeout(autoTimer); autoTimer = null }
 }
@@ -113,23 +156,25 @@ function scheduleAutoPoint() {
     autoTimer = null
     if (state.phase !== Phase.ASSEMBLY) return
 
-    const q = data.qualityMin + Math.random() * (data.qualityMax - data.qualityMin)
+    const q   = data.qualityMin + Math.random() * (data.qualityMax - data.qualityMin)
     const kit = KIT_TYPES[state.activeKit]
-    state = recordSolderPoint(state, q)
-    if (state.solderPoints.length >= kit.solderPointCount) state = finishAssembly(state)
-    draw()
-    if (state.phase === Phase.ASSEMBLY) scheduleAutoPoint()
+    const s   = recordSolderPoint(state, q)
+    if (s.solderPoints.length >= kit.solderPointCount) {
+      const next = finishAssembly(s)
+      sceneRefs?.worker?.notifySolderDone()
+      update(next)
+    } else {
+      update(s)
+      scheduleAutoPoint()
+    }
   }, data.pointDelayMs)
 }
 
-// ── Solder params per level (manual mini-game) ───────────
+// ── Solder result handler ─────────────────────────────────
 
 function solderParams(level) {
-  const data = levelData('soldering', level)
-  return { greenHalf: data.greenHalf, overheatChance: data.overheatChance }
+  return { overheatChance: levelData('soldering', level).overheatChance }
 }
-
-// ── Failure classification ───────────────────────────────
 
 function canAffordAfterBurn() {
   const kit = KIT_TYPES[state.activeKit]
@@ -142,38 +187,34 @@ function handleSolderResult(quality) {
     if (Math.random() < overheatChance && canAffordAfterBurn()) {
       update(burnKit(state))
     } else {
-      // Cold solder: apply quality cap penalty and retry the same point.
       warning = 'cold'
       update(applyColdSolderPenalty(state, COLD_SOLDER_QUALITY_PENALTY))
     }
     return
   }
-  update(recordSolderPoint(state, quality))
+  const newState = recordSolderPoint(state, quality)
+  const kit      = KIT_TYPES[newState.activeKit]
+  if (newState.solderPoints.length >= kit.solderPointCount) {
+    const finished = finishAssembly(newState)
+    sceneRefs?.worker?.notifySolderDone()
+    update(finished)
+  } else {
+    update(newState)
+  }
 }
 
-// ── Draw ─────────────────────────────────────────────────
+// ── Draw ──────────────────────────────────────────────────
 
 function draw() {
-  if (activeGame) { activeGame.destroy(); activeGame = null }
-
-  render(uiRoot, state, handlers, salesLog, warning)
+  hud.update(state)
+  shopModal.update(state)
+  solderModal.update(state, warning)
   warning = null
 
   const level = state.upgrades.solderingLevel
   const mode  = levelData('soldering', level).mode
 
-  // Manual levels: spin up the reaction mini-game
-  const sgHost = uiRoot.querySelector('#sg-host')
-  if (sgHost && mode === SOLDER_MODE.MANUAL) {
-    const { greenHalf } = solderParams(level)
-    activeGame = createSolderGame(sgHost, {
-      pointIndex: state.solderPoints.length,
-      greenHalf,
-      onResult: handleSolderResult,
-    })
-  }
-
-  // Auto level: start the background solder loop if not already running
+  // Auto mode: start background solder loop if not running
   if (state.phase === Phase.ASSEMBLY && mode === SOLDER_MODE.AUTO && autoTimer === null) {
     scheduleAutoPoint()
   }
@@ -182,38 +223,12 @@ function draw() {
 }
 
 function update(newState) {
-  if (newState.phase !== Phase.ORDERED)   clearDeliveryTimer()
-  if (newState.phase !== Phase.ASSEMBLY)  clearAutoTimer()
+  if (newState.phase !== Phase.ORDERED)  clearDeliveryTimer()
+  if (newState.phase !== Phase.ASSEMBLY) clearAutoTimer()
   state = newState
   saveGame(state, salesLog)
   if (state.phase === Phase.ORDERED && deliveryTimer === null) scheduleDelivery()
   draw()
-}
-
-// ── Handlers ─────────────────────────────────────────────
-
-const handlers = {
-  onOrder:   () => update(orderKit(state, 'mini_drone')),
-  onStart:   () => update(startAssembly(state)),
-  onFinish:  () => update(finishAssembly(state)),
-  onAbandon: () => update(abandonBurntDrone(state, SALVAGE_RATE)),
-  onSell: () => {
-    const kit   = KIT_TYPES[state.activeKit]
-    const price = calcPrice(kit.basePrice, state.assemblyQuality, state.upgrades.priceMultiplier)
-    salesLog.push({ quality: state.assemblyQuality, price })
-    update(sell(state))
-  },
-  onSemiAuto: () => {
-    const kit  = KIT_TYPES[state.activeKit]
-    const data = levelData('soldering', state.upgrades.solderingLevel)
-    let s = state
-    while (s.solderPoints.length < kit.solderPointCount) {
-      const q = data.qualityMin + Math.random() * (data.qualityMax - data.qualityMin)
-      s = recordSolderPoint(s, q)
-    }
-    update(finishAssembly(s))
-  },
-  onBuyUpgrade: (id) => update(buyUpgrade(state, id)),
 }
 
 draw()

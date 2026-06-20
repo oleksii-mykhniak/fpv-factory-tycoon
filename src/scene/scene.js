@@ -5,9 +5,9 @@ import { createWorker } from './worker.js'
 
 const BG = ex.Color.fromHex('#0e0e18')
 
-// Room uses top 67% of canvas — DOM panel starts at ~68%, giving ~8px clearance.
-// T3 removes the DOM panel → ROOM_H can grow to 0.90+.
-const ROOM_H = 0.67
+// T3: DOM panel removed → full canvas available. Room uses top 88%.
+// Bottom 12% stays dark (visual breathing room below room walls).
+const ROOM_H = 0.88
 
 // Tracks the current game phase so pointer handlers can gate commands.
 let currentPhase = Phase.IDLE
@@ -76,7 +76,7 @@ function applySprite(actor, key) {
 
 // ── Scene entry points ────────────────────────────────────
 
-export async function initScene(canvas, { onBoxPicked, onSolderRequested, onLoadProgress }) {
+export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSellRequested, onLoadProgress }) {
   const engine = new ex.Engine({
     canvasElement: canvas,
     backgroundColor: BG,
@@ -154,9 +154,10 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onLoad
     if (currentPhase === Phase.DELIVERY) worker.commandDeliver()
   })
 
-  // Tap workbench → worker solders (gated to ASSEMBLY phase)
+  // Tap workbench → solder (ASSEMBLY) or sell (READY)
   workbench.on('pointerup', () => {
     if (currentPhase === Phase.ASSEMBLY) worker.commandSolder()
+    if (currentPhase === Phase.READY)    onSellRequested?.()
   })
 
   return {

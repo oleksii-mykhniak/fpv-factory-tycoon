@@ -22,7 +22,7 @@
 | M2 | Лоадер + spriteCache з graceful fallback | `loader.js`, `spriteCache.js`, `manifest.js` | ✅ 2026-06-20 |
 | T1 | Top-down перекомпонування кімнати (без персонажа) | `scene.js` (top-down діорама) | ✅ 2026-06-20 |
 | T2 | Робітник-аватар + його FSM (тап = команда, manual) | `scene/worker.js`, `scene.js`, `main.js` | ✅ 2026-06-20 |
-| T3 | Interaction-driven UI: мінімальний HUD, міні-гра по тапу, заглушка магазину | `ui/`, `main.js` | 🔲 |
+| T3 | Interaction-driven UI: мінімальний HUD, міні-гра по тапу, заглушка магазину | `ui/`, `main.js` | ✅ 2026-06-20 |
 | T4 | Авто-режим робітника через upgrade-трек | `upgrades.js`, `worker.js` | 🔲 |
 | M4 | Swap прямокутник↔спрайт + кадри ходьби робітника | `scene.js`, `public/sprites/` | 🔲 |
 | M5 | Прибирання 3D-коду + перейменування | `kits.js`, `manifest.test.js`, відаляємо modelCache/blender | 🟡 Частково (3D вже прибрано) |
@@ -54,6 +54,26 @@
 ---
 
 ## Нотатки по під-етапах
+
+### T3 — Interaction-driven UI ✅
+
+**Що зроблено:**
+- Прибрано постійну DOM-панель (`domUI.render` більше не викликається)
+- `ROOM_H` 0.67 → 0.88 — кімната займає весь canvas (DOM-панель видалено)
+- `ui/hud.js` — мінімальний HUD: гроші (зелений, top-right) + кнопка «Магазин» (top-left); підказки фаз внизу
+- `ui/shopModal.js` — bottom-sheet модалка: список кітів з кнопками «Замовити», секція апгрейдів; закривається після замовлення
+- `ui/solderModal.js` — bottom-sheet модалка паяння: прогрес-крапки, step-label, mini-game per point, показує burn-результат + abandon-кнопку; auto-close на READY/IDLE
+- `scene.js`: `onSellRequested` — тап по столу в READY → продаж (diegetic); `initScene` отримує новий callback
+- `main.js`: перейшов на нові UI-модулі; `onSolderRequested` — гілкує manual/semi/auto; `handleSolderResult` auto-finish коли всі точки зроблено; `onSellRequested` продає через тап столу
+- Cold solder fix: mini-game перестворюється при `warning === 'cold'` (попередній екземпляр `running=false`)
+- 70 тестів зелені
+
+**Відхилення від плану / рішення:**
+- `solderModal.open(state)` одразу рендерить вміст через `update(state, null)` — щоб вміст з'явився без `draw()` з main
+- Cold solder: умова `done !== lastGameIdx || warning === 'cold'` — гарантує перестворення mini-game після провалу без просуву індексу
+- READY-продаж diegetic (тап столу), а не кнопка HUD — відповідає Spirit DoD «повний цикл через тапи по світу + HUD»
+
+---
 
 ### T2 — Робітник-аватар + FSM ✅
 
