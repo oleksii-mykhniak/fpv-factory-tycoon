@@ -36,6 +36,11 @@ export const SPRITES = Object.freeze({
     url: '/sprites/soldering_iron.png',
     anchors: {},
   },
+
+  worker_walk: {
+    url: '/sprites/worker_walk.png',
+    anchors: {},
+  },
 })
 
 // ── Helpers ───────────────────────────────────────────────

@@ -16,6 +16,9 @@ import {
 //   onBoxPicked    — called after worker delivers box to bench
 //   onSolderRequested — called when worker starts soldering (T3 opens mini-game)
 
+const FRAME_W = 48  // worker_walk.png frame dimensions
+const FRAME_H = 48
+
 export function createWorker(scene, {
   W, RH,
   doorPos, benchPos, idlePos,
@@ -33,6 +36,16 @@ export function createWorker(scene, {
   })
   scene.add(actor)
 
+  // Animation handles — set by setupSprite() once spritesheet is loaded.
+  let walkAnim = null
+  let idleAnim = null
+
+  function setMoving(moving, toRight = false) {
+    if (!walkAnim) return
+    actor.graphics.flipHorizontal = toRight
+    actor.graphics.use(moving ? 'walk' : 'idle')
+  }
+
   function dispatch(event) {
     ws = workerTransition(ws, event)
   }
@@ -41,14 +54,20 @@ export function createWorker(scene, {
   function commandDeliver() {
     if (!workerCanDeliver(ws)) return
     dispatch('startDelivery')
+    // Door is to the left of idle pos — walk left
+    const goingLeft = doorPos.x < actor.pos.x
+    setMoving(true, !goingLeft)
     actor.actions.clearActions()
     actor.actions
       .moveTo(doorPos, 150)
       .callMethod(() => {
         dispatch('arrivedAtDoor')
+        setMoving(false)
         // Brief pause while picking up
         actor.actions.delay(250).callMethod(() => {
           dispatch('pickedUp')
+          // Walk toward bench (roughly center — going right from door)
+          setMoving(true, benchPos.x > doorPos.x)
           // Box and worker travel to workbench together
           box.actions.clearActions()
           box.actions.moveTo(tablePos, 180)
@@ -56,6 +75,7 @@ export function createWorker(scene, {
             .moveTo(benchPos, 180)
             .callMethod(() => {
               dispatch('arrivedAtBench')
+              setMoving(false)
               onBoxPicked()
             })
         })
@@ -78,9 +98,31 @@ export function createWorker(scene, {
   function reset() {
     if (ws.state === WS.IDLE) return
     actor.actions.clearActions()
-    actor.actions.moveTo(idlePos, 150)
+    setMoving(true, idlePos.x > actor.pos.x)
+    actor.actions.moveTo(idlePos, 150).callMethod(() => setMoving(false))
     ws = createWorkerState()
   }
 
-  return { actor, commandDeliver, commandSolder, notifySolderDone, reset, getState: () => ws.state }
+  // Called from scene.js once sprites are loaded. Sets up walk/idle animations.
+  function setupSprite(src) {
+    if (!src) return
+    const sheet = ex.SpriteSheet.fromImageSource({
+      image: src,
+      grid: { rows: 1, columns: 4, spriteWidth: FRAME_W, spriteHeight: FRAME_H },
+    })
+    const sx = actor.width  / FRAME_W
+    const sy = actor.height / FRAME_H
+
+    walkAnim = ex.Animation.fromSpriteSheet(sheet, [0, 1, 2, 3], 120)
+    walkAnim.scale = ex.vec(sx, sy)
+
+    idleAnim = ex.Animation.fromSpriteSheet(sheet, [0], 1000)
+    idleAnim.scale = ex.vec(sx, sy)
+
+    actor.graphics.add('walk', walkAnim)
+    actor.graphics.add('idle', idleAnim)
+    actor.graphics.use('idle')
+  }
+
+  return { actor, commandDeliver, commandSolder, notifySolderDone, reset, setupSprite, getState: () => ws.state }
 }

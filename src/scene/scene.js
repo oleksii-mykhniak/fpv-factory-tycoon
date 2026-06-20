@@ -148,6 +148,7 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
     onBoxPicked,
     onSolderRequested,
   })
+  worker.setupSprite(getSprite('worker_walk'))
 
   // Tap box → worker fetches (gated to DELIVERY phase)
   box.on('pointerup', () => {
