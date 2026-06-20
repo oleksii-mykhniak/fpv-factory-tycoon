@@ -34,9 +34,156 @@ body {
   pointer-events: auto;
 }
 
-.placeholder {
-  color: #555;
-  font-size: 1.2rem;
-  text-align: center;
-  user-select: none;
+/* === Game Panel === */
+.panel {
+  background: #1e1e2e;
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 24px;
+  width: min(400px, 95vw);
+  max-height: 90dvh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
+
+.panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.panel__title {
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: #a0a0c0;
+  letter-spacing: 0.05em;
+}
+
+.panel__balance {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #7de07d;
+}
+
+.panel__phase {
+  font-size: 0.85rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* === Solder progress dots === */
+.solder-track {
+  display: flex;
+  gap: 8px;
+}
+
+.solder-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #333;
+  border: 2px solid #555;
+  transition: background 0.15s;
+}
+
+.solder-dot--done {
+  background: #e07d3a;
+  border-color: #e07d3a;
+}
+
+/* === Sell preview === */
+.sell-preview {
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
+.sell-preview strong {
+  color: #eee;
+}
+
+/* === Buttons === */
+.panel__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  font-family: monospace;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: opacity 0.1s, transform 0.1s;
+  text-align: left;
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: #2d5a8e;
+  color: #dde;
+}
+
+.btn--primary:not(:disabled):hover {
+  background: #376ab0;
+}
+
+.btn--success {
+  background: #2d7a4e;
+  color: #dfd;
+}
+
+.btn--success:not(:disabled):hover {
+  background: #38965f;
+}
+
+.warn {
+  font-size: 0.8rem;
+  color: #e07a7a;
+}
+
+/* === Sales log === */
+.log {
+  border-top: 1px solid #2a2a3a;
+  padding-top: 12px;
+}
+
+.log__title {
+  font-size: 0.75rem;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.log__list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.log__list li {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: #999;
+}
+
+.log__price { color: #7de07d; }
+
+.quality--high { color: #7de07d; }
+.quality--mid  { color: #e0c97d; }
+.quality--low  { color: #e07a7a; }
