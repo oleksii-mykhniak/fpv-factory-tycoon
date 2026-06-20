@@ -1,4 +1,5 @@
 import './style.css'
+import { saveGame, loadGame } from './save/storage.js'
 import {
   createState, Phase, KIT_TYPES,
   orderKit, receiveDelivery, startAssembly,
@@ -18,11 +19,29 @@ import {
 import { render } from './ui/domUI.js'
 import { createSolderGame } from './ui/solderGame.js'
 
-let state      = createState()
+// ── State init: restore save or start fresh ──────────────
+
+function initState() {
+  const defaults = createState()
+  const saved    = loadGame()
+  if (!saved) return { state: defaults, salesLog: [] }
+
+  // Merge: saved values win, but new fields from defaults fill any gaps.
+  const state = {
+    ...defaults,
+    ...saved.state,
+    upgrades: { ...defaults.upgrades, ...saved.state.upgrades },
+  }
+  return { state, salesLog: saved.salesLog }
+}
+
+const loaded   = initState()
+let state      = loaded.state
+const salesLog = loaded.salesLog
+
 let activeGame = null
 let autoTimer  = null
-let warning    = null   // 'cold' — shown above mini-game after a cold-solder miss
-const salesLog = []
+let warning    = null
 const uiRoot   = document.getElementById('ui-root')
 
 // ── Auto-solder timer ────────────────────────────────────
@@ -104,6 +123,7 @@ function draw() {
 function update(newState) {
   if (newState.phase !== Phase.ASSEMBLY) clearAutoTimer()
   state = newState
+  saveGame(state, salesLog)
   draw()
 }
 
