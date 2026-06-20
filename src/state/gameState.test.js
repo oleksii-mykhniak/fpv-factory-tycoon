@@ -3,6 +3,7 @@ import {
   createState, Phase, KIT_TYPES,
   orderKit, receiveDelivery, startAssembly,
   recordSolderPoint, finishAssembly, sell,
+  burnKit, abandonBurntDrone,
   calcPrice, calcQuality,
 } from './gameState.js'
 
@@ -182,5 +183,87 @@ describe('незмінність стану (immutability)', () => {
     const next = recordSolderPoint(s, 0.5)
     expect(prev).toHaveLength(0)
     expect(next.solderPoints).toHaveLength(1)
+  })
+})
+
+describe('Поломка: гілка перегріву', () => {
+  function inAssembly(pointsDone = 0) {
+    let s = createState()
+    s = orderKit(s, 'mini_drone')
+    s = receiveDelivery(s)
+    s = startAssembly(s)
+    for (let i = 0; i < pointsDone; i++) s = recordSolderPoint(s, 0.9)
+    return s
+  }
+
+  it('burnKit: ASSEMBLY → BURNT, гроші не змінюються', () => {
+    const s = inAssembly(1)
+    const burnt = burnKit(s)
+    expect(burnt.phase).toBe(Phase.BURNT)
+    expect(burnt.money).toBe(s.money)
+  })
+
+  it('burnKit зберігає вже запаяні точки в стані', () => {
+    const s = inAssembly(2)
+    expect(burnKit(s).solderPoints).toHaveLength(2)
+  })
+
+  it('abandonBurntDrone без salvage: гроші не змінюються', () => {
+    let s = inAssembly(1)
+    s = burnKit(s)
+    const moneyBeforeAbandon = s.money
+    s = abandonBurntDrone(s, 0)
+    expect(s.phase).toBe(Phase.IDLE)
+    expect(s.money).toBe(moneyBeforeAbandon)
+    expect(s.activeKit).toBeNull()
+    expect(s.solderPoints).toHaveLength(0)
+    expect(s.assemblyQuality).toBeNull()
+  })
+
+  it('abandonBurntDrone з salvageRate=0.40 повертає 40% вартості комплекту', () => {
+    let s = createState()
+    s = orderKit(s, 'mini_drone')
+    s = receiveDelivery(s)
+    s = startAssembly(s)
+    s = burnKit(s)
+    const moneyAfterBurn = s.money // 120 - 72 = 48
+    s = abandonBurntDrone(s, 0.40)
+    // 48 + 72 * 0.40 = 48 + 28.80 = 76.80
+    expect(s.money).toBeCloseTo(moneyAfterBurn + KIT_TYPES.mini_drone.cost * 0.40)
+    expect(s.money).toBeGreaterThanOrEqual(KIT_TYPES.mini_drone.cost) // can reorder
+  })
+
+  it('abandonBurntDrone: загальні втрати = вартість × (1 - salvageRate)', () => {
+    let s = createState()
+    const startMoney = s.money
+    s = orderKit(s, 'mini_drone')
+    s = receiveDelivery(s)
+    s = startAssembly(s)
+    s = burnKit(s)
+    s = abandonBurntDrone(s, 0.40)
+    const expectedLoss = KIT_TYPES.mini_drone.cost * 0.60
+    expect(s.money).toBeCloseTo(startMoney - expectedLoss)
+  })
+
+  it('burnKit поза ASSEMBLY — помилка', () => {
+    expect(() => burnKit(createState())).toThrow('burnKit')
+  })
+
+  it('abandonBurntDrone поза BURNT — помилка', () => {
+    expect(() => abandonBurntDrone(createState())).toThrow('abandonBurntDrone')
+  })
+
+  it('після abandonBurntDrone можна почати новий цикл', () => {
+    let s = createState()
+    // дати достатньо грошей щоб дозволити другий замовлення
+    s = { ...s, money: 200 }
+    s = orderKit(s, 'mini_drone')
+    s = receiveDelivery(s)
+    s = startAssembly(s)
+    s = burnKit(s)
+    s = abandonBurntDrone(s)
+    // новий цикл
+    s = orderKit(s, 'mini_drone')
+    expect(s.phase).toBe(Phase.ORDERED)
   })
 })

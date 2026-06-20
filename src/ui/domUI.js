@@ -1,4 +1,5 @@
 import { Phase, KIT_TYPES, calcPrice } from '../state/gameState.js'
+import { SALVAGE_RATE } from '../state/config.js'
 
 const PHASE_LABEL = {
   [Phase.IDLE]:     'Очікування',
@@ -6,9 +7,10 @@ const PHASE_LABEL = {
   [Phase.DELIVERY]: 'Посилка біля дверей!',
   [Phase.ASSEMBLY]: 'Збірка',
   [Phase.READY]:    'Готово до продажу',
+  [Phase.BURNT]:    'Перегрів деталі!',
 }
 
-export function render(root, state, handlers, salesLog) {
+export function render(root, state, handlers, salesLog, warning = null) {
   const kit     = state.activeKit ? KIT_TYPES[state.activeKit] : null
   const done    = state.solderPoints.length
   const total   = kit?.solderPointCount ?? 0
@@ -63,9 +65,16 @@ export function render(root, state, handlers, salesLog) {
           </button>
         ` : ''}
 
-        ${state.phase === Phase.ASSEMBLY && !canFinish ? `
-          <div id="sg-host"></div>
-        ` : ''}
+        ${state.phase === Phase.ASSEMBLY && !canFinish ? (() => {
+          const stepLabel = kit?.assemblySteps?.[done] ?? `Крок ${done + 1}`
+          return `
+            ${warning === 'cold' ? `
+              <div class="warning-cold">Холодна пайка — переробляємо точку</div>
+            ` : ''}
+            <div class="assembly-step">${stepLabel}</div>
+            <div id="sg-host" data-step="${done}"></div>
+          `
+        })() : ''}
 
         ${state.phase === Phase.ASSEMBLY && canFinish ? `
           <button class="btn btn--success" id="btn-finish">
@@ -78,6 +87,22 @@ export function render(root, state, handlers, salesLog) {
             Продати за $${sellPrice?.toFixed(2) ?? '?'}
           </button>
         ` : ''}
+
+        ${state.phase === Phase.BURNT ? (() => {
+          const kit     = KIT_TYPES[state.activeKit]
+          const salvage = (kit.cost * SALVAGE_RATE).toFixed(2)
+          const loss    = (kit.cost * (1 - SALVAGE_RATE)).toFixed(2)
+          return `
+            <div class="burnt-notice">
+              <p>Деталь спалено. Комплект зіпсовано.</p>
+              <p class="burnt-notice__loss">Втрачено: $${loss}</p>
+              <p class="burnt-notice__salvage">Утиль: +$${salvage}</p>
+            </div>
+            <button class="btn btn--danger" id="btn-abandon">
+              Починаємо заново (+$${salvage} утилю)
+            </button>
+          `
+        })() : ''}
       </div>
 
       ${salesLog.length > 0 ? `
@@ -99,6 +124,7 @@ export function render(root, state, handlers, salesLog) {
     </div>
   `
 
+  root.querySelector('#btn-abandon')?.addEventListener('click', handlers.onAbandon)
   root.querySelector('#btn-order')?.addEventListener('click', handlers.onOrder)
   root.querySelector('#btn-deliver')?.addEventListener('click', handlers.onDeliver)
   root.querySelector('#btn-start')?.addEventListener('click', handlers.onStart)

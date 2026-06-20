@@ -188,6 +188,12 @@ body {
 .quality--mid  { color: #e0c97d; }
 .quality--low  { color: #e07a7a; }
 
+.assembly-step {
+  font-size: 1rem;
+  color: #ccc;
+  font-weight: bold;
+}
+
 /* === Solder mini-game === */
 .sg {
   display: flex;
@@ -240,4 +246,45 @@ body {
   font-weight: bold;
   text-align: center;
   margin-top: 2px;
+}
+
+/* === Failure states === */
+.warning-cold {
+  font-size: 0.85rem;
+  color: #e0c97d;
+  background: rgba(224, 201, 125, 0.1);
+  border: 1px solid rgba(224, 201, 125, 0.3);
+  border-radius: 6px;
+  padding: 8px 12px;
+  text-align: center;
+}
+
+.burnt-notice {
+  background: rgba(224, 80, 80, 0.1);
+  border: 1px solid rgba(224, 80, 80, 0.3);
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9rem;
+  color: #ccc;
+}
+
+.burnt-notice__loss {
+  color: #e07a7a;
+  font-weight: bold;
+}
+
+.burnt-notice__salvage {
+  color: #7de07d;
+}
+
+.btn--danger {
+  background: #7a2d2d;
+  color: #fdd;
+}
+
+.btn--danger:hover {
+  background: #9a3a3a;
 }

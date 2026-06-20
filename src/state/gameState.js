@@ -4,6 +4,7 @@ export const Phase = Object.freeze({
   DELIVERY: 'DELIVERY',
   ASSEMBLY: 'ASSEMBLY',
   READY: 'READY',
+  BURNT: 'BURNT',   // part overheated during assembly
 })
 
 export const KIT_TYPES = Object.freeze({
@@ -13,6 +14,12 @@ export const KIT_TYPES = Object.freeze({
     cost: 72,
     basePrice: 95,
     solderPointCount: 4,
+    assemblySteps: [
+      'Збираю раму',
+      'Встановлюю мотори',
+      'Паяю регулятори (ESC)',
+      'Прошиваю польотний контролер',
+    ],
   },
 })
 
@@ -99,6 +106,30 @@ export function finishAssembly(state) {
     ...state,
     phase: Phase.READY,
     assemblyQuality: calcQuality(state.solderPoints),
+  }
+}
+
+// Triggered when a solder miss escalates to part overheating.
+export function burnKit(state) {
+  if (state.phase !== Phase.ASSEMBLY)
+    throw new Error(`burnKit: недозволено у фазі ${state.phase}`)
+  return { ...state, phase: Phase.BURNT }
+}
+
+// Player acknowledges the loss and resets to IDLE.
+// salvageRate [0..1] — fraction of kit cost returned as scrap (default 0 = no refund).
+export function abandonBurntDrone(state, salvageRate = 0) {
+  if (state.phase !== Phase.BURNT)
+    throw new Error(`abandonBurntDrone: недозволено у фазі ${state.phase}`)
+  const kit     = KIT_TYPES[state.activeKit]
+  const salvage = kit.cost * salvageRate
+  return {
+    ...state,
+    money: state.money + salvage,
+    phase: Phase.IDLE,
+    activeKit: null,
+    solderPoints: [],
+    assemblyQuality: null,
   }
 }
 
