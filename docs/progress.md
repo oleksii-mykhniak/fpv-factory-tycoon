@@ -23,7 +23,7 @@
 | T1 | Top-down перекомпонування кімнати (без персонажа) | `scene.js` (top-down діорама) | ✅ 2026-06-20 |
 | T2 | Робітник-аватар + його FSM (тап = команда, manual) | `scene/worker.js`, `scene.js`, `main.js` | ✅ 2026-06-20 |
 | T3 | Interaction-driven UI: мінімальний HUD, міні-гра по тапу, заглушка магазину | `ui/`, `main.js` | ✅ 2026-06-20 |
-| T4 | Авто-режим робітника через upgrade-трек | `upgrades.js`, `worker.js` | 🔲 |
+| T4 | Авто-режим робітника через upgrade-трек | `upgrades.js`, `worker.js` | ✅ 2026-06-20 |
 | M4 | Swap прямокутник↔спрайт + кадри ходьби робітника | `scene.js`, `public/sprites/` | 🔲 |
 | M5 | Прибирання 3D-коду + перейменування | `kits.js`, `manifest.test.js`, відаляємо modelCache/blender | 🟡 Частково (3D вже прибрано) |
 
@@ -54,6 +54,22 @@
 ---
 
 ## Нотатки по під-етапах
+
+### T4 — Авто-режим робітника ✅
+
+**Що зроблено:**
+- `WORKER_UPGRADE_COSTS = [250, 500]` у `config.js`
+- `WORKER_MODE` (manual/semi/auto) + трек `worker` у `upgrades.js` — дзеркалить soldering-трек
+- `workerLevel: 0` у `createState().upgrades` (`gameState.js`) — зберігається в save автоматично
+- `main.js`: у `draw()` два авто-тригери: `DELIVERY` + semi/auto → `commandDeliver()`; `ASSEMBLY` + auto → `commandSolder()`. Обидва виклики ідемпотентні (FSM-гарди в worker.js)
+- Shop modal підхоплює новий трек автоматично (ітерує `UPGRADE_TRACKS`)
+- 8 нових тестів для worker-треку; 78 тестів зелені
+
+**Відхилення від плану / рішення:**
+- Нова FSM не потрібна — auto-режим реалізовано через виклик тих самих `commandDeliver`/`commandSolder` з `draw()`, гілкуванням за `workerMode`
+- Жоден новий таймер не додано — авто-тригер вбудований у вже існуючий `draw()` цикл
+
+---
 
 ### T3 — Interaction-driven UI ✅
 
