@@ -25,7 +25,7 @@
 | T3 | Interaction-driven UI: мінімальний HUD, міні-гра по тапу, заглушка магазину | `ui/`, `main.js` | ✅ 2026-06-20 |
 | T4 | Авто-режим робітника через upgrade-трек | `upgrades.js`, `worker.js` | ✅ 2026-06-20 |
 | M4 | Swap прямокутник↔спрайт + кадри ходьби робітника | `scene.js`, `public/sprites/` | ✅ 2026-06-20 |
-| M5 | Прибирання 3D-коду + перейменування | `kits.js`, `manifest.test.js`, відаляємо modelCache/blender | 🟡 Частково (3D вже прибрано) |
+| M5 | Прибирання 3D-коду + перейменування | `kits.js`, `manifest.test.js`, відаляємо modelCache/blender | ✅ 2026-06-20 |
 
 ---
 
@@ -54,6 +54,20 @@
 ---
 
 ## Нотатки по під-етапах
+
+### M5 — 3D cleanup ✅
+
+**Що зроблено:**
+- Підтверджено: `package.json`/`package-lock.json` — нуль Babylon; `kits.js` вже має `spriteKey`; `modelCache.js`, `public/models/`, `src/assets/models/` — вже видалено раніше (M1/M2)
+- `src/assets/CREDITS.md` — прибрано посилання на Blender/models, оновлено під 2D-спрайти
+- Нуль файлів `.glb`/`.blend` у репо (підтверджено `find`)
+- 78 тестів зелені, `npm run build` проходить
+
+**Відхилення від плану / рішення:**
+- Більшість прибирання було зроблено поступово в M1–M2; M5 зафіксував фінальний стан і очистив CREDITS
+- Android-білд (`npm run android`) потребує підключеного пристрою — гейт для валідації на залізі
+
+---
 
 ### M4 — Shaped sprites + walk animation ✅
 
