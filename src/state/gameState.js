@@ -1,18 +1,24 @@
+import {
+  STARTING_MONEY,
+  PRICE_BASE_COEFF, PRICE_QUALITY_COEFF,
+  SOLDERING_UPGRADE_COSTS, SOLDERING_MAX_LEVEL,
+} from './config.js'
+
 export const Phase = Object.freeze({
-  IDLE: 'IDLE',
-  ORDERED: 'ORDERED',
+  IDLE:     'IDLE',
+  ORDERED:  'ORDERED',
   DELIVERY: 'DELIVERY',
   ASSEMBLY: 'ASSEMBLY',
-  READY: 'READY',
-  BURNT: 'BURNT',   // part overheated during assembly
+  READY:    'READY',
+  BURNT:    'BURNT',   // part overheated during assembly
 })
 
 export const KIT_TYPES = Object.freeze({
   mini_drone: {
-    id: 'mini_drone',
-    name: 'Міні-дрон',
-    cost: 72,
-    basePrice: 95,
+    id:               'mini_drone',
+    name:             'Міні-дрон',
+    cost:             72,
+    basePrice:        95,
     solderPointCount: 4,
     assemblySteps: [
       'Збираю раму',
@@ -25,20 +31,22 @@ export const KIT_TYPES = Object.freeze({
 
 export function createState() {
   return {
-    money: 120,
-    phase: Phase.IDLE,
-    activeKit: null,        // KIT_TYPES key
-    solderPoints: [],       // quality values [0..1] per solder point
-    assemblyQuality: null,  // final quality, set by finishAssembly
+    money:              STARTING_MONEY,
+    phase:              Phase.IDLE,
+    activeKit:          null,
+    solderPoints:       [],
+    assemblyQuality:    null,
+    coldSolderPenalty:  0,   // accumulated quality cap reduction from cold-solder misses
     upgrades: {
-      priceMultiplier: 1,   // grows with per-type upgrade tree (Axis B)
+      priceMultiplier: 1,
+      solderingLevel:  0,   // 0=manual, 1=better iron, 2=semi-auto, 3=auto
     },
   }
 }
 
-// ціна = база × (0.6 + 0.7 × якість) × множник_прокачки
+// ціна = база × (BASE_COEFF + QUALITY_COEFF × якість) × множник
 export function calcPrice(basePrice, quality, priceMultiplier = 1) {
-  return basePrice * (0.6 + 0.7 * quality) * priceMultiplier
+  return basePrice * (PRICE_BASE_COEFF + PRICE_QUALITY_COEFF * quality) * priceMultiplier
 }
 
 export function calcQuality(solderPoints) {
@@ -46,7 +54,7 @@ export function calcQuality(solderPoints) {
   return solderPoints.reduce((sum, q) => sum + q, 0) / solderPoints.length
 }
 
-// --- FSM transitions ---
+// ── FSM transitions ───────────────────────────────────────
 
 export function orderKit(state, kitTypeId) {
   if (state.phase !== Phase.IDLE)
@@ -56,14 +64,14 @@ export function orderKit(state, kitTypeId) {
     throw new Error(`orderKit: невідомий тип комплекту "${kitTypeId}"`)
   if (state.money < kit.cost)
     throw new Error(`orderKit: недостатньо грошей (є ${state.money}, потрібно ${kit.cost})`)
-
   return {
     ...state,
-    money: state.money - kit.cost,
-    phase: Phase.ORDERED,
-    activeKit: kitTypeId,
-    solderPoints: [],
-    assemblyQuality: null,
+    money:             state.money - kit.cost,
+    phase:             Phase.ORDERED,
+    activeKit:         kitTypeId,
+    solderPoints:      [],
+    assemblyQuality:   null,
+    coldSolderPenalty: 0,
   }
 }
 
@@ -84,40 +92,40 @@ export function recordSolderPoint(state, quality) {
     throw new Error(`recordSolderPoint: недозволено у фазі ${state.phase}`)
   if (quality < 0 || quality > 1)
     throw new Error(`recordSolderPoint: якість має бути від 0 до 1, отримано ${quality}`)
-
   const kit = KIT_TYPES[state.activeKit]
   if (state.solderPoints.length >= kit.solderPointCount)
     throw new Error(`recordSolderPoint: всі ${kit.solderPointCount} точки вже запаяно`)
-
   return { ...state, solderPoints: [...state.solderPoints, quality] }
+}
+
+export function applyColdSolderPenalty(state, amount) {
+  if (state.phase !== Phase.ASSEMBLY)
+    throw new Error(`applyColdSolderPenalty: недозволено у фазі ${state.phase}`)
+  return {
+    ...state,
+    coldSolderPenalty: Math.min(1, state.coldSolderPenalty + amount),
+  }
 }
 
 export function finishAssembly(state) {
   if (state.phase !== Phase.ASSEMBLY)
     throw new Error(`finishAssembly: недозволено у фазі ${state.phase}`)
-
   const kit = KIT_TYPES[state.activeKit]
   if (state.solderPoints.length < kit.solderPointCount)
     throw new Error(
       `finishAssembly: потрібно ${kit.solderPointCount} точок, є ${state.solderPoints.length}`
     )
-
-  return {
-    ...state,
-    phase: Phase.READY,
-    assemblyQuality: calcQuality(state.solderPoints),
-  }
+  const raw     = calcQuality(state.solderPoints)
+  const quality = Math.max(0, raw - state.coldSolderPenalty)
+  return { ...state, phase: Phase.READY, assemblyQuality: quality }
 }
 
-// Triggered when a solder miss escalates to part overheating.
 export function burnKit(state) {
   if (state.phase !== Phase.ASSEMBLY)
     throw new Error(`burnKit: недозволено у фазі ${state.phase}`)
   return { ...state, phase: Phase.BURNT }
 }
 
-// Player acknowledges the loss and resets to IDLE.
-// salvageRate [0..1] — fraction of kit cost returned as scrap (default 0 = no refund).
 export function abandonBurntDrone(state, salvageRate = 0) {
   if (state.phase !== Phase.BURNT)
     throw new Error(`abandonBurntDrone: недозволено у фазі ${state.phase}`)
@@ -125,27 +133,43 @@ export function abandonBurntDrone(state, salvageRate = 0) {
   const salvage = kit.cost * salvageRate
   return {
     ...state,
-    money: state.money + salvage,
-    phase: Phase.IDLE,
-    activeKit: null,
-    solderPoints: [],
-    assemblyQuality: null,
+    money:             state.money + salvage,
+    phase:             Phase.IDLE,
+    activeKit:         null,
+    solderPoints:      [],
+    assemblyQuality:   null,
+    coldSolderPenalty: 0,
   }
 }
 
 export function sell(state) {
   if (state.phase !== Phase.READY)
     throw new Error(`sell: недозволено у фазі ${state.phase}`)
-
-  const kit = KIT_TYPES[state.activeKit]
+  const kit   = KIT_TYPES[state.activeKit]
   const price = calcPrice(kit.basePrice, state.assemblyQuality, state.upgrades.priceMultiplier)
-
   return {
     ...state,
-    money: state.money + price,
-    phase: Phase.IDLE,
-    activeKit: null,
-    solderPoints: [],
-    assemblyQuality: null,
+    money:             state.money + price,
+    phase:             Phase.IDLE,
+    activeKit:         null,
+    solderPoints:      [],
+    assemblyQuality:   null,
+    coldSolderPenalty: 0,
+  }
+}
+
+export function buyUpgrade(state, upgradeId) {
+  if (upgradeId !== 'soldering')
+    throw new Error(`buyUpgrade: невідомий апгрейд "${upgradeId}"`)
+  const level = state.upgrades.solderingLevel
+  if (level >= SOLDERING_MAX_LEVEL)
+    throw new Error('buyUpgrade: паяльник вже на максимальному рівні')
+  const cost = SOLDERING_UPGRADE_COSTS[level]
+  if (state.money < cost)
+    throw new Error(`buyUpgrade: недостатньо грошей (є ${state.money}, потрібно ${cost})`)
+  return {
+    ...state,
+    money:    state.money - cost,
+    upgrades: { ...state.upgrades, solderingLevel: level + 1 },
   }
 }

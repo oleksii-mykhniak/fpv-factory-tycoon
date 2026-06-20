@@ -3,9 +3,11 @@ import {
   createState, Phase, KIT_TYPES,
   orderKit, receiveDelivery, startAssembly,
   recordSolderPoint, finishAssembly, sell,
-  burnKit, abandonBurntDrone,
+  burnKit, abandonBurntDrone, buyUpgrade,
+  applyColdSolderPenalty,
   calcPrice, calcQuality,
 } from './gameState.js'
+import { SOLDERING_UPGRADE_COSTS, SOLDERING_MAX_LEVEL } from './config.js'
 
 // helper: runs through the full cycle with given solder quality values
 function runCycle(qualityValues) {
@@ -255,15 +257,113 @@ describe('Поломка: гілка перегріву', () => {
 
   it('після abandonBurntDrone можна почати новий цикл', () => {
     let s = createState()
-    // дати достатньо грошей щоб дозволити другий замовлення
     s = { ...s, money: 200 }
     s = orderKit(s, 'mini_drone')
     s = receiveDelivery(s)
     s = startAssembly(s)
     s = burnKit(s)
     s = abandonBurntDrone(s)
-    // новий цикл
     s = orderKit(s, 'mini_drone')
     expect(s.phase).toBe(Phase.ORDERED)
+  })
+})
+
+describe('Холодна пайка: штраф якості', () => {
+  function inAssembly() {
+    let s = createState()
+    s = orderKit(s, 'mini_drone')
+    s = receiveDelivery(s)
+    s = startAssembly(s)
+    return s
+  }
+
+  it('applyColdSolderPenalty збільшує штраф', () => {
+    const s = applyColdSolderPenalty(inAssembly(), 0.15)
+    expect(s.coldSolderPenalty).toBeCloseTo(0.15)
+    expect(s.phase).toBe(Phase.ASSEMBLY)   // фаза не змінюється
+    expect(s.solderPoints).toHaveLength(0) // точка не записана
+  })
+
+  it('штраф накопичується при кількох промахах', () => {
+    let s = inAssembly()
+    s = applyColdSolderPenalty(s, 0.15)
+    s = applyColdSolderPenalty(s, 0.15)
+    expect(s.coldSolderPenalty).toBeCloseTo(0.30)
+  })
+
+  it('штраф не перевищує 1', () => {
+    let s = inAssembly()
+    for (let i = 0; i < 10; i++) s = applyColdSolderPenalty(s, 0.15)
+    expect(s.coldSolderPenalty).toBe(1)
+  })
+
+  it('finishAssembly враховує штраф у фінальній якості', () => {
+    let s = inAssembly()
+    s = applyColdSolderPenalty(s, 0.15)
+    // запаяти всі 4 точки ідеально
+    for (let i = 0; i < 4; i++) s = recordSolderPoint(s, 1.0)
+    s = finishAssembly(s)
+    // quality = 1.0 - 0.15 = 0.85
+    expect(s.assemblyQuality).toBeCloseTo(0.85)
+  })
+
+  it('finishAssembly якість не нижче 0', () => {
+    let s = inAssembly()
+    for (let i = 0; i < 10; i++) s = applyColdSolderPenalty(s, 0.15)
+    for (let i = 0; i < 4; i++) s = recordSolderPoint(s, 0.5)
+    s = finishAssembly(s)
+    expect(s.assemblyQuality).toBe(0)
+  })
+
+  it('штраф скидається після sell', () => {
+    let s = { ...createState(), money: 999 }
+    s = orderKit(s, 'mini_drone')
+    s = receiveDelivery(s)
+    s = startAssembly(s)
+    s = applyColdSolderPenalty(s, 0.15)
+    for (let i = 0; i < 4; i++) s = recordSolderPoint(s, 1.0)
+    s = finishAssembly(s)
+    s = sell(s)
+    expect(s.coldSolderPenalty).toBe(0)
+  })
+})
+
+describe('Апгрейди: buyUpgrade', () => {
+  function richState() {
+    return { ...createState(), money: 9999 }
+  }
+
+  it('рівень 0 → 1: гроші зменшуються, solderingLevel зростає', () => {
+    const s = buyUpgrade(richState(), 'soldering')
+    expect(s.upgrades.solderingLevel).toBe(1)
+    expect(s.money).toBe(9999 - SOLDERING_UPGRADE_COSTS[0])
+  })
+
+  it('можна прокачати до максимального рівня', () => {
+    let s = richState()
+    for (let i = 0; i < SOLDERING_MAX_LEVEL; i++) s = buyUpgrade(s, 'soldering')
+    expect(s.upgrades.solderingLevel).toBe(SOLDERING_MAX_LEVEL)
+  })
+
+  it('вище максимуму — помилка', () => {
+    let s = richState()
+    for (let i = 0; i < SOLDERING_MAX_LEVEL; i++) s = buyUpgrade(s, 'soldering')
+    expect(() => buyUpgrade(s, 'soldering')).toThrow('максимальному рівні')
+  })
+
+  it('недостатньо грошей — помилка', () => {
+    const broke = { ...createState(), money: 10 }
+    expect(() => buyUpgrade(broke, 'soldering')).toThrow('недостатньо грошей')
+  })
+
+  it('невідомий апгрейд — помилка', () => {
+    expect(() => buyUpgrade(richState(), 'unknown')).toThrow('невідомий апгрейд')
+  })
+
+  it('buyUpgrade не мутує стан', () => {
+    const s = richState()
+    const before = s.upgrades.solderingLevel
+    buyUpgrade(s, 'soldering')
+    expect(s.upgrades.solderingLevel).toBe(before)
   })
 })

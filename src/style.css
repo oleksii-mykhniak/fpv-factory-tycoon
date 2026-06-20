@@ -94,6 +94,10 @@ body {
   border-color: #e07d3a;
 }
 
+.solder-dot--high { background: #7de07d; border-color: #7de07d; }
+.solder-dot--mid  { background: #e0c97d; border-color: #e0c97d; }
+.solder-dot--low  { background: #e07a7a; border-color: #e07a7a; }
+
 /* === Sell preview === */
 .sell-preview {
   font-size: 0.9rem;
@@ -248,7 +252,70 @@ body {
   margin-top: 2px;
 }
 
-/* === Failure states === */
+/* === Upgrade shop === */
+.upgrades {
+  border-top: 1px solid #2a2a3a;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.upgrades__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.upgrades__title {
+  font-size: 0.75rem;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.upgrades__current {
+  font-size: 0.85rem;
+  color: #aaa;
+}
+
+.btn--upgrade {
+  background: #2a2a3e;
+  color: #aac;
+  border: 1px solid #444;
+  padding: 8px 14px;
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+.btn--upgrade:not(:disabled):hover { background: #34345a; }
+.btn--upgrade:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.upgrade-effect-hint {
+  font-size: 0.75rem;
+  color: #666;
+}
+
+/* === Assembly level indicators === */
+.iron-badge {
+  font-size: 0.75rem;
+  color: #7de07d;
+  letter-spacing: 0.04em;
+}
+
+.auto-notice {
+  font-size: 0.9rem;
+  color: #aaa;
+  text-align: center;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* === Cold solder warning === */
 .warning-cold {
   font-size: 0.85rem;
   color: #e0c97d;
@@ -256,8 +323,23 @@ body {
   border: 1px solid rgba(224, 201, 125, 0.3);
   border-radius: 6px;
   padding: 8px 12px;
-  text-align: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
+
+.warning-cold__penalty {
+  font-weight: bold;
+  color: #e07a7a;
+}
+
+.penalty-hint {
+  font-size: 0.8rem;
+  color: #e07a7a;
+  text-align: right;
+}
+
+/* === Failure states === */
 
 .burnt-notice {
   background: rgba(224, 80, 80, 0.1);

@@ -1,16 +1,11 @@
-const BASE_PERIOD_MS = 1600 // one full oscillation at point 0
-const SPEED_FACTOR   = 0.88 // each subsequent point is 12% faster
+import { SOLDER_BASE_PERIOD_MS, SOLDER_SPEED_FACTOR } from '../state/config.js'
 
-// Green zone half-width as fraction of track [0..1].
-// Exported so upgrade system (1.5) can widen it.
-export const DEFAULT_GREEN_HALF = 0.15
-
-export function createSolderGame(host, { pointIndex, greenHalf = DEFAULT_GREEN_HALF, onResult }) {
-  const period = BASE_PERIOD_MS * Math.pow(SPEED_FACTOR, pointIndex)
+export function createSolderGame(host, { pointIndex, greenHalf, onResult }) {
+  const period = SOLDER_BASE_PERIOD_MS * Math.pow(SOLDER_SPEED_FACTOR, pointIndex)
 
   let running   = true
   let startTime = null
-  let pos       = 0.5 // current needle position [0..1]
+  let pos       = 0.5
 
   host.innerHTML = `
     <div class="sg">
@@ -43,13 +38,12 @@ export function createSolderGame(host, { pointIndex, greenHalf = DEFAULT_GREEN_H
     running = false
 
     const quality = calcQuality(pos, greenHalf)
-
-    needle.style.background   = qualityColor(quality)
-    needle.style.width        = '6px'
-    track.style.cursor        = 'default'
+    needle.style.background = qualityColor(quality)
+    needle.style.width      = '6px'
+    track.style.cursor      = 'default'
 
     const fb = document.createElement('p')
-    fb.className  = 'sg__feedback'
+    fb.className   = 'sg__feedback'
     fb.textContent = feedbackText(quality)
     fb.style.color = qualityColor(quality)
     host.querySelector('.sg').appendChild(fb)
@@ -58,7 +52,7 @@ export function createSolderGame(host, { pointIndex, greenHalf = DEFAULT_GREEN_H
   }
 
   track.addEventListener('click', handleTap)
-  // spacebar support for desktop
+
   function onKey(e) {
     if (e.code === 'Space') { e.preventDefault(); handleTap() }
   }
@@ -74,16 +68,12 @@ export function createSolderGame(host, { pointIndex, greenHalf = DEFAULT_GREEN_H
 
 function calcQuality(pos, greenHalf) {
   const dist = Math.abs(pos - 0.5)
-  if (dist <= greenHalf) {
-    // 1.0 at center → 0.6 at green-zone edge
-    return 1 - (dist / greenHalf) * 0.4
-  }
-  // 0.6 at green edge → 0 at track edge
+  if (dist <= greenHalf) return 1 - (dist / greenHalf) * 0.4
   return Math.max(0, 0.6 * (1 - (dist - greenHalf) / (0.5 - greenHalf)))
 }
 
 function qualityColor(q) {
-  if (q >= 0.7) return '#7de07d'
+  if (q >= 0.7)  return '#7de07d'
   if (q >= 0.35) return '#e0c97d'
   return '#e07a7a'
 }

@@ -1,5 +1,5 @@
 import { Phase, KIT_TYPES, calcPrice } from '../state/gameState.js'
-import { SALVAGE_RATE } from '../state/config.js'
+import { SALVAGE_RATE, SOLDERING_UPGRADE_COSTS, SOLDERING_MAX_LEVEL } from '../state/config.js'
 
 const PHASE_LABEL = {
   [Phase.IDLE]:     'Очікування',
@@ -10,11 +10,19 @@ const PHASE_LABEL = {
   [Phase.BURNT]:    'Перегрів деталі!',
 }
 
+const SOLDERING_LEVELS = [
+  { name: 'Ручний паяльник',   effect: 'Базова механіка' },
+  { name: 'Кращий паяльник',   effect: 'Ширша зона +47%, перегрів −60%' },
+  { name: 'Напівавтомат',      effect: '1 тап — вся збірка, якість 65–85%' },
+  { name: 'Автопаяльник',      effect: 'Паяє сам, якість 55–75%, без участі' },
+]
+
 export function render(root, state, handlers, salesLog, warning = null) {
-  const kit     = state.activeKit ? KIT_TYPES[state.activeKit] : null
-  const done    = state.solderPoints.length
-  const total   = kit?.solderPointCount ?? 0
+  const kit      = state.activeKit ? KIT_TYPES[state.activeKit] : null
+  const done     = state.solderPoints.length
+  const total    = kit?.solderPointCount ?? 0
   const canFinish = done === total && total > 0
+  const level    = state.upgrades.solderingLevel
 
   const sellPrice = state.assemblyQuality !== null && kit
     ? calcPrice(kit.basePrice, state.assemblyQuality, state.upgrades.priceMultiplier)
@@ -30,11 +38,13 @@ export function render(root, state, handlers, salesLog, warning = null) {
 
       <div class="panel__phase">${PHASE_LABEL[state.phase]}</div>
 
-      ${state.phase === Phase.ASSEMBLY ? `
+      ${(state.phase === Phase.ASSEMBLY || state.phase === Phase.READY) && total > 0 ? `
         <div class="solder-track">
-          ${Array.from({ length: total }, (_, i) => `
-            <div class="solder-dot ${i < done ? 'solder-dot--done' : ''}"></div>
-          `).join('')}
+          ${Array.from({ length: total }, (_, i) => {
+            const q = state.solderPoints[i]
+            const cls = q !== undefined ? `solder-dot--${dotQuality(q)}` : ''
+            return `<div class="solder-dot ${cls}"></div>`
+          }).join('')}
         </div>
       ` : ''}
 
@@ -44,6 +54,7 @@ export function render(root, state, handlers, salesLog, warning = null) {
       ` : ''}
 
       <div class="panel__actions">
+
         ${state.phase === Phase.IDLE ? `
           <button class="btn btn--primary" id="btn-order"
             ${state.money < KIT_TYPES.mini_drone.cost ? 'disabled' : ''}>
@@ -54,9 +65,7 @@ export function render(root, state, handlers, salesLog, warning = null) {
         ` : ''}
 
         ${state.phase === Phase.ORDERED ? `
-          <button class="btn btn--primary" id="btn-deliver">
-            Отримати доставку
-          </button>
+          <button class="btn btn--primary" id="btn-deliver">Отримати доставку</button>
         ` : ''}
 
         ${state.phase === Phase.DELIVERY ? `
@@ -67,19 +76,42 @@ export function render(root, state, handlers, salesLog, warning = null) {
 
         ${state.phase === Phase.ASSEMBLY && !canFinish ? (() => {
           const stepLabel = kit?.assemblySteps?.[done] ?? `Крок ${done + 1}`
+
+          if (level >= 3) {
+            // Auto-solder: player just watches
+            return `
+              <div class="assembly-step">${stepLabel}</div>
+              <div class="auto-notice">Автопаяльник працює…</div>
+            `
+          }
+          if (level === 2) {
+            // Semi-auto: one tap
+            return `
+              <button class="btn btn--primary" id="btn-semi-auto">
+                Зібрати (напівавтомат)
+              </button>
+              <p class="upgrade-effect-hint">Якість: ${Math.round(65)}–${Math.round(85)}%</p>
+            `
+          }
+          // Level 0-1: mini-game
+          const penalty = state.coldSolderPenalty
           return `
             ${warning === 'cold' ? `
-              <div class="warning-cold">Холодна пайка — переробляємо точку</div>
+              <div class="warning-cold">
+                Холодна пайка — переробляємо точку
+                <span class="warning-cold__penalty">−${Math.round(penalty * 100)}% до макс. якості</span>
+              </div>
+            ` : penalty > 0 ? `
+              <div class="penalty-hint">Штраф якості: −${Math.round(penalty * 100)}%</div>
             ` : ''}
             <div class="assembly-step">${stepLabel}</div>
+            ${level === 1 ? '<div class="iron-badge">Кращий паяльник</div>' : ''}
             <div id="sg-host" data-step="${done}"></div>
           `
         })() : ''}
 
         ${state.phase === Phase.ASSEMBLY && canFinish ? `
-          <button class="btn btn--success" id="btn-finish">
-            Завершити збірку
-          </button>
+          <button class="btn btn--success" id="btn-finish">Завершити збірку</button>
         ` : ''}
 
         ${state.phase === Phase.READY ? `
@@ -89,9 +121,9 @@ export function render(root, state, handlers, salesLog, warning = null) {
         ` : ''}
 
         ${state.phase === Phase.BURNT ? (() => {
-          const kit     = KIT_TYPES[state.activeKit]
-          const salvage = (kit.cost * SALVAGE_RATE).toFixed(2)
-          const loss    = (kit.cost * (1 - SALVAGE_RATE)).toFixed(2)
+          const burnKit  = KIT_TYPES[state.activeKit]
+          const salvage  = (burnKit.cost * SALVAGE_RATE).toFixed(2)
+          const loss     = (burnKit.cost * (1 - SALVAGE_RATE)).toFixed(2)
           return `
             <div class="burnt-notice">
               <p>Деталь спалено. Комплект зіпсовано.</p>
@@ -103,7 +135,10 @@ export function render(root, state, handlers, salesLog, warning = null) {
             </button>
           `
         })() : ''}
+
       </div>
+
+      ${renderUpgrades(state)}
 
       ${salesLog.length > 0 ? `
         <div class="log">
@@ -124,16 +159,60 @@ export function render(root, state, handlers, salesLog, warning = null) {
     </div>
   `
 
-  root.querySelector('#btn-abandon')?.addEventListener('click', handlers.onAbandon)
+  // Bind events
   root.querySelector('#btn-order')?.addEventListener('click', handlers.onOrder)
   root.querySelector('#btn-deliver')?.addEventListener('click', handlers.onDeliver)
   root.querySelector('#btn-start')?.addEventListener('click', handlers.onStart)
   root.querySelector('#btn-finish')?.addEventListener('click', handlers.onFinish)
   root.querySelector('#btn-sell')?.addEventListener('click', handlers.onSell)
+  root.querySelector('#btn-abandon')?.addEventListener('click', handlers.onAbandon)
+  root.querySelector('#btn-semi-auto')?.addEventListener('click', handlers.onSemiAuto)
+  root.querySelector('#btn-upgrade-soldering')?.addEventListener('click',
+    () => handlers.onBuyUpgrade('soldering'))
+}
+
+function renderUpgrades(state) {
+  const level    = state.upgrades.solderingLevel
+  const inIdle   = state.phase === Phase.IDLE
+  const nextInfo = level < SOLDERING_MAX_LEVEL ? SOLDERING_LEVELS[level + 1] : null
+  const nextCost = level < SOLDERING_MAX_LEVEL ? SOLDERING_UPGRADE_COSTS[level] : null
+  const canBuy   = nextCost !== null && inIdle && state.money >= nextCost
+
+  const kitCost      = KIT_TYPES.mini_drone.cost
+  const afterPurchase = nextCost !== null ? state.money - nextCost : null
+  const willBeStuck  = afterPurchase !== null && afterPurchase < kitCost
+
+  return `
+    <div class="upgrades">
+      <div class="upgrades__header">
+        <span class="upgrades__title">Паяльник</span>
+        <span class="upgrades__current">${SOLDERING_LEVELS[level].name}</span>
+      </div>
+      ${nextInfo ? `
+        <button class="btn btn--upgrade" id="btn-upgrade-soldering"
+          ${canBuy ? '' : 'disabled'}>
+          → ${nextInfo.name} — $${nextCost}
+        </button>
+        <p class="upgrade-effect-hint">${nextInfo.effect}</p>
+        ${canBuy && willBeStuck ? `
+          <p class="warn">Після купівлі залишиться $${afterPurchase.toFixed(2)} — не вистачить на комплект ($${kitCost})</p>
+        ` : ''}
+        ${!inIdle ? '<p class="upgrade-effect-hint">Купівля доступна між циклами</p>' : ''}
+      ` : `
+        <p class="upgrade-effect-hint">Максимальний рівень</p>
+      `}
+    </div>
+  `
 }
 
 function qualityClass(q) {
   if (q >= 0.8) return 'high'
   if (q >= 0.5) return 'mid'
+  return 'low'
+}
+
+function dotQuality(q) {
+  if (q >= 0.7)  return 'high'
+  if (q >= 0.35) return 'mid'
   return 'low'
 }

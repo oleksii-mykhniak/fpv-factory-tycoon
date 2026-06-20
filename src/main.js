@@ -3,61 +3,111 @@ import {
   createState, Phase, KIT_TYPES,
   orderKit, receiveDelivery, startAssembly,
   recordSolderPoint, finishAssembly, sell,
-  burnKit, abandonBurntDrone,
+  burnKit, abandonBurntDrone, buyUpgrade,
+  applyColdSolderPenalty,
   calcPrice,
 } from './state/gameState.js'
-import { COLD_SOLDER_THRESHOLD, OVERHEAT_CHANCE, SALVAGE_RATE } from './state/config.js'
+import {
+  COLD_SOLDER_THRESHOLD, OVERHEAT_CHANCE, SALVAGE_RATE,
+  COLD_SOLDER_QUALITY_PENALTY,
+  SOLDER_GREEN_HALF,
+  BETTER_IRON_GREEN_HALF, BETTER_IRON_OVERHEAT_CHANCE,
+  SEMIAUTO_QUALITY_MIN, SEMIAUTO_QUALITY_MAX,
+  AUTO_QUALITY_MIN, AUTO_QUALITY_MAX, AUTO_POINT_DELAY_MS,
+} from './state/config.js'
 import { render } from './ui/domUI.js'
 import { createSolderGame } from './ui/solderGame.js'
 
 let state      = createState()
 let activeGame = null
-let warning    = null   // 'cold' | null — shown above mini-game after a cold-solder miss
+let autoTimer  = null
+let warning    = null   // 'cold' — shown above mini-game after a cold-solder miss
 const salesLog = []
 const uiRoot   = document.getElementById('ui-root')
 
-function draw() {
-  if (activeGame) {
-    activeGame.destroy()
-    activeGame = null
+// ── Auto-solder timer ────────────────────────────────────
+
+function clearAutoTimer() {
+  if (autoTimer !== null) { clearTimeout(autoTimer); autoTimer = null }
+}
+
+function scheduleAutoPoint() {
+  autoTimer = setTimeout(() => {
+    autoTimer = null
+    if (state.phase !== Phase.ASSEMBLY) return
+
+    const q = AUTO_QUALITY_MIN + Math.random() * (AUTO_QUALITY_MAX - AUTO_QUALITY_MIN)
+    const kit = KIT_TYPES[state.activeKit]
+    state = recordSolderPoint(state, q)
+    if (state.solderPoints.length >= kit.solderPointCount) state = finishAssembly(state)
+    draw()
+    if (state.phase === Phase.ASSEMBLY) scheduleAutoPoint()
+  }, AUTO_POINT_DELAY_MS)
+}
+
+// ── Solder params per level ──────────────────────────────
+
+function solderParams(level) {
+  if (level >= 1) return { greenHalf: BETTER_IRON_GREEN_HALF, overheatChance: BETTER_IRON_OVERHEAT_CHANCE }
+  return { greenHalf: SOLDER_GREEN_HALF, overheatChance: OVERHEAT_CHANCE }
+}
+
+// ── Failure classification ───────────────────────────────
+
+function canAffordAfterBurn() {
+  const kit = KIT_TYPES[state.activeKit]
+  return state.money + kit.cost * SALVAGE_RATE >= kit.cost
+}
+
+function handleSolderResult(quality) {
+  const { overheatChance } = solderParams(state.upgrades.solderingLevel)
+  if (quality < COLD_SOLDER_THRESHOLD) {
+    if (Math.random() < overheatChance && canAffordAfterBurn()) {
+      update(burnKit(state))
+    } else {
+      // Cold solder: apply quality cap penalty and retry the same point.
+      warning = 'cold'
+      update(applyColdSolderPenalty(state, COLD_SOLDER_QUALITY_PENALTY))
+    }
+    return
   }
+  update(recordSolderPoint(state, quality))
+}
+
+// ── Draw ─────────────────────────────────────────────────
+
+function draw() {
+  if (activeGame) { activeGame.destroy(); activeGame = null }
 
   render(uiRoot, state, handlers, salesLog, warning)
   warning = null
 
+  const level = state.upgrades.solderingLevel
+
+  // Level 0-1: manual mini-game
   const sgHost = uiRoot.querySelector('#sg-host')
-  if (sgHost) {
+  if (sgHost && level <= 1) {
+    const { greenHalf } = solderParams(level)
     activeGame = createSolderGame(sgHost, {
       pointIndex: state.solderPoints.length,
+      greenHalf,
       onResult: handleSolderResult,
     })
+  }
+
+  // Level 3: start auto-solder if not already running
+  if (state.phase === Phase.ASSEMBLY && level === 3 && autoTimer === null) {
+    scheduleAutoPoint()
   }
 }
 
 function update(newState) {
+  if (newState.phase !== Phase.ASSEMBLY) clearAutoTimer()
   state = newState
   draw()
 }
 
-function canAffordAfterBurn() {
-  const kit     = KIT_TYPES[state.activeKit]
-  const salvage = kit.cost * SALVAGE_RATE
-  return state.money + salvage >= kit.cost
-}
-
-function handleSolderResult(quality) {
-  if (quality >= COLD_SOLDER_THRESHOLD) {
-    update(recordSolderPoint(state, quality))
-    return
-  }
-  // Overheat blocked when player wouldn't have enough to reorder even with salvage.
-  if (Math.random() < OVERHEAT_CHANCE && canAffordAfterBurn()) {
-    update(burnKit(state))
-  } else {
-    warning = 'cold'
-    draw()
-  }
-}
+// ── Handlers ─────────────────────────────────────────────
 
 const handlers = {
   onOrder:   () => update(orderKit(state, 'mini_drone')),
@@ -71,6 +121,16 @@ const handlers = {
     salesLog.push({ quality: state.assemblyQuality, price })
     update(sell(state))
   },
+  onSemiAuto: () => {
+    const kit = KIT_TYPES[state.activeKit]
+    let s = state
+    while (s.solderPoints.length < kit.solderPointCount) {
+      const q = SEMIAUTO_QUALITY_MIN + Math.random() * (SEMIAUTO_QUALITY_MAX - SEMIAUTO_QUALITY_MIN)
+      s = recordSolderPoint(s, q)
+    }
+    update(finishAssembly(s))
+  },
+  onBuyUpgrade: (id) => update(buyUpgrade(state, id)),
 }
 
 draw()
