@@ -373,6 +373,48 @@ body {
   background: #9a3a3a;
 }
 
+/* === Loading overlay === */
+#load-overlay {
+  position: fixed;
+  inset: 0;
+  background: #111;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  z-index: 1000;
+  transition: opacity 0.3s ease;
+}
+
+#load-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#load-bar-wrap {
+  width: 180px;
+  height: 4px;
+  background: #222;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+#load-bar {
+  height: 100%;
+  width: 0%;
+  background: #7de07d;
+  border-radius: 2px;
+  transition: width 0.2s ease;
+}
+
+#load-label {
+  font-size: 0.75rem;
+  color: #555;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 /* === Mobile layout: bottom-sheet panel, 3D scene visible above === */
 @media (max-width: 640px) {
   #ui-root {

@@ -46,6 +46,17 @@ let warning       = null
 const uiRoot   = document.getElementById('ui-root')
 const canvas   = document.getElementById('game-canvas')
 
+// ── Loading overlay ──────────────────────────────────────
+
+const loadOverlay = document.getElementById('load-overlay')
+const loadBar     = document.getElementById('load-bar')
+
+function hideOverlay() {
+  loadOverlay.classList.add('hidden')
+  // Remove from DOM after fade so it doesn't block touches.
+  loadOverlay.addEventListener('transitionend', () => loadOverlay.remove(), { once: true })
+}
+
 // 3D scene — initScene is async (loads .glb models before first draw).
 // sceneRefs starts null; draw() calls updateScene only when ready.
 let sceneRefs = null
@@ -53,8 +64,12 @@ initScene(canvas, {
   onBoxPicked: () => {
     if (state.phase === Phase.DELIVERY) update(startAssembly(state))
   },
+  onLoadProgress: (loaded, total) => {
+    if (loadBar) loadBar.style.width = `${Math.round((loaded / total) * 100)}%`
+  },
 }).then(refs => {
   sceneRefs = refs
+  hideOverlay()
   draw()
 })
 
