@@ -21,7 +21,7 @@
 | M1 | Excalibur in, Babylon out — порожня сцена | `scene.js`, `loader.js`, `package.json` | ✅ 2026-06-20 |
 | M2 | Лоадер + spriteCache з graceful fallback | `loader.js`, `spriteCache.js`, `manifest.js` | ✅ 2026-06-20 |
 | T1 | Top-down перекомпонування кімнати (без персонажа) | `scene.js` (top-down діорама) | ✅ 2026-06-20 |
-| T2 | Робітник-аватар + його FSM (тап = команда, manual) | `scene/worker.js`, `scene.js`, `main.js` | 🔲 |
+| T2 | Робітник-аватар + його FSM (тап = команда, manual) | `scene/worker.js`, `scene.js`, `main.js` | ✅ 2026-06-20 |
 | T3 | Interaction-driven UI: мінімальний HUD, міні-гра по тапу, заглушка магазину | `ui/`, `main.js` | 🔲 |
 | T4 | Авто-режим робітника через upgrade-трек | `upgrades.js`, `worker.js` | 🔲 |
 | M4 | Swap прямокутник↔спрайт + кадри ходьби робітника | `scene.js`, `public/sprites/` | 🔲 |
@@ -54,6 +54,24 @@
 ---
 
 ## Нотатки по під-етапах
+
+### T2 — Робітник-аватар + FSM ✅
+
+**Що зроблено:**
+- `workerFSM.js` — pure FSM (6 станів: idle→walkDoor→pick→carry→atBench→solder), нуль Excalibur
+- `workerFSM.test.js` — 8 тестів: повний цикл доставки, solder-цикл, reset з будь-якого стану, invalid no-op, predicates, immutability
+- `worker.js` — Actor (оранжевий W*0.09 квадрат) + рух: `commandDeliver()` іде до дверей → пауза 250ms → несе коробку на стіл (worker+box разом); `commandSolder()` → `onSolderRequested`; `reset()` повертає на `idlePos`
+- `scene.js`: workbench повертає ref; `currentPhase` на рівні модуля для gate-перевірки; box-tap → `commandDeliver`, bench-tap → `commandSolder`; `boxOpen` Actor (відкрита коробка видна в ASSEMBLY/READY); `updateScene` скидає worker на IDLE; `BENCH_POS`/`TABLE` дериваються від `workbench.pos` (object-relative)
+- `main.js`: `onSolderRequested: () => {}` (no-op, T3 підключить)
+- `ROOM_H`: 0.65 → 0.67 (трохи більше простору)
+- 70 тестів зелені
+
+**Відхилення від плану / рішення:**
+- `workerFSM.js` + `worker.js` — два файли (аналог spriteCache+loader), щоб FSM тестувався в Node без Excalibur
+- `boxOpen` — окремий Actor для "відкритої" коробки на столі; не зникає в ASSEMBLY, а перетворюється на плаский світлий прямокутник під дроном
+- `BENCH_POS` = `workbench.pos.y + workbench.height/2 + WORKER_SIZE/2` — перший крок до POI-системи (object-derived waypoints); решта (`DOOR`, `IDLE_POS`) ще fractional — повна POI-система на T4+
+
+---
 
 ### M1 + M2 + T1 — Excalibur, spriteCache, top-down кімната ✅
 

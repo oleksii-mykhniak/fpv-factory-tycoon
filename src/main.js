@@ -64,6 +64,7 @@ initScene(canvas, {
   onBoxPicked: () => {
     if (state.phase === Phase.DELIVERY) update(startAssembly(state))
   },
+  onSolderRequested: () => { /* T3: open mini-game modal here */ },
   onLoadProgress: (loaded, total) => {
     if (loadBar) loadBar.style.width = `${Math.round((loaded / total) * 100)}%`
   },

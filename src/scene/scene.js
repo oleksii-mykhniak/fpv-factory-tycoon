@@ -1,12 +1,16 @@
 import * as ex from 'excalibur'
 import { Phase } from '../state/gameState.js'
 import { loadSprites, getSprite } from './loader.js'
+import { createWorker } from './worker.js'
 
 const BG = ex.Color.fromHex('#0e0e18')
 
-// Room uses only the top 65% of canvas height — the rest is DOM overlay.
-// Measured: DOM panel starts at ~572/844px ≈ 68%; 65% gives 23px clearance.
-const ROOM_H = 0.65
+// Room uses top 67% of canvas — DOM panel starts at ~68%, giving ~8px clearance.
+// T3 removes the DOM panel → ROOM_H can grow to 0.90+.
+const ROOM_H = 0.67
+
+// Tracks the current game phase so pointer handlers can gate commands.
+let currentPhase = Phase.IDLE
 
 // ── Helpers ───────────────────────────────────────────────
 
@@ -26,11 +30,12 @@ function colorRect(scene, { x, y, w, h, hex, z = 0 }) {
 //
 // (0,0) = top-left. RH = usable room height (65% of canvas).
 // Door gap in bottom wall: x ∈ [W*0.28, W*0.48] — box spawns there.
+// Returns { workbench } for wiring up interaction.
 
 function buildRoom(scene, W, H) {
-  const WW = W * 0.06      // side wall thickness
-  const HW = H * 0.035     // top/bottom wall thickness
-  const RH = H * ROOM_H   // room height in px
+  const WW = W * 0.06
+  const HW = H * 0.035
+  const RH = H * ROOM_H
 
   // Floor
   colorRect(scene, { x: W * 0.5, y: RH * 0.5, w: W, h: RH, hex: '#1a1a26', z: 0 })
@@ -41,25 +46,25 @@ function buildRoom(scene, W, H) {
   colorRect(scene, { x: WW * 0.5,      y: RH * 0.5,       w: WW,  h: RH, hex: '#2e2e42', z: 1 })
   // Right wall
   colorRect(scene, { x: W - WW * 0.5,  y: RH * 0.5,       w: WW,  h: RH, hex: '#2e2e42', z: 1 })
-  // Bottom wall — left of door (x: 0 → W*0.28)
+  // Bottom wall — left of door
   colorRect(scene, { x: W * 0.14,      y: RH - HW * 0.5,  w: W * 0.28, h: HW, hex: '#2e2e42', z: 1 })
-  // Bottom wall — door gap (darker: outside void)
+  // Bottom wall — door gap (outside void)
   colorRect(scene, { x: W * 0.38,      y: RH - HW * 0.5,  w: W * 0.20, h: HW, hex: '#0d0d15', z: 1 })
-  // Bottom wall — right of door (x: W*0.48 → W)
+  // Bottom wall — right of door
   colorRect(scene, { x: W * 0.74,      y: RH - HW * 0.5,  w: W * 0.52, h: HW, hex: '#2e2e42', z: 1 })
 
-  // Workbench (top-down: wide rect, upper portion of room)
-  colorRect(scene, { x: W * 0.50, y: RH * 0.35,  w: W * 0.60, h: RH * 0.13, hex: '#6b4226', z: 2 })
-  // Workbench front edge (thin darker strip)
-  colorRect(scene, { x: W * 0.50, y: RH * 0.42,  w: W * 0.60, h: RH * 0.015, hex: '#4a2a18', z: 2 })
-
-  // Ceiling lamp (seen from above as small bright square)
+  // Workbench — interactive, keep ref
+  const workbench = colorRect(scene, { x: W * 0.50, y: RH * 0.35, w: W * 0.60, h: RH * 0.13, hex: '#6b4226', z: 2 })
+  // Workbench front edge
+  colorRect(scene, { x: W * 0.50, y: RH * 0.42, w: W * 0.60, h: RH * 0.015, hex: '#4a2a18', z: 2 })
+  // Ceiling lamp (seen from above)
   colorRect(scene, { x: W * 0.50, y: RH * 0.16, w: W * 0.08, h: W * 0.08, hex: '#d4c060', z: 2 })
+
+  return { workbench }
 }
 
 // ── Sprite swap ───────────────────────────────────────────
-// If the sprite loaded, replace the Actor's rect graphic with it (scaled to fit).
-// If the sprite is missing, the Actor shows its rect color — no other code changes.
+
 function applySprite(actor, key) {
   const src = getSprite(key)
   if (!src) return
@@ -71,12 +76,7 @@ function applySprite(actor, key) {
 
 // ── Scene entry points ────────────────────────────────────
 
-// Public API — contract unchanged from 3D era so main.js needs no edits.
-//   initScene(canvas, { onBoxPicked, onLoadProgress }) → Promise<refs>
-//   updateScene(refs, phase)
-//   refs.engine.getFps()
-
-export async function initScene(canvas, { onBoxPicked, onLoadProgress }) {
+export async function initScene(canvas, { onBoxPicked, onSolderRequested, onLoadProgress }) {
   const engine = new ex.Engine({
     canvasElement: canvas,
     backgroundColor: BG,
@@ -87,42 +87,48 @@ export async function initScene(canvas, { onBoxPicked, onLoadProgress }) {
   await loadSprites(onLoadProgress)
   await engine.start()
 
-  const W = engine.drawWidth
-  const H = engine.drawHeight
+  const W  = engine.drawWidth
+  const H  = engine.drawHeight
+  const RH = H * ROOM_H
   const scene = engine.currentScene
 
-  const RH = H * ROOM_H
-  buildRoom(scene, W, H)
+  const { workbench } = buildRoom(scene, W, H)
 
-  // Box: spawns at door gap (bottom of room), slides to workbench on tap
-  const DOOR  = ex.vec(W * 0.38, RH * 0.88)
-  const TABLE = ex.vec(W * 0.50, RH * 0.35)
+  // Key positions — derived from actual Actor positions where possible.
+  const WORKER_SIZE = W * 0.09                       // matches worker.js
+  const DOOR        = ex.vec(W * 0.38, RH * 0.88)   // door gap center; box spawns here
+  const TABLE       = workbench.pos.clone()           // box lands on workbench center
+  const IDLE_POS    = ex.vec(W * 0.72, RH * 0.68)   // worker resting spot (right side)
+  // Worker stands just below the workbench front edge
+  const BENCH_POS   = ex.vec(workbench.pos.x, workbench.pos.y + workbench.height / 2 + WORKER_SIZE / 2)
 
+  // Delivery box
   const box = new ex.Actor({
-    pos: DOOR.clone(),
-    width:  W * 0.13,
+    pos:    DOOR.clone(),
+    width:  W  * 0.13,
     height: RH * 0.10,
     z: 3,
     color: ex.Color.fromHex('#c49a3c'),
   })
   box.graphics.visible = false
-
-  let animating = false
-  box.on('pointerup', () => {
-    if (animating) return
-    animating = true
-    box.actions
-      .moveTo(ex.vec(W * 0.50, RH * 0.62), 600)  // slide toward center
-      .moveTo(TABLE, 500)                           // arrive at workbench
-      .callMethod(() => { animating = false; onBoxPicked() })
-  })
   applySprite(box, 'delivery_box')
   scene.add(box)
 
-  // Drone on workbench — shown during assembly / ready
+  // Opened box — visible on workbench during ASSEMBLY/READY (wider, flatter, lighter)
+  const boxOpen = new ex.Actor({
+    pos:    TABLE.clone(),
+    width:  W  * 0.16,
+    height: RH * 0.04,
+    z: 3,
+    color: ex.Color.fromHex('#e8c870'),
+  })
+  boxOpen.graphics.visible = false
+  scene.add(boxOpen)
+
+  // Drone silhouette on workbench
   const drone = new ex.Actor({
-    pos: ex.vec(W * 0.52, RH * 0.35),
-    width:  W * 0.18,
+    pos:    ex.vec(W * 0.52, RH * 0.35),
+    width:  W  * 0.18,
     height: RH * 0.09,
     z: 4,
     color: ex.Color.fromHex('#2a2a3e'),
@@ -131,27 +137,59 @@ export async function initScene(canvas, { onBoxPicked, onLoadProgress }) {
   applySprite(drone, 'mini_drone')
   scene.add(drone)
 
+  // Worker
+  const worker = createWorker(scene, {
+    W, RH,
+    doorPos:  DOOR,
+    benchPos: BENCH_POS,
+    idlePos:  IDLE_POS,
+    box,
+    tablePos: TABLE,
+    onBoxPicked,
+    onSolderRequested,
+  })
+
+  // Tap box → worker fetches (gated to DELIVERY phase)
+  box.on('pointerup', () => {
+    if (currentPhase === Phase.DELIVERY) worker.commandDeliver()
+  })
+
+  // Tap workbench → worker solders (gated to ASSEMBLY phase)
+  workbench.on('pointerup', () => {
+    if (currentPhase === Phase.ASSEMBLY) worker.commandSolder()
+  })
+
   return {
     engine: { getFps: () => engine.clock.fpsSampler.fps, _ex: engine },
     scene,
     box,
+    boxOpen,
     drone,
-    _boxDoor: DOOR,   // stored for updateScene to reset position
+    worker,
+    _boxDoor: DOOR,
   }
 }
 
 export function updateScene(refs, phase) {
   if (!refs?.box) return
 
-  const { box, drone, _boxDoor } = refs
+  currentPhase = phase
 
-  box.graphics.visible   = phase === Phase.DELIVERY
-  drone.graphics.visible = phase === Phase.ASSEMBLY || phase === Phase.READY
+  const { box, boxOpen, drone, worker, _boxDoor } = refs
 
-  // Reset box to door when not in delivery so it's ready for next cycle
-  if (phase !== Phase.DELIVERY) {
+  const assembling = phase === Phase.ASSEMBLY || phase === Phase.READY
+
+  box.graphics.visible     = phase === Phase.DELIVERY
+  boxOpen.graphics.visible = assembling
+  drone.graphics.visible   = assembling
+
+  // Reset closed box to door between cycles (not during active assembly)
+  if (!assembling && phase !== Phase.DELIVERY) {
     box.actions.clearActions()
     box.pos.x = _boxDoor.x
     box.pos.y = _boxDoor.y
   }
+
+  // Return worker to idle spot between cycles
+  if (phase === Phase.IDLE) worker?.reset()
 }
