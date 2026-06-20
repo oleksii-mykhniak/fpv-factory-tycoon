@@ -10,6 +10,7 @@ import {
   Animation,
 } from '@babylonjs/core'
 import { Phase } from '../state/gameState.js'
+import { loadModels, getModel } from './loader.js'
 
 // World constants
 const TABLE_TOP_Y  = 1.575
@@ -18,7 +19,9 @@ const BOX_TABLE_POS = new Vector3(0.3, TABLE_TOP_Y + 0.45, 0.2)
 
 // ── Public API ────────────────────────────────────────────
 
-export function initScene(canvas, { onBoxPicked }) {
+// initScene now returns a Promise so the caller can await model loading (step 2.4).
+// The scene starts rendering immediately — models swap in after loadModels resolves.
+export async function initScene(canvas, { onBoxPicked, onLoadProgress }) {
   const engine = new Engine(canvas, false) // antialiasing off — mobile perf
   const scene  = new Scene(engine)
   scene.clearColor = new Color4(0.07, 0.07, 0.11, 1)
@@ -40,6 +43,10 @@ export function initScene(canvas, { onBoxPicked }) {
   workLamp.diffuse   = new Color3(1, 0.95, 0.8)
 
   buildRoom(scene)
+
+  // Try to load .glb models; falls back to primitives for any that are missing.
+  await loadModels(scene, onLoadProgress)
+
   const box   = buildBox(scene)
   const drone = buildDrone(scene)
 
@@ -107,6 +114,14 @@ function buildRoom(scene) {
 }
 
 function buildBox(scene) {
+  // Use .glb model if loaded, otherwise fall back to the procedural primitive.
+  const glb = getModel('delivery_box')
+  if (glb) {
+    glb.position.copyFrom(BOX_DOOR_POS)
+    glb.setEnabled(false)
+    return glb
+  }
+
   const b = MeshBuilder.CreateBox('deliveryBox', { size: 0.72 }, scene)
   b.position.copyFrom(BOX_DOOR_POS)
   b.material = material(scene, '#c49a3c')
@@ -115,6 +130,14 @@ function buildBox(scene) {
 }
 
 function buildDrone(scene) {
+  // Use .glb model if loaded, otherwise fall back to the procedural X-frame.
+  const glb = getModel('mini_drone')
+  if (glb) {
+    glb.position.set(0, TABLE_TOP_Y + 0.1, 0.15)
+    glb.setEnabled(false)
+    return glb
+  }
+
   const root = new TransformNode('droneRoot', scene)
   root.position.set(0, TABLE_TOP_Y + 0.1, 0.15)
 

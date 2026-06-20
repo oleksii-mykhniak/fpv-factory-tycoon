@@ -46,11 +46,16 @@ let warning       = null
 const uiRoot   = document.getElementById('ui-root')
 const canvas   = document.getElementById('game-canvas')
 
-// 3D scene — always alive; updateScene() syncs visibility each draw.
-const sceneRefs = initScene(canvas, {
+// 3D scene — initScene is async (loads .glb models before first draw).
+// sceneRefs starts null; draw() calls updateScene only when ready.
+let sceneRefs = null
+initScene(canvas, {
   onBoxPicked: () => {
     if (state.phase === Phase.DELIVERY) update(startAssembly(state))
   },
+}).then(refs => {
+  sceneRefs = refs
+  draw()
 })
 
 // ── Debug FPS counter ─────────────────────────────────────
