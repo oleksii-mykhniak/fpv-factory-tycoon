@@ -1,11 +1,12 @@
 # Asset Credits
 
-All custom models (mini_drone, delivery_box, workbench, soldering_iron) are
-original work for this project. Blender source files live in src/assets/models/_blender/.
+All sprites (mini_drone, delivery_box, workbench, soldering_iron, worker_walk)
+are procedurally generated placeholders. Real art will replace them in a future
+sprint — see `scripts/gen-placeholder-sprites.js` for the generator.
 
 ## CC0 / Third-party assets
 
-None yet. When adding a CC0 model, record it here:
+None yet. When adding a CC0 sprite (Kenney.nl etc.), record it here:
 
 | File | Source | License | Author |
 |---|---|---|---|
