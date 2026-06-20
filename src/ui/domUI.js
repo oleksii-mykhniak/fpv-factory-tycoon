@@ -64,9 +64,7 @@ export function render(root, state, handlers, salesLog) {
         ` : ''}
 
         ${state.phase === Phase.ASSEMBLY && !canFinish ? `
-          <button class="btn btn--primary" id="btn-solder">
-            Паяти точку ${done + 1} з ${total}
-          </button>
+          <div id="sg-host"></div>
         ` : ''}
 
         ${state.phase === Phase.ASSEMBLY && canFinish ? `
@@ -104,7 +102,6 @@ export function render(root, state, handlers, salesLog) {
   root.querySelector('#btn-order')?.addEventListener('click', handlers.onOrder)
   root.querySelector('#btn-deliver')?.addEventListener('click', handlers.onDeliver)
   root.querySelector('#btn-start')?.addEventListener('click', handlers.onStart)
-  root.querySelector('#btn-solder')?.addEventListener('click', handlers.onSolder)
   root.querySelector('#btn-finish')?.addEventListener('click', handlers.onFinish)
   root.querySelector('#btn-sell')?.addEventListener('click', handlers.onSell)
 }

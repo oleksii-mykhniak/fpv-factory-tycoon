@@ -187,3 +187,57 @@ body {
 .quality--high { color: #7de07d; }
 .quality--mid  { color: #e0c97d; }
 .quality--low  { color: #e07a7a; }
+
+/* === Solder mini-game === */
+.sg {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sg__track {
+  position: relative;
+  height: 52px;
+  background: #111;
+  border-radius: 8px;
+  border: 1px solid #333;
+  overflow: hidden;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sg__track:hover {
+  border-color: #555;
+}
+
+.sg__zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(125, 224, 125, 0.15);
+  border-left:  2px solid rgba(125, 224, 125, 0.5);
+  border-right: 2px solid rgba(125, 224, 125, 0.5);
+}
+
+.sg__needle {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 4px;
+  background: #ddd;
+  border-radius: 2px;
+  transform: translateX(-50%);
+}
+
+.sg__hint {
+  font-size: 0.75rem;
+  color: #555;
+  text-align: center;
+}
+
+.sg__feedback {
+  font-size: 1rem;
+  font-weight: bold;
+  text-align: center;
+  margin-top: 2px;
+}
