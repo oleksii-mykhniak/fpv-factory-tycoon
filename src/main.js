@@ -57,7 +57,7 @@ function hideOverlay() {
   loadOverlay.addEventListener('transitionend', () => loadOverlay.remove(), { once: true })
 }
 
-// 3D scene — initScene is async (loads .glb models before first draw).
+// 2D scene — initScene is async (loads sprites before first draw).
 // sceneRefs starts null; draw() calls updateScene only when ready.
 let sceneRefs = null
 initScene(canvas, {

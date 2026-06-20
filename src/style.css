@@ -19,7 +19,7 @@ body {
   height: 100%;
   display: block;
   background: #1a1a2e;
-  touch-action: none; /* prevent scroll hijack; Babylon handles touch itself */
+  touch-action: none; /* prevent scroll hijack on mobile */
 }
 
 #ui-root {

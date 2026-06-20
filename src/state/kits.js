@@ -12,7 +12,7 @@ export const KIT_TYPES = Object.freeze({
     cost:             72,
     basePrice:        95,
     solderPointCount: 4,
-    modelKey:         'mini_drone',   // key into the 3D asset manifest; loader falls back to a primitive
+    spriteKey:        'mini_drone',
     assemblySteps: [
       'Збираю раму',
       'Встановлюю мотори',

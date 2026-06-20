@@ -1,57 +1,54 @@
-// Asset manifest — single source of truth for 3D models.
-// URL is a plain string served from public/models/ → dist/models/ → Android assets.
-// Build never fails when a file is missing — loader catches 404s at runtime (see loader.js).
+// Asset manifest — single source of truth for 2D sprites.
+// URL served from public/sprites/ → dist/sprites/ → Android assets.
+// Build never fails when a file is missing — loader catches 404s at runtime.
 //
-// anchors: named Empty nodes baked into the .glb; loader resolves them to world positions.
+// anchors: 2D pixel offsets from the sprite's origin point.
 // solderPoints array must have length === kit.solderPointCount for that drone type.
 
-export const MODELS = Object.freeze({
+export const SPRITES = Object.freeze({
   mini_drone: {
-    url: '/models/mini_drone.glb',
+    url: '/sprites/mini_drone.png',
     anchors: {
-      root:         'anchor_root',
       solderPoints: [
-        'anchor_solder_1',
-        'anchor_solder_2',
-        'anchor_solder_3',
-        'anchor_solder_4',
+        { x: -20, y:  10 },
+        { x:  20, y:  10 },
+        { x: -20, y: -10 },
+        { x:  20, y: -10 },
       ],
     },
   },
 
   delivery_box: {
-    url: '/models/delivery_box.glb',
-    anchors: {
-      root: 'anchor_root',
-    },
+    url: '/sprites/delivery_box.png',
+    anchors: {},
   },
 
   workbench: {
-    url: '/models/workbench.glb',
+    url: '/sprites/workbench.png',
     anchors: {
-      drone: 'anchor_drone',  // where the drone model is placed
-      box:   'anchor_box',    // where delivery box lands
-      tool:  'anchor_tool',   // soldering iron position
+      drone: { x:  0, y: -30 },
+      box:   { x:  0, y:  20 },
+      tool:  { x: 40, y:   0 },
     },
   },
 
   soldering_iron: {
-    url: '/models/soldering_iron.glb',
-    // sub-nodes level_0..level_3 are enabled/disabled by loader per upgrade level
-    anchors: {
-      root: 'anchor_root',
-    },
+    url: '/sprites/soldering_iron.png',
+    anchors: {},
   },
 })
 
 // ── Helpers ───────────────────────────────────────────────
 
-// Returns the manifest entry for a key, or null if not registered.
 export function getManifestEntry(key) {
-  return MODELS[key] ?? null
+  return SPRITES[key] ?? null
 }
 
-// Returns all registered model keys.
-export function modelKeys() {
-  return Object.keys(MODELS)
+export function spriteKeys() {
+  return Object.keys(SPRITES)
+}
+
+// Returns a 2D anchor offset { x, y } for a named anchor, or null if absent.
+export function getAnchor(key, anchorName) {
+  return SPRITES[key]?.anchors?.[anchorName] ?? null
 }

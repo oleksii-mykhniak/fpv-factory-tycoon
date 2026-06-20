@@ -11,15 +11,29 @@
 
 ---
 
-## Стадія 2 — Asset pipeline (3D-моделі)
+## Стадія 2-bis — Top-down 2D кімната + робітник (Excalibur)
+
+> **Розворот 2026-06-20:** складність 3D + виробництво Blender-моделей надто дорогі для соло. Ядро гри (FSM, кіти, апгрейди, save, тести) не чіпалось — міняється лише шар `src/scene/`.
+> **Уточнення напряму 2026-06-20 (друге):** псевдо-ізо 3⁄4 → **top-down (PA-style) + персонаж-робітник** + interaction-driven UI (мінімальний HUD, тапи по об'єктах, кнопка-магазин). M1/M2 лишаються валідними; M3/M4-діорама (3⁄4) **переосмислюється** в T1–T4 (top-down + робітник + UI). Деталі — `plan_full_game.md` §5a, §6.
 
 | Під-етап | Назва | Статус | Дата коміту |
 |----------|-------|--------|-------------|
-| 2.1 | Маніфест + структура `src/assets/` | ✅ Готово | 2026-06-20 |
-| 2.2 | Лоадер з кешем і graceful fallback | ✅ Готово | 2026-06-20 |
-| 2.3 | Інтеграція в сцену (swap примітив ↔ модель) | ✅ Готово | 2026-06-20 |
-| 2.4 | Async-UX завантаження | ✅ Готово | 2026-06-20 |
-| 2.5 | Перша реальна модель `mini_drone.glb` | 🔲 Не почато | — |
+| M1 | Excalibur in, Babylon out — порожня сцена | `scene.js`, `loader.js`, `package.json` | ✅ 2026-06-20 |
+| M2 | Лоадер + spriteCache з graceful fallback | `loader.js`, `spriteCache.js`, `manifest.js` | ✅ 2026-06-20 |
+| T1 | Top-down перекомпонування кімнати (без персонажа) | `scene.js` (top-down діорама) | ✅ 2026-06-20 |
+| T2 | Робітник-аватар + його FSM (тап = команда, manual) | `scene/worker.js`, `scene.js`, `main.js` | 🔲 |
+| T3 | Interaction-driven UI: мінімальний HUD, міні-гра по тапу, заглушка магазину | `ui/`, `main.js` | 🔲 |
+| T4 | Авто-режим робітника через upgrade-трек | `upgrades.js`, `worker.js` | 🔲 |
+| M4 | Swap прямокутник↔спрайт + кадри ходьби робітника | `scene.js`, `public/sprites/` | 🔲 |
+| M5 | Прибирання 3D-коду + перейменування | `kits.js`, `manifest.test.js`, відаляємо modelCache/blender | 🟡 Частково (3D вже прибрано) |
+
+---
+
+## Стадія 2 — Asset pipeline 3D (СКАСОВАНО — замінено Стадією 2-bis)
+
+*Під-етапи 2.1–2.4 виконано, але стратегія змінилась до першої реальної моделі. Весь 3D-шар (Babylon, manifest MODELS, modelCache, public/models) видалено в M5.*
+
+---
 
 ---
 
@@ -40,6 +54,29 @@
 ---
 
 ## Нотатки по під-етапах
+
+### M1 + M2 + T1 — Excalibur, spriteCache, top-down кімната ✅
+
+**Що зроблено:**
+- `excalibur@0.32` встановлено; `@babylonjs/core` + `@babylonjs/loaders` видалено з `package.json`
+- `scene.js` — переписано на Excalibur Actors; `colorRect` helper; top-down PA-style кімната (підлога, 4 стіни з дверним прорізом внизу, стіл, лампа)
+- Кімната займає верхні 65% canvas (`ROOM_H = 0.65`) — нижче DOM-панель; усі об'єкти у видимій зоні
+- `loader.js` — `ImageSource.load()` з graceful fallback (404 → `null` у кеші → rect fallback)
+- `spriteCache.js` — pure-JS модуль без Excalibur-імпортів; тестується в Node без WebGL
+- `manifest.js` — перейменовано `MODELS`→`SPRITES`, URL `.glb`→`.png`, якорі стали 2D-зміщеннями `{x,y}`
+- `kits.js` — `modelKey`→`spriteKey`
+- `scripts/gen-placeholder-sprites.js` — генератор 4 placeholder PNG (solid-color)
+- `public/sprites/` — `mini_drone`, `delivery_box`, `workbench`, `soldering_iron`
+- Видалено: `modelCache.js`, `loader.test.js`, `public/models/`, `src/assets/models/`
+- Тести: 62, всі зелені
+
+**Відхилення від плану / рішення:**
+- `loadSprites` викликається з `initScene` (не через Excalibur `Loader`) — зберігає існуючий DOM load-overlay без змін у `main.js`
+- FPS: Excalibur не має `getFps()` → обгортка `engine: { getFps: () => engine.clock.fpsSampler.fps }`
+- Кімната обмежена `ROOM_H = 0.65` бо DOM-панель стартує на ~68% висоти viewport; 65% дає 23px буфера
+- Excalibur Actor pointer events (`actor.on('pointerup', ...)`) дають нативний hit-test — вручну перевіряти координати не треба
+
+---
 
 ### 1.8 — Capacitor + тест на залізі ✅
 

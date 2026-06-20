@@ -1,182 +1,157 @@
-import {
-  Engine, Scene,
-  ArcRotateCamera,
-  HemisphericLight, PointLight,
-  TransformNode,
-  Vector3, Color3, Color4,
-  MeshBuilder,
-  StandardMaterial,
-  ActionManager, ExecuteCodeAction,
-  Animation,
-} from '@babylonjs/core'
+import * as ex from 'excalibur'
 import { Phase } from '../state/gameState.js'
-import { loadModels, getModel } from './loader.js'
+import { loadSprites, getSprite } from './loader.js'
 
-// World constants
-const TABLE_TOP_Y  = 1.575
-const BOX_DOOR_POS = new Vector3(-4.2, 0.38, 1.8)
-const BOX_TABLE_POS = new Vector3(0.3, TABLE_TOP_Y + 0.45, 0.2)
+const BG = ex.Color.fromHex('#0e0e18')
 
-// ── Public API ────────────────────────────────────────────
+// Room uses only the top 65% of canvas height — the rest is DOM overlay.
+// Measured: DOM panel starts at ~572/844px ≈ 68%; 65% gives 23px clearance.
+const ROOM_H = 0.65
 
-// initScene now returns a Promise so the caller can await model loading (step 2.4).
-// The scene starts rendering immediately — models swap in after loadModels resolves.
+// ── Helpers ───────────────────────────────────────────────
+
+function colorRect(scene, { x, y, w, h, hex, z = 0 }) {
+  const a = new ex.Actor({
+    pos: ex.vec(x, y),
+    width: w,
+    height: h,
+    z,
+    color: ex.Color.fromHex(hex),
+  })
+  scene.add(a)
+  return a
+}
+
+// ── Layout (top-down, PA-style) ───────────────────────────
+//
+// (0,0) = top-left. RH = usable room height (65% of canvas).
+// Door gap in bottom wall: x ∈ [W*0.28, W*0.48] — box spawns there.
+
+function buildRoom(scene, W, H) {
+  const WW = W * 0.06      // side wall thickness
+  const HW = H * 0.035     // top/bottom wall thickness
+  const RH = H * ROOM_H   // room height in px
+
+  // Floor
+  colorRect(scene, { x: W * 0.5, y: RH * 0.5, w: W, h: RH, hex: '#1a1a26', z: 0 })
+
+  // Top wall
+  colorRect(scene, { x: W * 0.5,       y: HW * 0.5,       w: W,   h: HW, hex: '#2e2e42', z: 1 })
+  // Left wall
+  colorRect(scene, { x: WW * 0.5,      y: RH * 0.5,       w: WW,  h: RH, hex: '#2e2e42', z: 1 })
+  // Right wall
+  colorRect(scene, { x: W - WW * 0.5,  y: RH * 0.5,       w: WW,  h: RH, hex: '#2e2e42', z: 1 })
+  // Bottom wall — left of door (x: 0 → W*0.28)
+  colorRect(scene, { x: W * 0.14,      y: RH - HW * 0.5,  w: W * 0.28, h: HW, hex: '#2e2e42', z: 1 })
+  // Bottom wall — door gap (darker: outside void)
+  colorRect(scene, { x: W * 0.38,      y: RH - HW * 0.5,  w: W * 0.20, h: HW, hex: '#0d0d15', z: 1 })
+  // Bottom wall — right of door (x: W*0.48 → W)
+  colorRect(scene, { x: W * 0.74,      y: RH - HW * 0.5,  w: W * 0.52, h: HW, hex: '#2e2e42', z: 1 })
+
+  // Workbench (top-down: wide rect, upper portion of room)
+  colorRect(scene, { x: W * 0.50, y: RH * 0.35,  w: W * 0.60, h: RH * 0.13, hex: '#6b4226', z: 2 })
+  // Workbench front edge (thin darker strip)
+  colorRect(scene, { x: W * 0.50, y: RH * 0.42,  w: W * 0.60, h: RH * 0.015, hex: '#4a2a18', z: 2 })
+
+  // Ceiling lamp (seen from above as small bright square)
+  colorRect(scene, { x: W * 0.50, y: RH * 0.16, w: W * 0.08, h: W * 0.08, hex: '#d4c060', z: 2 })
+}
+
+// ── Sprite swap ───────────────────────────────────────────
+// If the sprite loaded, replace the Actor's rect graphic with it (scaled to fit).
+// If the sprite is missing, the Actor shows its rect color — no other code changes.
+function applySprite(actor, key) {
+  const src = getSprite(key)
+  if (!src) return
+  const sprite = src.toSprite()
+  sprite.width  = actor.width
+  sprite.height = actor.height
+  actor.graphics.use(sprite)
+}
+
+// ── Scene entry points ────────────────────────────────────
+
+// Public API — contract unchanged from 3D era so main.js needs no edits.
+//   initScene(canvas, { onBoxPicked, onLoadProgress }) → Promise<refs>
+//   updateScene(refs, phase)
+//   refs.engine.getFps()
+
 export async function initScene(canvas, { onBoxPicked, onLoadProgress }) {
-  const engine = new Engine(canvas, false) // antialiasing off — mobile perf
-  const scene  = new Scene(engine)
-  scene.clearColor = new Color4(0.07, 0.07, 0.11, 1)
+  const engine = new ex.Engine({
+    canvasElement: canvas,
+    backgroundColor: BG,
+    displayMode: ex.DisplayMode.FillScreen,
+    antialiasing: false,
+  })
 
-  // Sims-like isometric camera: from +X+Z corner looking at −X−Z corner
-  // alpha=PI/4 puts camera diagonally front-right so back+left walls are both visible
-  const camera = new ArcRotateCamera('cam', Math.PI / 4, 0.88, 20,
-    new Vector3(-0.5, 0.6, -0.5), scene)
-  camera.inputs.clear()
+  await loadSprites(onLoadProgress)
+  await engine.start()
 
-  // Hemisphere for ambient fill + point light above the workbench
-  const ambient = new HemisphericLight('ambient', new Vector3(0.3, 1, 0.2), scene)
-  ambient.intensity   = 0.7
-  ambient.diffuse     = new Color3(1, 0.92, 0.85)
-  ambient.groundColor = new Color3(0.1, 0.1, 0.2)
+  const W = engine.drawWidth
+  const H = engine.drawHeight
+  const scene = engine.currentScene
 
-  const workLamp = new PointLight('workLamp', new Vector3(0, 5, 0), scene)
-  workLamp.intensity = 0.6
-  workLamp.diffuse   = new Color3(1, 0.95, 0.8)
+  const RH = H * ROOM_H
+  buildRoom(scene, W, H)
 
-  buildRoom(scene)
+  // Box: spawns at door gap (bottom of room), slides to workbench on tap
+  const DOOR  = ex.vec(W * 0.38, RH * 0.88)
+  const TABLE = ex.vec(W * 0.50, RH * 0.35)
 
-  // Try to load .glb models; falls back to primitives for any that are missing.
-  await loadModels(scene, onLoadProgress)
+  const box = new ex.Actor({
+    pos: DOOR.clone(),
+    width:  W * 0.13,
+    height: RH * 0.10,
+    z: 3,
+    color: ex.Color.fromHex('#c49a3c'),
+  })
+  box.graphics.visible = false
 
-  const box   = buildBox(scene)
-  const drone = buildDrone(scene)
-
-  // Box click → animate to table → fire callback
   let animating = false
-  box.actionManager = new ActionManager(scene)
-  box.actionManager.registerAction(
-    new ExecuteCodeAction(ActionManager.OnPickTrigger, () => {
-      if (animating) return
-      animating = true
-      animateBoxToTable(box, scene, () => {
-        animating = false
-        onBoxPicked()
-      })
-    })
-  )
+  box.on('pointerup', () => {
+    if (animating) return
+    animating = true
+    box.actions
+      .moveTo(ex.vec(W * 0.50, RH * 0.62), 600)  // slide toward center
+      .moveTo(TABLE, 500)                           // arrive at workbench
+      .callMethod(() => { animating = false; onBoxPicked() })
+  })
+  applySprite(box, 'delivery_box')
+  scene.add(box)
 
-  engine.runRenderLoop(() => scene.render())
-  window.addEventListener('resize', () => engine.resize())
+  // Drone on workbench — shown during assembly / ready
+  const drone = new ex.Actor({
+    pos: ex.vec(W * 0.52, RH * 0.35),
+    width:  W * 0.18,
+    height: RH * 0.09,
+    z: 4,
+    color: ex.Color.fromHex('#2a2a3e'),
+  })
+  drone.graphics.visible = false
+  applySprite(drone, 'mini_drone')
+  scene.add(drone)
 
-  return { engine, scene, box, drone }
+  return {
+    engine: { getFps: () => engine.clock.fpsSampler.fps, _ex: engine },
+    scene,
+    box,
+    drone,
+    _boxDoor: DOOR,   // stored for updateScene to reset position
+  }
 }
 
-// Call after every state change to sync visibility.
 export function updateScene(refs, phase) {
-  if (!refs) return
+  if (!refs?.box) return
 
-  refs.box.setEnabled(phase === Phase.DELIVERY)
-  refs.drone.setEnabled(phase === Phase.ASSEMBLY || phase === Phase.READY)
+  const { box, drone, _boxDoor } = refs
 
-  // Reset box to door when not in delivery so it's ready for next cycle.
-  if (phase !== Phase.DELIVERY) refs.box.position.copyFrom(BOX_DOOR_POS)
-}
+  box.graphics.visible   = phase === Phase.DELIVERY
+  drone.graphics.visible = phase === Phase.ASSEMBLY || phase === Phase.READY
 
-// ── Scene builders ────────────────────────────────────────
-
-function material(scene, hex) {
-  const m = new StandardMaterial('', scene)
-  m.diffuseColor = Color3.FromHexString(hex)
-  return m
-}
-
-function box3(scene, name, w, h, d, hex, x, y, z) {
-  const m = MeshBuilder.CreateBox(name, { width: w, height: h, depth: d }, scene)
-  m.position.set(x, y, z)
-  m.material = material(scene, hex)
-  return m
-}
-
-function buildRoom(scene) {
-  box3(scene, 'floor',    12,  0.2,  10,  '#1e1e2a',  0,  -0.1, 0)
-  box3(scene, 'backWall', 12,  5.5,  0.2, '#252535',  0,   2.75, -5)
-  box3(scene, 'leftWall', 0.2, 5.5,  10,  '#252535', -6,   2.75, 0)
-  box3(scene, 'doorway',  1.5, 3.0,  0.2, '#1a1a28', -5.95, 1.5, 1.5)
-
-  // Table
-  box3(scene, 'tableTop', 3.6, 0.15, 2.2, '#6b4226',  0, TABLE_TOP_Y, 0)
-  for (const [x, z] of [[-1.6, -0.9], [1.6, -0.9], [-1.6, 0.9], [1.6, 0.9]]) {
-    const legH = TABLE_TOP_Y - 0.075
-    box3(scene, `leg${x}${z}`, 0.12, legH, 0.12, '#5a3620', x, legH / 2, z)
+  // Reset box to door when not in delivery so it's ready for next cycle
+  if (phase !== Phase.DELIVERY) {
+    box.actions.clearActions()
+    box.pos.x = _boxDoor.x
+    box.pos.y = _boxDoor.y
   }
-
-  // Workshop lamp (decorative)
-  box3(scene, 'lampShade', 0.5, 0.15, 0.5, '#3a3a50', 0, 4.8, 0)
-}
-
-function buildBox(scene) {
-  // Use .glb model if loaded, otherwise fall back to the procedural primitive.
-  const glb = getModel('delivery_box')
-  if (glb) {
-    glb.position.copyFrom(BOX_DOOR_POS)
-    glb.setEnabled(false)
-    return glb
-  }
-
-  const b = MeshBuilder.CreateBox('deliveryBox', { size: 0.72 }, scene)
-  b.position.copyFrom(BOX_DOOR_POS)
-  b.material = material(scene, '#c49a3c')
-  b.setEnabled(false)
-  return b
-}
-
-function buildDrone(scene) {
-  // Use .glb model if loaded, otherwise fall back to the procedural X-frame.
-  const glb = getModel('mini_drone')
-  if (glb) {
-    glb.position.set(0, TABLE_TOP_Y + 0.1, 0.15)
-    glb.setEnabled(false)
-    return glb
-  }
-
-  const root = new TransformNode('droneRoot', scene)
-  root.position.set(0, TABLE_TOP_Y + 0.1, 0.15)
-
-  // Flat body
-  const body = MeshBuilder.CreateBox('droneBody', { width: 0.88, height: 0.1, depth: 0.88 }, scene)
-  body.parent   = root
-  body.material = material(scene, '#2a2a3e')
-
-  // X-frame arms (two crossed bars at ±45°)
-  for (const [i, angle] of [[0, Math.PI / 4], [1, -Math.PI / 4]]) {
-    const arm = MeshBuilder.CreateBox(`arm${i}`, { width: 1.62, height: 0.07, depth: 0.1 }, scene)
-    arm.parent    = root
-    arm.rotation.y = angle
-    arm.material  = material(scene, '#333355')
-  }
-
-  // Motor nacelles at corners
-  for (const [i, x, z] of [[0, -0.48, -0.48], [1, 0.48, -0.48], [2, -0.48, 0.48], [3, 0.48, 0.48]]) {
-    const n = MeshBuilder.CreateBox(`nacelle${i}`, { width: 0.22, height: 0.14, depth: 0.22 }, scene)
-    n.parent   = root
-    n.position.set(x, 0.04, z)
-    n.material = material(scene, '#444466')
-  }
-
-  root.setEnabled(false)
-  return root
-}
-
-function animateBoxToTable(b, scene, onComplete) {
-  const anim = new Animation(
-    'boxMove', 'position', 60,
-    Animation.ANIMATIONTYPE_VECTOR3,
-    Animation.ANIMATIONLOOPMODE_CONSTANT,
-  )
-  anim.setKeys([
-    { frame: 0,  value: b.position.clone() },
-    { frame: 14, value: new Vector3(BOX_TABLE_POS.x, 2.2, BOX_TABLE_POS.z) },
-    { frame: 26, value: BOX_TABLE_POS.clone() },
-  ])
-  b.animations = [anim]
-  scene.beginAnimation(b, 0, 26, false, 1, onComplete)
 }

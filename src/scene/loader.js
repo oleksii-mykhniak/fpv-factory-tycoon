@@ -1,30 +1,29 @@
-// Babylon-specific loader. Imports Babylon/WebGL — never import this in Node unit tests.
-// Pure logic (cache, getModel, getAnchor) lives in modelCache.js.
-import { SceneLoader } from '@babylonjs/core'
-import '@babylonjs/loaders/glTF'        // registers glTF/glb support
-import { MODELS } from '../assets/manifest.js'
-import { _modelCache } from './modelCache.js'
+// Excalibur-specific loader. Imports ex.ImageSource — never import this in Node unit tests.
+// Pure cache logic (getSprite) lives in spriteCache.js (Node-safe).
+import { ImageSource } from 'excalibur'
+import { SPRITES } from '../assets/manifest.js'
+import { _spriteCache } from './spriteCache.js'
 
-export { getModel, getAnchor } from './modelCache.js'
+export { getSprite } from './spriteCache.js'
+export { getAnchor } from '../assets/manifest.js'
 
 // Load all manifest entries into the shared cache.
-// Always resolves — missing / broken files are stored as null (fallback to primitives).
+// Always resolves — missing / broken files are stored as null (fallback to rect).
 // onProgress(loaded, total) fires after each attempt.
-export async function loadModels(scene, onProgress) {
-  const entries = Object.entries(MODELS)
+export async function loadSprites(onProgress) {
+  const entries = Object.entries(SPRITES)
   let loaded = 0
 
   await Promise.all(entries.map(async ([key, entry]) => {
-    if (_modelCache.has(key)) { onProgress?.(++loaded, entries.length); return }
+    if (_spriteCache.has(key)) { onProgress?.(++loaded, entries.length); return }
 
     try {
-      const result = await SceneLoader.ImportMeshAsync('', entry.url, '', scene)
-      const root = result.meshes[0] ?? null
-      if (root) root.setEnabled(false)    // hidden until scene explicitly shows it
-      _modelCache.set(key, root)
+      const src = new ImageSource(entry.url)
+      await src.load()
+      _spriteCache.set(key, src)
     } catch (err) {
       console.warn(`[loader] "${key}" (${entry.url}) not loaded:`, err?.message ?? err)
-      _modelCache.setFailed(key)
+      _spriteCache.setFailed(key)
     }
 
     onProgress?.(++loaded, entries.length)
