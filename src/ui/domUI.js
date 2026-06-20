@@ -1,5 +1,6 @@
 import { Phase, KIT_TYPES, calcPrice } from '../state/gameState.js'
-import { SALVAGE_RATE, SOLDERING_UPGRADE_COSTS, SOLDERING_MAX_LEVEL } from '../state/config.js'
+import { SALVAGE_RATE } from '../state/config.js'
+import { UPGRADE_TRACKS, levelData } from '../state/upgrades.js'
 
 const PHASE_LABEL = {
   [Phase.IDLE]:     'Очікування',
@@ -9,13 +10,6 @@ const PHASE_LABEL = {
   [Phase.READY]:    'Готово до продажу',
   [Phase.BURNT]:    'Перегрів деталі!',
 }
-
-const SOLDERING_LEVELS = [
-  { name: 'Ручний паяльник',   effect: 'Базова механіка' },
-  { name: 'Кращий паяльник',   effect: 'Ширша зона +47%, перегрів −60%' },
-  { name: 'Напівавтомат',      effect: '1 тап — вся збірка, якість 65–85%' },
-  { name: 'Автопаяльник',      effect: 'Паяє сам, якість 55–75%, без участі' },
-]
 
 export function render(root, state, handlers, salesLog, warning = null) {
   const kit      = state.activeKit ? KIT_TYPES[state.activeKit] : null
@@ -86,11 +80,12 @@ export function render(root, state, handlers, salesLog, warning = null) {
           }
           if (level === 2) {
             // Semi-auto: one tap
+            const d = levelData('soldering', level)
             return `
               <button class="btn btn--primary" id="btn-semi-auto">
                 Зібрати (напівавтомат)
               </button>
-              <p class="upgrade-effect-hint">Якість: ${Math.round(65)}–${Math.round(85)}%</p>
+              <p class="upgrade-effect-hint">Якість: ${Math.round(d.qualityMin * 100)}–${Math.round(d.qualityMax * 100)}%</p>
             `
           }
           // Level 0-1: mini-game
@@ -171,10 +166,12 @@ export function render(root, state, handlers, salesLog, warning = null) {
 }
 
 function renderUpgrades(state) {
+  const track    = UPGRADE_TRACKS.soldering
+  const maxLevel = track.costs.length
   const level    = state.upgrades.solderingLevel
   const inIdle   = state.phase === Phase.IDLE
-  const nextInfo = level < SOLDERING_MAX_LEVEL ? SOLDERING_LEVELS[level + 1] : null
-  const nextCost = level < SOLDERING_MAX_LEVEL ? SOLDERING_UPGRADE_COSTS[level] : null
+  const nextInfo = level < maxLevel ? track.levels[level + 1] : null
+  const nextCost = level < maxLevel ? track.costs[level] : null
   const canBuy   = nextCost !== null && inIdle && state.money >= nextCost
 
   const kitCost      = KIT_TYPES.mini_drone.cost
@@ -184,8 +181,8 @@ function renderUpgrades(state) {
   return `
     <div class="upgrades">
       <div class="upgrades__header">
-        <span class="upgrades__title">Паяльник</span>
-        <span class="upgrades__current">${SOLDERING_LEVELS[level].name}</span>
+        <span class="upgrades__title">${track.name}</span>
+        <span class="upgrades__current">${track.levels[level].name}</span>
       </div>
       ${nextInfo ? `
         <button class="btn btn--upgrade" id="btn-upgrade-soldering"

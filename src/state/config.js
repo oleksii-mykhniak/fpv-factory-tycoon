@@ -37,7 +37,7 @@ export const AUTO_QUALITY_MIN   = 0.55
 export const AUTO_QUALITY_MAX   = 0.75
 export const AUTO_POINT_DELAY_MS = 2000  // ms between auto-soldered points
 
-// ── Upgrade costs & limits ───────────────────────────────
+// ── Upgrade costs ────────────────────────────────────────
 // Index = current level; value = cost to reach next level.
+// Max level is derived from this array's length (see upgrades.js trackMaxLevel).
 export const SOLDERING_UPGRADE_COSTS = [150, 300, 600]
-export const SOLDERING_MAX_LEVEL     = 3

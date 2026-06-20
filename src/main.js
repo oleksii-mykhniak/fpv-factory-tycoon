@@ -10,13 +10,10 @@ import {
 } from './state/gameState.js'
 import {
   DELIVERY_DELAY_MS,
-  COLD_SOLDER_THRESHOLD, OVERHEAT_CHANCE, SALVAGE_RATE,
+  COLD_SOLDER_THRESHOLD, SALVAGE_RATE,
   COLD_SOLDER_QUALITY_PENALTY,
-  SOLDER_GREEN_HALF,
-  BETTER_IRON_GREEN_HALF, BETTER_IRON_OVERHEAT_CHANCE,
-  SEMIAUTO_QUALITY_MIN, SEMIAUTO_QUALITY_MAX,
-  AUTO_QUALITY_MIN, AUTO_QUALITY_MAX, AUTO_POINT_DELAY_MS,
 } from './state/config.js'
+import { levelData, SOLDER_MODE } from './state/upgrades.js'
 import { render } from './ui/domUI.js'
 import { createSolderGame } from './ui/solderGame.js'
 import { initScene, updateScene } from './scene/scene.js'
@@ -56,6 +53,20 @@ const sceneRefs = initScene(canvas, {
   },
 })
 
+// ── Debug FPS counter ─────────────────────────────────────
+if (import.meta.env.MODE === 'debug') {
+  const fpsEl = Object.assign(document.createElement('div'), {
+    id: 'fps-counter',
+    style: 'position:fixed;top:6px;right:8px;color:#7de07d;font:bold 13px monospace;' +
+           'background:rgba(0,0,0,.55);padding:2px 6px;border-radius:4px;pointer-events:none;z-index:9999',
+  })
+  document.body.appendChild(fpsEl)
+  setInterval(() => {
+    const fps = sceneRefs?.engine?.getFps()
+    if (fps != null) fpsEl.textContent = `${fps.toFixed(0)} FPS`
+  }, 500)
+}
+
 // ── Delivery timer ───────────────────────────────────────
 
 function clearDeliveryTimer() {
@@ -76,24 +87,25 @@ function clearAutoTimer() {
 }
 
 function scheduleAutoPoint() {
+  const data = levelData('soldering', state.upgrades.solderingLevel)
   autoTimer = setTimeout(() => {
     autoTimer = null
     if (state.phase !== Phase.ASSEMBLY) return
 
-    const q = AUTO_QUALITY_MIN + Math.random() * (AUTO_QUALITY_MAX - AUTO_QUALITY_MIN)
+    const q = data.qualityMin + Math.random() * (data.qualityMax - data.qualityMin)
     const kit = KIT_TYPES[state.activeKit]
     state = recordSolderPoint(state, q)
     if (state.solderPoints.length >= kit.solderPointCount) state = finishAssembly(state)
     draw()
     if (state.phase === Phase.ASSEMBLY) scheduleAutoPoint()
-  }, AUTO_POINT_DELAY_MS)
+  }, data.pointDelayMs)
 }
 
-// ── Solder params per level ──────────────────────────────
+// ── Solder params per level (manual mini-game) ───────────
 
 function solderParams(level) {
-  if (level >= 1) return { greenHalf: BETTER_IRON_GREEN_HALF, overheatChance: BETTER_IRON_OVERHEAT_CHANCE }
-  return { greenHalf: SOLDER_GREEN_HALF, overheatChance: OVERHEAT_CHANCE }
+  const data = levelData('soldering', level)
+  return { greenHalf: data.greenHalf, overheatChance: data.overheatChance }
 }
 
 // ── Failure classification ───────────────────────────────
@@ -127,10 +139,11 @@ function draw() {
   warning = null
 
   const level = state.upgrades.solderingLevel
+  const mode  = levelData('soldering', level).mode
 
-  // Level 0-1: manual mini-game
+  // Manual levels: spin up the reaction mini-game
   const sgHost = uiRoot.querySelector('#sg-host')
-  if (sgHost && level <= 1) {
+  if (sgHost && mode === SOLDER_MODE.MANUAL) {
     const { greenHalf } = solderParams(level)
     activeGame = createSolderGame(sgHost, {
       pointIndex: state.solderPoints.length,
@@ -139,8 +152,8 @@ function draw() {
     })
   }
 
-  // Level 3: start auto-solder if not already running
-  if (state.phase === Phase.ASSEMBLY && level === 3 && autoTimer === null) {
+  // Auto level: start the background solder loop if not already running
+  if (state.phase === Phase.ASSEMBLY && mode === SOLDER_MODE.AUTO && autoTimer === null) {
     scheduleAutoPoint()
   }
 
@@ -170,10 +183,11 @@ const handlers = {
     update(sell(state))
   },
   onSemiAuto: () => {
-    const kit = KIT_TYPES[state.activeKit]
+    const kit  = KIT_TYPES[state.activeKit]
+    const data = levelData('soldering', state.upgrades.solderingLevel)
     let s = state
     while (s.solderPoints.length < kit.solderPointCount) {
-      const q = SEMIAUTO_QUALITY_MIN + Math.random() * (SEMIAUTO_QUALITY_MAX - SEMIAUTO_QUALITY_MIN)
+      const q = data.qualityMin + Math.random() * (data.qualityMax - data.qualityMin)
       s = recordSolderPoint(s, q)
     }
     update(finishAssembly(s))

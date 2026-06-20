@@ -7,7 +7,10 @@ import {
   applyColdSolderPenalty,
   calcPrice, calcQuality,
 } from './gameState.js'
-import { SOLDERING_UPGRADE_COSTS, SOLDERING_MAX_LEVEL } from './config.js'
+import { SOLDERING_UPGRADE_COSTS } from './config.js'
+import { trackMaxLevel, nextCost, levelData, UPGRADE_TRACKS, SOLDER_MODE } from './upgrades.js'
+
+const SOLDERING_MAX_LEVEL = trackMaxLevel('soldering')
 
 // helper: runs through the full cycle with given solder quality values
 function runCycle(qualityValues) {
@@ -365,5 +368,29 @@ describe('Апгрейди: buyUpgrade', () => {
     const before = s.upgrades.solderingLevel
     buyUpgrade(s, 'soldering')
     expect(s.upgrades.solderingLevel).toBe(before)
+  })
+})
+
+describe('Реєстр апгрейдів (data-driven)', () => {
+  it('max level дорівнює довжині масиву вартостей', () => {
+    expect(trackMaxLevel('soldering')).toBe(SOLDERING_UPGRADE_COSTS.length)
+  })
+
+  it('nextCost повертає вартість наступного рівня і null на максимумі', () => {
+    expect(nextCost('soldering', 0)).toBe(SOLDERING_UPGRADE_COSTS[0])
+    expect(nextCost('soldering', trackMaxLevel('soldering'))).toBeNull()
+  })
+
+  it('levelData повертає режим збірки для кожного рівня', () => {
+    expect(levelData('soldering', 0).mode).toBe(SOLDER_MODE.MANUAL)
+    expect(levelData('soldering', 1).mode).toBe(SOLDER_MODE.MANUAL)
+    expect(levelData('soldering', 2).mode).toBe(SOLDER_MODE.SEMI)
+    expect(levelData('soldering', 3).mode).toBe(SOLDER_MODE.AUTO)
+  })
+
+  it('buyUpgrade узагальнений: рухає рівень за stateKey трека', () => {
+    const track = UPGRADE_TRACKS.soldering
+    const s = buyUpgrade({ ...createState(), money: 9999 }, 'soldering')
+    expect(s.upgrades[track.stateKey]).toBe(1)
   })
 })

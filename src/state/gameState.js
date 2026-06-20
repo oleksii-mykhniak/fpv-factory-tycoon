@@ -1,8 +1,12 @@
 import {
   STARTING_MONEY,
   PRICE_BASE_COEFF, PRICE_QUALITY_COEFF,
-  SOLDERING_UPGRADE_COSTS, SOLDERING_MAX_LEVEL,
 } from './config.js'
+import { UPGRADE_TRACKS } from './upgrades.js'
+import { KIT_TYPES } from './kits.js'
+
+// Re-export so existing consumers keep importing kit data from gameState.js.
+export { KIT_TYPES }
 
 export const Phase = Object.freeze({
   IDLE:     'IDLE',
@@ -11,22 +15,6 @@ export const Phase = Object.freeze({
   ASSEMBLY: 'ASSEMBLY',
   READY:    'READY',
   BURNT:    'BURNT',   // part overheated during assembly
-})
-
-export const KIT_TYPES = Object.freeze({
-  mini_drone: {
-    id:               'mini_drone',
-    name:             'Міні-дрон',
-    cost:             72,
-    basePrice:        95,
-    solderPointCount: 4,
-    assemblySteps: [
-      'Збираю раму',
-      'Встановлюю мотори',
-      'Паяю регулятори (ESC)',
-      'Прошиваю польотний контролер',
-    ],
-  },
 })
 
 export function createState() {
@@ -158,18 +146,20 @@ export function sell(state) {
   }
 }
 
-export function buyUpgrade(state, upgradeId) {
-  if (upgradeId !== 'soldering')
-    throw new Error(`buyUpgrade: невідомий апгрейд "${upgradeId}"`)
-  const level = state.upgrades.solderingLevel
-  if (level >= SOLDERING_MAX_LEVEL)
-    throw new Error('buyUpgrade: паяльник вже на максимальному рівні')
-  const cost = SOLDERING_UPGRADE_COSTS[level]
+// Generic over any track registered in UPGRADE_TRACKS.
+export function buyUpgrade(state, trackId) {
+  const track = UPGRADE_TRACKS[trackId]
+  if (!track)
+    throw new Error(`buyUpgrade: невідомий апгрейд "${trackId}"`)
+  const level = state.upgrades[track.stateKey] ?? 0
+  if (level >= track.costs.length)
+    throw new Error('buyUpgrade: апгрейд вже на максимальному рівні')
+  const cost = track.costs[level]
   if (state.money < cost)
     throw new Error(`buyUpgrade: недостатньо грошей (є ${state.money}, потрібно ${cost})`)
   return {
     ...state,
     money:    state.money - cost,
-    upgrades: { ...state.upgrades, solderingLevel: level + 1 },
+    upgrades: { ...state.upgrades, [track.stateKey]: level + 1 },
   }
 }
