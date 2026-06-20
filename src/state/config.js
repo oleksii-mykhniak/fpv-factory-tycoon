@@ -41,3 +41,4 @@ export const AUTO_POINT_DELAY_MS = 2000  // ms between auto-soldered points
 // Index = current level; value = cost to reach next level.
 // Max level is derived from this array's length (see upgrades.js trackMaxLevel).
 export const SOLDERING_UPGRADE_COSTS = [150, 300, 600]
+export const WORKER_UPGRADE_COSTS    = [250, 500]

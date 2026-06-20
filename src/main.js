@@ -13,7 +13,7 @@ import {
   COLD_SOLDER_THRESHOLD, SALVAGE_RATE,
   COLD_SOLDER_QUALITY_PENALTY,
 } from './state/config.js'
-import { levelData, SOLDER_MODE } from './state/upgrades.js'
+import { levelData, SOLDER_MODE, WORKER_MODE } from './state/upgrades.js'
 import { createHUD } from './ui/hud.js'
 import { createShopModal } from './ui/shopModal.js'
 import { createSolderModal } from './ui/solderModal.js'
@@ -214,9 +214,19 @@ function draw() {
   const level = state.upgrades.solderingLevel
   const mode  = levelData('soldering', level).mode
 
-  // Auto mode: start background solder loop if not running
+  // Auto-solder: start background loop if not running
   if (state.phase === Phase.ASSEMBLY && mode === SOLDER_MODE.AUTO && autoTimer === null) {
     scheduleAutoPoint()
+  }
+
+  // Auto-worker: trigger delivery/solder based on worker upgrade mode
+  const workerMode = levelData('worker', state.upgrades.workerLevel ?? 0).mode
+  if (state.phase === Phase.DELIVERY &&
+      (workerMode === WORKER_MODE.SEMI || workerMode === WORKER_MODE.AUTO)) {
+    sceneRefs?.worker?.commandDeliver()
+  }
+  if (state.phase === Phase.ASSEMBLY && workerMode === WORKER_MODE.AUTO) {
+    sceneRefs?.worker?.commandSolder()
   }
 
   updateScene(sceneRefs, state.phase)

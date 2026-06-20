@@ -7,8 +7,8 @@ import {
   applyColdSolderPenalty,
   calcPrice, calcQuality,
 } from './gameState.js'
-import { SOLDERING_UPGRADE_COSTS } from './config.js'
-import { trackMaxLevel, nextCost, levelData, UPGRADE_TRACKS, SOLDER_MODE } from './upgrades.js'
+import { SOLDERING_UPGRADE_COSTS, WORKER_UPGRADE_COSTS } from './config.js'
+import { trackMaxLevel, nextCost, levelData, UPGRADE_TRACKS, SOLDER_MODE, WORKER_MODE } from './upgrades.js'
 
 const SOLDERING_MAX_LEVEL = trackMaxLevel('soldering')
 
@@ -392,5 +392,57 @@ describe('Реєстр апгрейдів (data-driven)', () => {
     const track = UPGRADE_TRACKS.soldering
     const s = buyUpgrade({ ...createState(), money: 9999 }, 'soldering')
     expect(s.upgrades[track.stateKey]).toBe(1)
+  })
+})
+
+describe('Апгрейди: worker-трек', () => {
+  function richState() {
+    return { ...createState(), money: 9999 }
+  }
+
+  it('початковий стан має workerLevel 0', () => {
+    expect(createState().upgrades.workerLevel).toBe(0)
+  })
+
+  it('рівень 0 → manual, 1 → semi, 2 → auto', () => {
+    expect(levelData('worker', 0).mode).toBe(WORKER_MODE.MANUAL)
+    expect(levelData('worker', 1).mode).toBe(WORKER_MODE.SEMI)
+    expect(levelData('worker', 2).mode).toBe(WORKER_MODE.AUTO)
+  })
+
+  it('buyUpgrade worker: рівень зростає, гроші зменшуються', () => {
+    const s = buyUpgrade(richState(), 'worker')
+    expect(s.upgrades.workerLevel).toBe(1)
+    expect(s.money).toBe(9999 - WORKER_UPGRADE_COSTS[0])
+  })
+
+  it('можна прокачати до максимального рівня', () => {
+    let s = richState()
+    const maxLevel = trackMaxLevel('worker')
+    for (let i = 0; i < maxLevel; i++) s = buyUpgrade(s, 'worker')
+    expect(s.upgrades.workerLevel).toBe(maxLevel)
+  })
+
+  it('вище максимуму — помилка', () => {
+    let s = richState()
+    const maxLevel = trackMaxLevel('worker')
+    for (let i = 0; i < maxLevel; i++) s = buyUpgrade(s, 'worker')
+    expect(() => buyUpgrade(s, 'worker')).toThrow('максимальному рівні')
+  })
+
+  it('max level збігається з довжиною WORKER_UPGRADE_COSTS', () => {
+    expect(trackMaxLevel('worker')).toBe(WORKER_UPGRADE_COSTS.length)
+  })
+
+  it('nextCost worker: повертає вартість і null на максимумі', () => {
+    expect(nextCost('worker', 0)).toBe(WORKER_UPGRADE_COSTS[0])
+    expect(nextCost('worker', trackMaxLevel('worker'))).toBeNull()
+  })
+
+  it('upgradeWorker не мутує стан', () => {
+    const s = richState()
+    const before = s.upgrades.workerLevel
+    buyUpgrade(s, 'worker')
+    expect(s.upgrades.workerLevel).toBe(before)
   })
 })

@@ -9,7 +9,7 @@ import {
   BETTER_IRON_GREEN_HALF, BETTER_IRON_OVERHEAT_CHANCE,
   SEMIAUTO_QUALITY_MIN, SEMIAUTO_QUALITY_MAX,
   AUTO_QUALITY_MIN, AUTO_QUALITY_MAX, AUTO_POINT_DELAY_MS,
-  SOLDERING_UPGRADE_COSTS,
+  SOLDERING_UPGRADE_COSTS, WORKER_UPGRADE_COSTS,
 } from './config.js'
 
 // Assembly behaviour a soldering level drives. main.js branches on this instead of
@@ -18,6 +18,12 @@ export const SOLDER_MODE = Object.freeze({
   MANUAL: 'manual',  // reaction mini-game (player solders each point)
   SEMI:   'semi',    // one tap solders the whole kit
   AUTO:   'auto',    // background timer solders each point on its own
+})
+
+export const WORKER_MODE = Object.freeze({
+  MANUAL: 'manual',  // player taps box and workbench
+  SEMI:   'semi',    // worker auto-fetches box on delivery arrival
+  AUTO:   'auto',    // worker auto-fetches and auto-starts soldering
 })
 
 export const UPGRADE_TRACKS = Object.freeze({
@@ -35,6 +41,20 @@ export const UPGRADE_TRACKS = Object.freeze({
         mode: SOLDER_MODE.SEMI, qualityMin: SEMIAUTO_QUALITY_MIN, qualityMax: SEMIAUTO_QUALITY_MAX },
       { name: 'Автопаяльник', effect: 'Паяє сам, якість 55–75%, без участі',
         mode: SOLDER_MODE.AUTO, qualityMin: AUTO_QUALITY_MIN, qualityMax: AUTO_QUALITY_MAX, pointDelayMs: AUTO_POINT_DELAY_MS },
+    ],
+  },
+  worker: {
+    id:       'worker',
+    name:     'Робітник',
+    stateKey: 'workerLevel',
+    costs:    WORKER_UPGRADE_COSTS,
+    levels: [
+      { name: 'Ручний режим', effect: 'Тап по коробці → доставка; тап по столу → пайка',
+        mode: WORKER_MODE.MANUAL },
+      { name: 'Авто-доставка', effect: 'Робітник сам забирає коробку при прибутті',
+        mode: WORKER_MODE.SEMI },
+      { name: 'Повний авто', effect: 'Робітник доставляє і готується до пайки без тапів',
+        mode: WORKER_MODE.AUTO },
     ],
   },
 })

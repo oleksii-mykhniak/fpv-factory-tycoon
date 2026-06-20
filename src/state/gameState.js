@@ -28,6 +28,7 @@ export function createState() {
     upgrades: {
       priceMultiplier: 1,
       solderingLevel:  0,   // 0=manual, 1=better iron, 2=semi-auto, 3=auto
+      workerLevel:     0,   // 0=manual, 1=auto-deliver, 2=full-auto
     },
   }
 }
