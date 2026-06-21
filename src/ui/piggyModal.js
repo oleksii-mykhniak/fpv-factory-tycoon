@@ -1,0 +1,103 @@
+import { PIGGY_TAP_VALUE, PIGGY_DURATION_MS, PIGGY_MAX_PAYOUT } from '../state/config.js'
+
+export function createPiggyModal(root, { onCollect }) {
+  const overlay = document.createElement('div')
+  overlay.className = 'modal-overlay piggy-overlay'
+  overlay.setAttribute('hidden', '')
+  overlay.innerHTML = `
+    <div class="modal piggy-modal" id="piggy-tap-area">
+      <div class="piggy-modal__body">
+        <div class="piggy-modal__title">Скарбничка</div>
+        <div class="piggy-emoji" id="piggy-emoji">🐷</div>
+        <div class="piggy-timer-wrap">
+          <div class="piggy-timer__bar"><div class="piggy-timer__fill" id="piggy-fill"></div></div>
+        </div>
+        <div class="piggy-taps-display">
+          <span id="piggy-taps">0</span> тапів → <span id="piggy-earn" class="piggy-earn">$0</span>
+        </div>
+        <div class="piggy-hint">Тапай будь-де!</div>
+        <div id="piggy-coins-layer" aria-hidden="true"></div>
+      </div>
+    </div>
+  `
+  root.appendChild(overlay)
+
+  const emojiEl   = overlay.querySelector('#piggy-emoji')
+  const fillEl    = overlay.querySelector('#piggy-fill')
+  const tapsEl    = overlay.querySelector('#piggy-taps')
+  const earnEl    = overlay.querySelector('#piggy-earn')
+  const coinsLayer = overlay.querySelector('#piggy-coins-layer')
+
+  let rafId     = null
+  let startTs   = 0
+  let taps      = 0
+
+  function currentPayout() {
+    return Math.min(taps * PIGGY_TAP_VALUE, PIGGY_MAX_PAYOUT)
+  }
+
+  function spawnCoin(x, y) {
+    const coin = document.createElement('span')
+    coin.className = 'piggy-coin'
+    coin.textContent = '💰'
+    const px = Math.max(5, Math.min(85, (x / overlay.offsetWidth) * 100))
+    coin.style.setProperty('--px', `${px}%`)
+    coinsLayer.appendChild(coin)
+    coin.addEventListener('animationend', () => coin.remove(), { once: true })
+  }
+
+  function handlePointerDown(e) {
+    e.preventDefault()
+    taps++
+    tapsEl.textContent = taps
+    earnEl.textContent = `$${currentPayout()}`
+
+    // shake animation restart
+    emojiEl.classList.remove('piggy-emoji--shake')
+    void emojiEl.offsetWidth
+    emojiEl.classList.add('piggy-emoji--shake')
+
+    spawnCoin(e.clientX, e.clientY)
+  }
+
+  function tick(now) {
+    const elapsed  = now - startTs
+    const progress = Math.min(elapsed / PIGGY_DURATION_MS, 1)
+    fillEl.style.width = `${(1 - progress) * 100}%`
+
+    if (progress < 1) {
+      rafId = requestAnimationFrame(tick)
+    } else {
+      finish()
+    }
+  }
+
+  function finish() {
+    overlay.setAttribute('hidden', '')
+    overlay.removeEventListener('pointerdown', handlePointerDown)
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null }
+    onCollect(taps)
+  }
+
+  function open() {
+    taps = 0
+    tapsEl.textContent = '0'
+    earnEl.textContent = '$0'
+    fillEl.style.width = '100%'
+    emojiEl.classList.remove('piggy-emoji--shake')
+    coinsLayer.innerHTML = ''
+
+    overlay.removeAttribute('hidden')
+    overlay.addEventListener('pointerdown', handlePointerDown)
+    startTs = performance.now()
+    rafId   = requestAnimationFrame(tick)
+  }
+
+  function close() {
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null }
+    overlay.setAttribute('hidden', '')
+    overlay.removeEventListener('pointerdown', handlePointerDown)
+  }
+
+  return { open, close }
+}

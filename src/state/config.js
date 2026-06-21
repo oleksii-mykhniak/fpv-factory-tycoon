@@ -93,6 +93,13 @@ export const KIT_CONFIGS = Object.freeze({
   },
 })
 
+// ── Piggy bank (rescue mini-game) ────────────────────────────
+// Visible only when money < cheapest kit and no active cycle.
+export const PIGGY_TAP_VALUE   = 3        // money per tap
+export const PIGGY_DURATION_MS = 8000     // tap window (ms)
+export const PIGGY_COOLDOWN_MS = 900000   // 15 min between sessions
+export const PIGGY_MAX_PAYOUT  = 72       // cap = cheapest kit cost → guaranteed rescue in one session
+
 // ── Upgrade costs ────────────────────────────────────────
 // Index = current level; value = cost to reach next level.
 // Max level is derived from this array's length (see upgrades.js trackMaxLevel).

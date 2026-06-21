@@ -1,6 +1,6 @@
 import * as ex from 'excalibur'
 import { Phase } from '../state/gameState.js'
-import { CAMERA_ZOOM_REF, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX } from '../state/config.js'
+import { CAMERA_ZOOM_REF, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX, PIGGY_COOLDOWN_MS } from '../state/config.js'
 import { loadSprites, getSprite } from './loader.js'
 import { createWorker } from './worker.js'
 
@@ -14,6 +14,9 @@ const ROOM_H = 0.88
 
 // Tracks the current game phase so pointer handlers can gate commands.
 let currentPhase = Phase.IDLE
+
+// lastPiggyAt from game state — piggy preupdate uses this for real-time cooldown display.
+let _piggyLastAt = null
 
 // ── Helpers ───────────────────────────────────────────────
 
@@ -79,7 +82,7 @@ function applySprite(actor, key) {
 
 // ── Scene entry points ────────────────────────────────────
 
-export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSellRequested, onLoadProgress }) {
+export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSellRequested, onLoadProgress, onPiggyRequested }) {
   const engine = new ex.Engine({
     canvasElement: canvas,
     backgroundColor: BG,
@@ -143,6 +146,55 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
   applySprite(drone, 'mini_drone')
   scene.add(drone)
 
+  // Piggy bank — visible whenever player is broke + IDLE.
+  // Active (pink, pulsing) when cooldown expired; dimmed + timer when in cooldown.
+  const piggySize = W * 0.13
+  const piggyPos  = ex.vec(W * 0.16, RH * 0.65)
+
+  const piggy = new ex.Actor({
+    pos:    piggyPos.clone(),
+    width:  piggySize,
+    height: piggySize,
+    z: 3,
+    color: ex.Color.fromHex('#d4607a'),
+  })
+  piggy.graphics.visible = false
+  scene.add(piggy)
+
+  const piggyTimerLabel = new ex.Label({
+    text:  '',
+    pos:   ex.vec(piggyPos.x, piggyPos.y - piggySize * 0.78),
+    color: ex.Color.fromHex('#dddddd'),
+    font:  new ex.Font({ size: 13, family: 'monospace', textAlign: ex.TextAlign.Center }),
+    z: 5,
+  })
+  piggyTimerLabel.graphics.visible = false
+  scene.add(piggyTimerLabel)
+
+  // preupdate: animate piggy and tick cooldown timer in real-time
+  piggy.on('preupdate', () => {
+    if (!piggy.graphics.visible) return
+    const now = Date.now()
+    const remaining = _piggyLastAt != null ? PIGGY_COOLDOWN_MS - (now - _piggyLastAt) : 0
+    if (remaining > 0) {
+      // Cooldown active — dimmed, no pulse, show timer
+      piggy.graphics.opacity = 0.35
+      piggy.scale = ex.vec(1, 1)
+      const secs = Math.ceil(remaining / 1000)
+      piggyTimerLabel.text = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+      piggyTimerLabel.graphics.visible = true
+    } else {
+      // Ready — pink, pulsing, no timer
+      piggy.graphics.opacity = 1.0
+      piggy.scale = ex.vec(1 + 0.08 * Math.sin(now / 400), 1 + 0.08 * Math.sin(now / 400))
+      piggyTimerLabel.graphics.visible = false
+    }
+  })
+
+  piggy.on('pointerup', () => {
+    if (piggy.graphics.visible) onPiggyRequested?.()
+  })
+
   // Worker
   const worker = createWorker(scene, {
     W, RH,
@@ -174,16 +226,23 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
     boxOpen,
     drone,
     worker,
+    piggy,
     _boxDoor: DOOR,
   }
 }
 
-export function updateScene(refs, phase) {
+// piggyInfo: null | { show: boolean, lastAt: number|null }
+export function updateScene(refs, phase, piggyInfo = null) {
   if (!refs?.box) return
 
   currentPhase = phase
 
-  const { box, boxOpen, drone, worker, _boxDoor } = refs
+  const { box, boxOpen, drone, worker, piggy, _boxDoor } = refs
+
+  if (piggy && piggyInfo !== null) {
+    piggy.graphics.visible = piggyInfo.show
+    _piggyLastAt = piggyInfo.lastAt
+  }
 
   const assembling = phase === Phase.ASSEMBLY || phase === Phase.READY
 

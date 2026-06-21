@@ -38,6 +38,15 @@ export function createSettingsModal(root, { onClearSave }) {
             <span class="toggle__slider"></span>
           </label>
         </div>
+        <div class="settings-divider"></div>
+        <div class="settings-section-title">Реальні FPV дрони</div>
+        <a class="btn btn--fpv-link"
+           href="https://s.click.aliexpress.com/e/_c4OzDRhF"
+           target="_blank" rel="noopener noreferrer">
+          🛒 Компоненти для FPV дрону
+        </a>
+        <p class="settings-fpv-hint">Збери справжній дрон — ті самі деталі що в грі</p>
+        <div class="settings-divider"></div>
         <div class="settings-version">Версія ${APP_VERSION}</div>
         <button class="btn btn--danger" id="settings-reset">Скинути збереження</button>
       </div>

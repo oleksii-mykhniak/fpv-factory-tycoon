@@ -7,6 +7,7 @@ import {
   burnKit, abandonBurntDrone, buyUpgrade,
   applyColdSolderPenalty,
   calcPrice,
+  canOpenPiggy, collectPiggy,
 } from './state/gameState.js'
 import {
   DELIVERY_DELAY_MS,
@@ -20,6 +21,7 @@ import { createShopModal } from './ui/shopModal.js'
 import { createUpgradeModal } from './ui/upgradeModal.js'
 import { createSettingsModal } from './ui/settingsModal.js'
 import { createSolderModal } from './ui/solderModal.js'
+import { createPiggyModal } from './ui/piggyModal.js'
 import { initScene, updateScene } from './scene/scene.js'
 
 // ── State init ────────────────────────────────────────────
@@ -73,6 +75,10 @@ const solderModal = createSolderModal(uiRoot, {
   onAbandon:      () => update(abandonBurntDrone(state, SALVAGE_RATE)),
 })
 
+const piggyModal = createPiggyModal(uiRoot, {
+  onCollect: (taps) => update(collectPiggy(state, taps, Date.now())),
+})
+
 createActionBar(uiRoot, {
   onShopOpen:     () => shopModal.open(state),
   onUpgradeOpen:  () => upgradeModal.open(state),
@@ -110,6 +116,10 @@ let sceneRefs = null
 initScene(canvas, {
   onBoxPicked: () => {
     if (state.phase === Phase.DELIVERY) update(startAssembly(state))
+  },
+  onPiggyRequested: () => {
+    const { can } = canOpenPiggy(state, Date.now())
+    if (can) piggyModal.open()
   },
   onSolderRequested: () => {
     const level  = state.upgrades.solderingLevel
@@ -189,11 +199,6 @@ function scheduleAutoPoint() {
 
 // ── Solder result handler ─────────────────────────────────
 
-function canAffordAfterBurn() {
-  const kit = KIT_TYPES[state.activeKit]
-  return state.money + kit.cost * SALVAGE_RATE >= kit.cost
-}
-
 function handleSolderResult(quality) {
   const solderLevel      = state.upgrades.solderingLevel
   const consumablesLevel = state.upgrades.consumablesLevel ?? 0
@@ -203,7 +208,7 @@ function handleSolderResult(quality) {
   const boostedQuality    = Math.min(1, quality + fluxData.qualityBonus)
 
   if (boostedQuality < COLD_SOLDER_THRESHOLD) {
-    if (Math.random() < effectiveOverheat && canAffordAfterBurn()) {
+    if (Math.random() < effectiveOverheat) {
       update(burnKit(state))
     } else {
       warning = 'cold'
@@ -247,7 +252,9 @@ function draw() {
     sceneRefs?.worker?.commandSolder()
   }
 
-  updateScene(sceneRefs, state.phase)
+  const minCost   = Math.min(...Object.values(KIT_TYPES).map(k => k.cost))
+  const showPiggy = state.money < minCost && state.phase === Phase.IDLE
+  updateScene(sceneRefs, state.phase, { show: showPiggy, lastAt: state.lastPiggyAt ?? null })
 }
 
 function update(newState) {

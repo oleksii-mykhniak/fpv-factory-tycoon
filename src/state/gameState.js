@@ -1,6 +1,7 @@
 import {
   STARTING_MONEY,
   PRICE_BASE_COEFF, PRICE_QUALITY_COEFF,
+  PIGGY_COOLDOWN_MS, PIGGY_TAP_VALUE, PIGGY_MAX_PAYOUT,
 } from './config.js'
 import { UPGRADE_TRACKS } from './upgrades.js'
 import { KIT_TYPES } from './kits.js'
@@ -24,12 +25,13 @@ export function createState() {
     activeKit:          null,
     solderPoints:       [],
     assemblyQuality:    null,
-    coldSolderPenalty:  0,   // accumulated quality cap reduction from cold-solder misses
+    coldSolderPenalty:  0,
+    lastPiggyAt:        null,  // timestamp of last piggy session; null = never used
     upgrades: {
       priceMultiplier:  1,
-      solderingLevel:   0,  // 0=manual, 1=better iron, 2=semi-auto, 3=auto
-      workerLevel:      0,  // 0=manual, 1=auto-deliver, 2=full-auto
-      consumablesLevel: 0,  // 0=cheap solder, 1=good flux, 2=silver solder
+      solderingLevel:   0,
+      workerLevel:      0,
+      consumablesLevel: 0,
     },
   }
 }
@@ -146,6 +148,23 @@ export function sell(state) {
     assemblyQuality:   null,
     coldSolderPenalty: 0,
   }
+}
+
+// ── Piggy bank ────────────────────────────────────────────
+
+// Returns { can: bool, remainingMs: number }.
+export function canOpenPiggy(state, now = Date.now()) {
+  if (state.lastPiggyAt == null) return { can: true, remainingMs: 0 }
+  const remaining = PIGGY_COOLDOWN_MS - (now - state.lastPiggyAt)
+  return remaining <= 0
+    ? { can: true, remainingMs: 0 }
+    : { can: false, remainingMs: remaining }
+}
+
+// Awards money for taps (capped), sets lastPiggyAt. Pure/immutable.
+export function collectPiggy(state, taps, now = Date.now()) {
+  const payout = Math.min(taps * PIGGY_TAP_VALUE, PIGGY_MAX_PAYOUT)
+  return { ...state, money: state.money + payout, lastPiggyAt: now }
 }
 
 // Generic over any track registered in UPGRADE_TRACKS.

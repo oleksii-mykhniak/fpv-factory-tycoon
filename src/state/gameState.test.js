@@ -6,8 +6,12 @@ import {
   burnKit, abandonBurntDrone, buyUpgrade,
   applyColdSolderPenalty,
   calcPrice, calcQuality,
+  canOpenPiggy, collectPiggy,
 } from './gameState.js'
-import { SOLDERING_UPGRADE_COSTS, WORKER_UPGRADE_COSTS, CONSUMABLES_UPGRADE_COSTS } from './config.js'
+import {
+  SOLDERING_UPGRADE_COSTS, WORKER_UPGRADE_COSTS, CONSUMABLES_UPGRADE_COSTS,
+  PIGGY_COOLDOWN_MS, PIGGY_TAP_VALUE, PIGGY_MAX_PAYOUT,
+} from './config.js'
 import { trackMaxLevel, nextCost, levelData, UPGRADE_TRACKS, SOLDER_MODE, WORKER_MODE } from './upgrades.js'
 
 const SOLDERING_MAX_LEVEL = trackMaxLevel('soldering')
@@ -540,5 +544,68 @@ describe('Апгрейд consumables (D2.2)', () => {
     const max = trackMaxLevel('consumables')
     for (let i = 0; i < max; i++) s = buyUpgrade(s, 'consumables')
     expect(() => buyUpgrade(s, 'consumables')).toThrow('максимальному рівні')
+  })
+})
+
+describe('Скарбничка (piggy bank)', () => {
+  it('canOpenPiggy: true коли lastPiggyAt null', () => {
+    const s = createState()
+    const { can, remainingMs } = canOpenPiggy(s, Date.now())
+    expect(can).toBe(true)
+    expect(remainingMs).toBe(0)
+  })
+
+  it('canOpenPiggy: false одразу після сесії', () => {
+    const now = Date.now()
+    const s = { ...createState(), lastPiggyAt: now - 1000 }
+    const { can, remainingMs } = canOpenPiggy(s, now)
+    expect(can).toBe(false)
+    expect(remainingMs).toBeGreaterThan(0)
+  })
+
+  it('canOpenPiggy: remainingMs відповідає часу що лишився', () => {
+    const now = Date.now()
+    const ago = 30_000
+    const s = { ...createState(), lastPiggyAt: now - ago }
+    const { remainingMs } = canOpenPiggy(s, now)
+    expect(remainingMs).toBeCloseTo(PIGGY_COOLDOWN_MS - ago, -2)
+  })
+
+  it('canOpenPiggy: true після закінчення кулдауну', () => {
+    const s = { ...createState(), lastPiggyAt: Date.now() - PIGGY_COOLDOWN_MS - 1 }
+    expect(canOpenPiggy(s, Date.now()).can).toBe(true)
+  })
+
+  it('collectPiggy: нараховує taps × tap_value', () => {
+    const now = Date.now()
+    const s = createState()
+    const result = collectPiggy(s, 10, now)
+    expect(result.money).toBe(s.money + Math.min(10 * PIGGY_TAP_VALUE, PIGGY_MAX_PAYOUT))
+    expect(result.lastPiggyAt).toBe(now)
+  })
+
+  it('collectPiggy: не перевищує PIGGY_MAX_PAYOUT', () => {
+    const s = createState()
+    expect(collectPiggy(s, 9999, Date.now()).money).toBe(s.money + PIGGY_MAX_PAYOUT)
+  })
+
+  it('collectPiggy: 0 тапів → 0 грошей', () => {
+    const s = createState()
+    expect(collectPiggy(s, 0, Date.now()).money).toBe(s.money)
+  })
+
+  it('collectPiggy: не мутує оригінальний стан', () => {
+    const s = createState()
+    const moneyBefore = s.money
+    collectPiggy(s, 5, Date.now())
+    expect(s.money).toBe(moneyBefore)
+    expect(s.lastPiggyAt).toBeNull()
+  })
+
+  it('lastPiggyAt зберігається в стані після collectPiggy', () => {
+    const s = createState()
+    const now = 1_700_000_000_000
+    const result = collectPiggy(s, 5, now)
+    expect(result.lastPiggyAt).toBe(now)
   })
 })
