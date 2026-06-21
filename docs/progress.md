@@ -18,11 +18,31 @@
 | D1 | UI/UX каркас | ✅ Готово | 2026-06-21 |
 | D2 | Контент магазину | ✅ Готово | 2026-06-21 |
 | D3 | Скарбничка | ✅ Готово | 2026-06-21 |
-| D4 | Живий світ | — | — |
+| D4 | Живий світ | ✅ Готово | 2026-06-21 |
 | D5 | Оформлення | — | — |
 | D6 | Слоти + логістика | — | — |
 | D7 | Прогрес локацій | — | — |
 | D8 | Реклама-гачки + поліш | — | — |
+
+---
+
+### D4 — Живий світ ✅
+
+**Що зроблено:**
+- `config.js` — `SCENE_ROOM_H_RATIO=0.70`, `SCENE_WORKER/DRONE/BOX_W_RATIO`, `PULSE_FREQ_HZ=1.5`, `PULSE_SCALE_AMP=0.08`; `deliveryMs` для кожного кіта (4/6/8/10 с); `DELIVERY_DELAY_MS` лишається як fallback
+- `workerFSM.js` — 3 нових стани: `EXIT_OUTSIDE`, `SELL`, `FREE_WALK`; `workerCanSell` включає IDLE/AT_BENCH/FREE_WALK; 14 тестів (з 8)
+- `worker.js` — плоский action-chain у `commandDeliver` (без вкладених `actor.actions` в `callMethod`); `commandSell` анімує воркера до поштової скриньки; дрон і коробка — дочірні об'єкти (`addChild`) під час carry; `scene.add` після `removeChild` щоб уникнути Excalibur-orphan; `walkTo` для вільного блукання (D4.7); y-sort через `preupdate`
+- `scene.js` — екстер'єр (темна смуга + тротуар); поштова скринька; `BOX_SPAWN` у зовнішній зоні; `DOOR` — поріг дверей; `addPulse` util; пульс-контролери на коробці/столі/скриньці; floor-tap через `engine.input.pointers.primary` (уникає z-order quirks)
+- `actionBar.js` — бейдж `!` на «Поліпшення» коли є доступний апгрейд; перевіряє всі треки через `UPGRADE_TRACKS`
+- `hud.js` — підказка DELIVERY адаптована до workerMode (SEMI/AUTO → «Доставка їде…»); підказка ASSEMBLY адаптована до solderMode (SEMI в процесі → «Паяємо…»)
+- `main.js` — SEMI-паяння через `scheduleAutoPoint()` (крок-за-кроком, не миттєво); `scheduleDelivery` бере `deliveryMs` з активного кіта
+
+**Відхилення від плану / рішення:**
+- **Плоский action-chain** замість вкладених callbacks — в Excalibur v0.32 `actor.actions.X` всередині `callMethod` ненадійно; плоський `.moveTo.callMethod.moveTo.callMethod...` завжди надійний
+- **`addChild/removeChild` + `scene.add`** — `addChild` знімає актора з render-list сцени; `scene.add` після `removeChild` повертає в сцену (idempotent якщо вже є)
+- **Floor-tap на engine-рівні** — `floor.on('pointerup')` при z=0 конкурував з workbench z=2; `engine.input.pointers.primary.on('up')` з bounds-check надійніший
+- **`deliveryMs` на кіт** — план мав один `DELIVERY_DELAY_MS`; різний час підвищує відчуття різниці між дронами
+- **A\* у TODO** — повноцінний pathfinding навколо столу відкладено; поточне рішення: вільна ходьба обмежена IDLE/ORDERED/DELIVERY, workerCanSolder/workerCanSell гардять від тапів під час руху
 
 ---
 
