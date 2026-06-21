@@ -20,8 +20,8 @@ import {
 //   onSolderRequested — called when worker starts soldering
 //   onSellRequested  — called after worker drops drone at mailbox
 
-const FRAME_W = 48
-const FRAME_H = 48
+const FRAME_W = 64
+const FRAME_H = 64
 
 export function createWorker(scene, {
   W, RH,

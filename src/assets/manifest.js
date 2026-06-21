@@ -56,6 +56,21 @@ export const SPRITES = Object.freeze({
     url: '/sprites/longrange_drone.png',
     anchors: {},
   },
+
+  lamp: {
+    url: '/sprites/lamp.png',
+    anchors: {},
+  },
+
+  mailbox: {
+    url: '/sprites/mailbox.png',
+    anchors: {},
+  },
+
+  piggy: {
+    url: '/sprites/piggy.png',
+    anchors: {},
+  },
 })
 
 // ── Helpers ───────────────────────────────────────────────

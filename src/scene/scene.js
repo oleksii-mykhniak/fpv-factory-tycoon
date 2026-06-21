@@ -20,6 +20,9 @@ let currentPhase = Phase.IDLE
 // lastPiggyAt from game state — piggy preupdate uses this for real-time cooldown display.
 let _piggyLastAt = null
 
+// Tracks which drone sprite is currently applied to avoid redundant applySprite calls.
+let _lastDroneSpriteKey = null
+
 // ── Helpers ───────────────────────────────────────────────
 
 function colorRect(scene, { x, y, w, h, hex, z = 0 }) {
@@ -94,7 +97,14 @@ function buildRoom(scene, W, H, RH) {
   const workbench = colorRect(scene, { x: W * 0.50, y: RH * 0.35, w: W * 0.60, h: RH * 0.13, hex: '#6b4226', z: 2 })
   colorRect(scene, { x: W * 0.50, y: RH * 0.42, w: W * 0.60, h: RH * 0.015, hex: '#4a2a18', z: 2 })
   // Ceiling lamp (top-down view)
-  colorRect(scene, { x: W * 0.50, y: RH * 0.16, w: W * 0.08, h: W * 0.08, hex: '#d4c060', z: 2 })
+  const lamp = new ex.Actor({
+    pos:    ex.vec(W * 0.50, RH * 0.16),
+    width:  W * 0.08,
+    height: W * 0.08,
+    z: 2,
+    color:  ex.Color.fromHex('#d4c060'),
+  })
+  scene.add(lamp)
 
   // ── Mailbox (outside, near door, left side) ───────────
   const MB_SIZE = W * 0.09
@@ -116,7 +126,7 @@ function buildRoom(scene, W, H, RH) {
     z: 4,
   })
 
-  return { workbench, floor, mailbox, HW, EXT_H }
+  return { workbench, floor, mailbox, lamp, HW, EXT_H }
 }
 
 // ── Sprite swap ───────────────────────────────────────────
@@ -150,7 +160,12 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
 
   scene.camera.zoom = Math.max(CAMERA_ZOOM_MIN, Math.min(CAMERA_ZOOM_MAX, H / CAMERA_ZOOM_REF))
 
-  const { workbench, floor, mailbox, HW, EXT_H } = buildRoom(scene, W, H, RH)
+  const { workbench, floor, mailbox, lamp, HW, EXT_H } = buildRoom(scene, W, H, RH)
+
+  // Apply environment sprites (swap colored rects to textured sprites)
+  applySprite(workbench, 'workbench')
+  applySprite(lamp, 'lamp')
+  applySprite(mailbox, 'mailbox')
 
   // ── Key positions ──────────────────────────────────────
   const WORKER_SIZE  = W * 0.18
@@ -195,7 +210,6 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
     color:  ex.Color.fromHex('#2a2a3e'),
   })
   drone.graphics.visible = false
-  applySprite(drone, 'mini_drone')
   scene.add(drone)
 
   // ── Piggy bank ─────────────────────────────────────────
@@ -210,6 +224,7 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
     color:  ex.Color.fromHex('#d4607a'),
   })
   piggy.graphics.visible = false
+  applySprite(piggy, 'piggy')
   scene.add(piggy)
 
   const piggyTimerLabel = new ex.Label({
@@ -307,7 +322,8 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
 }
 
 // piggyInfo: null | { show: boolean, lastAt: number|null }
-export function updateScene(refs, phase, piggyInfo = null) {
+// droneSpriteKey: string | null — spriteKey of the active kit; updates drone graphic when changed
+export function updateScene(refs, phase, piggyInfo = null, droneSpriteKey = null) {
   if (!refs?.box) return
 
   currentPhase = phase
@@ -317,6 +333,12 @@ export function updateScene(refs, phase, piggyInfo = null) {
   if (piggy && piggyInfo !== null) {
     piggy.graphics.visible = piggyInfo.show
     _piggyLastAt = piggyInfo.lastAt
+  }
+
+  // Swap drone sprite when kit changes (only when key is known and different)
+  if (droneSpriteKey && droneSpriteKey !== _lastDroneSpriteKey) {
+    applySprite(drone, droneSpriteKey)
+    _lastDroneSpriteKey = droneSpriteKey
   }
 
   const assembling = phase === Phase.ASSEMBLY || phase === Phase.READY

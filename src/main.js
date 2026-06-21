@@ -246,9 +246,10 @@ function draw() {
     sceneRefs?.worker?.commandSolder()
   }
 
-  const minCost   = Math.min(...Object.values(KIT_TYPES).map(k => k.cost))
-  const showPiggy = state.money < minCost && state.phase === Phase.IDLE
-  updateScene(sceneRefs, state.phase, { show: showPiggy, lastAt: state.lastPiggyAt ?? null })
+  const minCost        = Math.min(...Object.values(KIT_TYPES).map(k => k.cost))
+  const showPiggy      = state.money < minCost && state.phase === Phase.IDLE
+  const droneSpriteKey = state.activeKit ? (KIT_TYPES[state.activeKit]?.spriteKey ?? null) : null
+  updateScene(sceneRefs, state.phase, { show: showPiggy, lastAt: state.lastPiggyAt ?? null }, droneSpriteKey)
 }
 
 function update(newState) {
