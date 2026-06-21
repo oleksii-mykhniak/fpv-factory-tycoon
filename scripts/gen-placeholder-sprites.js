@@ -220,16 +220,79 @@ function drawWorkerWalk(pixels, w, h) {
   }
 }
 
+function drawRacingDrone(pixels, w, h) {
+  const cx = w >> 1, cy = h >> 1
+  // Slim X-frame arms — cyan/blue
+  drawLine(pixels, w, 4, 4, w - 5, h - 5,  0x40, 0x90, 0xd0, 2)
+  drawLine(pixels, w, w - 5, 4, 4, h - 5,  0x40, 0x90, 0xd0, 2)
+  // Motors
+  for (const [mx, my] of [[6, 6], [w - 7, 6], [6, h - 7], [w - 7, h - 7]]) {
+    fillCircle(pixels, w, mx, my, 6,  0x60, 0xb0, 0xe0)
+    fillCircle(pixels, w, mx, my, 4,  0x20, 0x60, 0xa0)
+    fillCircle(pixels, w, mx, my, 2,  0x90, 0xd0, 0xff)
+  }
+  // Center — compact body
+  fillRect(pixels, w, cx - 4, cy - 3, cx + 4, cy + 3,  0x18, 0x28, 0x4a)
+  fillCircle(pixels, w, cx, cy, 2,  0xff, 0x40, 0x40)  // red LED
+}
+
+function drawCinematicDrone(pixels, w, h) {
+  const cx = w >> 1, cy = h >> 1
+  // Heavy X-frame — dark gray
+  fillRect(pixels, w, 4, cy - 2, w - 5, cy + 2,  0x50, 0x50, 0x60)
+  fillRect(pixels, w, cx - 2, 4, cx + 2, h - 5,  0x50, 0x50, 0x60)
+  // Diagonal struts
+  drawLine(pixels, w, 8, 8, cx - 3, cy - 3,  0x60, 0x60, 0x70, 2)
+  drawLine(pixels, w, w - 9, 8, cx + 3, cy - 3,  0x60, 0x60, 0x70, 2)
+  drawLine(pixels, w, 8, h - 9, cx - 3, cy + 3,  0x60, 0x60, 0x70, 2)
+  drawLine(pixels, w, w - 9, h - 9, cx + 3, cy + 3,  0x60, 0x60, 0x70, 2)
+  // Motors
+  for (const [mx, my] of [[9, 9], [w - 10, 9], [9, h - 10], [w - 10, h - 10]]) {
+    fillCircle(pixels, w, mx, my, 7,  0x70, 0x70, 0x80)
+    fillCircle(pixels, w, mx, my, 5,  0x30, 0x30, 0x40)
+    fillCircle(pixels, w, mx, my, 2,  0xc0, 0xc0, 0xd0)
+  }
+  // Camera gimbal — bottom center
+  fillCircle(pixels, w, cx, cy + 2, 5,  0x28, 0x28, 0x38)
+  fillCircle(pixels, w, cx, cy + 2, 3,  0x10, 0x60, 0x90)  // lens
+  fillCircle(pixels, w, cx, cy + 2, 1,  0xd0, 0xd0, 0xff)  // reflection
+  // Body
+  fillRect(pixels, w, cx - 5, cy - 4, cx + 5, cy + 4,  0x22, 0x22, 0x32)
+}
+
+function drawLongrangeDrone(pixels, w, h) {
+  const cx = w >> 1, cy = h >> 1
+  // Elongated body
+  fillRect(pixels, w, 4, cy - 3, w - 5, cy + 3,  0x3a, 0x5a, 0x3a)
+  // Side wings
+  fillRect(pixels, w, cx - 2, 6, cx + 2, h - 7,  0x3a, 0x5a, 0x3a)
+  // Motors — 4-motor standard
+  for (const [mx, my] of [[8, cy], [w - 9, cy], [cx, 8], [cx, h - 9]]) {
+    fillCircle(pixels, w, mx, my, 6,  0x5a, 0x8a, 0x5a)
+    fillCircle(pixels, w, mx, my, 4,  0x28, 0x48, 0x28)
+    fillCircle(pixels, w, mx, my, 2,  0x8a, 0xca, 0x8a)
+  }
+  // GPS antenna nub
+  fillRect(pixels, w, cx - 1, 1, cx + 1, 4,  0xaa, 0xaa, 0x50)
+  fillCircle(pixels, w, cx, 2, 2,  0xdd, 0xdd, 0x60)
+  // Center body
+  fillRect(pixels, w, cx - 5, cy - 3, cx + 5, cy + 3,  0x28, 0x48, 0x28)
+  fillCircle(pixels, w, cx, cy, 2,  0x50, 0xff, 0x50)  // green LED
+}
+
 // ── Generate all sprites ──────────────────────────────────────────────────────
 
 mkdirSync('public/sprites', { recursive: true })
 
 const sprites = [
-  { name: 'mini_drone',     w:  80, h:  40, draw: drawDrone        },
-  { name: 'delivery_box',   w:  64, h:  52, draw: drawBox          },
-  { name: 'workbench',      w: 300, h:  20, draw: drawWorkbench    },
-  { name: 'soldering_iron', w:  48, h:  12, draw: drawSolderingIron },
-  { name: 'worker_walk',    w: 192, h:  48, draw: drawWorkerWalk   },
+  { name: 'mini_drone',       w:  80, h:  40, draw: drawDrone          },
+  { name: 'racing_drone',     w:  80, h:  40, draw: drawRacingDrone    },
+  { name: 'cinematic_drone',  w:  96, h:  56, draw: drawCinematicDrone },
+  { name: 'longrange_drone',  w:  88, h:  44, draw: drawLongrangeDrone },
+  { name: 'delivery_box',     w:  64, h:  52, draw: drawBox            },
+  { name: 'workbench',        w: 300, h:  20, draw: drawWorkbench      },
+  { name: 'soldering_iron',   w:  48, h:  12, draw: drawSolderingIron  },
+  { name: 'worker_walk',      w: 192, h:  48, draw: drawWorkerWalk     },
 ]
 
 for (const { name, w, h, draw } of sprites) {

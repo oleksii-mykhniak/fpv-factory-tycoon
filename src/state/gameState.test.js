@@ -7,7 +7,7 @@ import {
   applyColdSolderPenalty,
   calcPrice, calcQuality,
 } from './gameState.js'
-import { SOLDERING_UPGRADE_COSTS, WORKER_UPGRADE_COSTS } from './config.js'
+import { SOLDERING_UPGRADE_COSTS, WORKER_UPGRADE_COSTS, CONSUMABLES_UPGRADE_COSTS } from './config.js'
 import { trackMaxLevel, nextCost, levelData, UPGRADE_TRACKS, SOLDER_MODE, WORKER_MODE } from './upgrades.js'
 
 const SOLDERING_MAX_LEVEL = trackMaxLevel('soldering')
@@ -444,5 +444,101 @@ describe('Апгрейди: worker-трек', () => {
     const before = s.upgrades.workerLevel
     buyUpgrade(s, 'worker')
     expect(s.upgrades.workerLevel).toBe(before)
+  })
+})
+
+describe('Нові типи дронів (D2.1)', () => {
+  function richState() { return { ...createState(), money: 9999 } }
+
+  it('racing_drone: повний цикл з 6 точками', () => {
+    let s = richState()
+    s = orderKit(s, 'racing_drone')
+    expect(s.phase).toBe(Phase.ORDERED)
+    s = receiveDelivery(s)
+    s = startAssembly(s)
+    for (let i = 0; i < 6; i++) s = recordSolderPoint(s, 0.9)
+    s = finishAssembly(s)
+    expect(s.phase).toBe(Phase.READY)
+    expect(s.assemblyQuality).toBeCloseTo(0.9)
+    s = sell(s)
+    expect(s.phase).toBe(Phase.IDLE)
+    expect(s.money).toBeGreaterThan(0)
+  })
+
+  it('cinematic_drone: повний цикл з 8 точками', () => {
+    let s = richState()
+    s = orderKit(s, 'cinematic_drone')
+    s = receiveDelivery(s)
+    s = startAssembly(s)
+    for (let i = 0; i < 8; i++) s = recordSolderPoint(s, 1.0)
+    s = finishAssembly(s)
+    expect(s.assemblyQuality).toBeCloseTo(1.0)
+    s = sell(s)
+    expect(s.phase).toBe(Phase.IDLE)
+  })
+
+  it('longrange_drone: повний цикл з 5 точками', () => {
+    let s = richState()
+    s = orderKit(s, 'longrange_drone')
+    s = receiveDelivery(s)
+    s = startAssembly(s)
+    for (let i = 0; i < 5; i++) s = recordSolderPoint(s, 0.8)
+    s = finishAssembly(s)
+    expect(s.phase).toBe(Phase.READY)
+  })
+
+  it('кожен дрон має solderPointCount що збігається з довжиною assemblySteps', () => {
+    for (const kit of Object.values(KIT_TYPES)) {
+      expect(kit.assemblySteps.length, `${kit.id} steps length`).toBe(kit.solderPointCount)
+    }
+  })
+
+  it('ціна racing_drone вища за mini_drone при однаковій якості', () => {
+    const mini    = calcPrice(KIT_TYPES.mini_drone.basePrice,    1, 1)
+    const racing  = calcPrice(KIT_TYPES.racing_drone.basePrice,  1, 1)
+    const cinema  = calcPrice(KIT_TYPES.cinematic_drone.basePrice, 1, 1)
+    expect(racing).toBeGreaterThan(mini)
+    expect(cinema).toBeGreaterThan(racing)
+  })
+})
+
+describe('Апгрейд consumables (D2.2)', () => {
+  function richState() { return { ...createState(), money: 9999 } }
+
+  it('початковий стан має consumablesLevel 0', () => {
+    expect(createState().upgrades.consumablesLevel).toBe(0)
+  })
+
+  it('рівень 0: overheatMult=1.0, qualityBonus=0', () => {
+    const d = levelData('consumables', 0)
+    expect(d.overheatMult).toBe(1.0)
+    expect(d.qualityBonus).toBe(0)
+  })
+
+  it('рівень 1: overheatMult=0.7 (−30% перегрів)', () => {
+    expect(levelData('consumables', 1).overheatMult).toBe(0.7)
+  })
+
+  it('рівень 2: overheatMult=0.4, qualityBonus=0.05', () => {
+    const d = levelData('consumables', 2)
+    expect(d.overheatMult).toBe(0.4)
+    expect(d.qualityBonus).toBeCloseTo(0.05)
+  })
+
+  it('buyUpgrade consumables: рівень зростає, гроші зменшуються', () => {
+    const s = buyUpgrade(richState(), 'consumables')
+    expect(s.upgrades.consumablesLevel).toBe(1)
+    expect(s.money).toBe(9999 - CONSUMABLES_UPGRADE_COSTS[0])
+  })
+
+  it('consumables max level збігається з CONSUMABLES_UPGRADE_COSTS', () => {
+    expect(trackMaxLevel('consumables')).toBe(CONSUMABLES_UPGRADE_COSTS.length)
+  })
+
+  it('вище максимуму — помилка', () => {
+    let s = richState()
+    const max = trackMaxLevel('consumables')
+    for (let i = 0; i < max; i++) s = buyUpgrade(s, 'consumables')
+    expect(() => buyUpgrade(s, 'consumables')).toThrow('максимальному рівні')
   })
 })

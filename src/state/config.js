@@ -43,8 +43,65 @@ export const CAMERA_ZOOM_REF = 980   // reference height for zoom=1.0 feel
 export const CAMERA_ZOOM_MIN = 0.78  // floor for small phones (iPhone SE)
 export const CAMERA_ZOOM_MAX = 0.90  // ceiling for large phones (Pro Max)
 
+// ── Kit configs ───────────────────────────────────────────
+// All tunable per-kit params live here: economy, structure, assembly steps.
+// Sprites / names / emoji / unlock conditions are content → kits.js.
+// assemblySteps: label shown during that solder point; missMsg shown on cold-solder failure.
+export const KIT_CONFIGS = Object.freeze({
+  mini_drone: {
+    cost: 72, basePrice: 95,
+    assemblySteps: [
+      { label: 'Збираю раму',                    missMsg: 'Стійки не вирівняні — підправляємо кут' },
+      { label: 'Встановлюю мотори',              missMsg: 'Мотор не зафіксовано — підтягуємо болти' },
+      { label: 'Паяю регулятори (ESC)',           missMsg: "Погане з'єднання ESC — переплавляємо контакт" },
+      { label: 'Прошиваю польотний контролер',   missMsg: 'Помилка прошивки — перевіряємо контакти' },
+    ],
+  },
+  racing_drone: {
+    cost: 140, basePrice: 210,
+    assemblySteps: [
+      { label: 'Збираю гоночну раму',            missMsg: 'Рама перекошена — вирівнюємо' },
+      { label: 'Встановлюю мотори 2306',         missMsg: 'Мотор вібрує — перетягуємо гвинти' },
+      { label: 'Паяю ESC 4-в-1',                missMsg: "Холодне з'єднання ESC — переплавляємо" },
+      { label: 'Монтую відеопередавач',          missMsg: 'VTX тримається погано — переклеюємо' },
+      { label: 'Калібрую польотний контролер',   missMsg: 'Калібрування збилось — повторюємо' },
+      { label: 'Тестую двигуни',                 missMsg: 'Двигун не запускається — перевіряємо пайку' },
+    ],
+  },
+  cinematic_drone: {
+    cost: 260, basePrice: 420,
+    assemblySteps: [
+      { label: 'Збираю карбонову раму',          missMsg: 'Карбон не стискується рівно — перезбираємо' },
+      { label: 'Встановлюю тихі мотори',         missMsg: 'Мотор шумить — перевіряємо посадку' },
+      { label: 'Паяю ESC',                       missMsg: "Поганий контакт ESC — переплавляємо" },
+      { label: 'Монтую кріплення камери',        missMsg: 'Кріплення хитається — підтягуємо' },
+      { label: 'Підключаю стабілізатор',         missMsg: "Стабілізатор не відповідає — перевіряємо роз'єм" },
+      { label: 'Паяю відеопередавач',            missMsg: 'Антена замикає — переробляємо пайку' },
+      { label: 'Калібрую польотний контролер',   missMsg: 'Гіроскоп не калібрується — перевіряємо контакти' },
+      { label: 'Балансую пропелери',             missMsg: 'Дисбаланс пропелера — переставляємо' },
+    ],
+  },
+  longrange_drone: {
+    cost: 180, basePrice: 300,
+    assemblySteps: [
+      { label: 'Збираю раму для далеких польотів', missMsg: "Кріплення не тримає — переробляємо" },
+      { label: 'Встановлюю економічні мотори',     missMsg: 'Мотор перегрівається — перевіряємо монтаж' },
+      { label: 'Паяю GPS-модуль',                  missMsg: "Погане з'єднання GPS — переплавляємо" },
+      { label: 'Підключаю радіоприймач',           missMsg: 'Приймач не відповідає — перевіряємо пайку' },
+      { label: 'Прошиваю польотний контролер',     missMsg: 'Прошивка не завантажилась — повторюємо' },
+    ],
+  },
+})
+
 // ── Upgrade costs ────────────────────────────────────────
 // Index = current level; value = cost to reach next level.
 // Max level is derived from this array's length (see upgrades.js trackMaxLevel).
-export const SOLDERING_UPGRADE_COSTS = [150, 300, 600]
-export const WORKER_UPGRADE_COSTS    = [250, 500]
+export const SOLDERING_UPGRADE_COSTS    = [150, 300, 600]
+export const WORKER_UPGRADE_COSTS       = [250, 500]
+export const CONSUMABLES_UPGRADE_COSTS  = [120, 280]
+
+// ── Upgrade: Consumables (flux & solder) ─────────────────
+// Per-level overheat chance multiplier (stacks with soldering track).
+export const FLUX_OVERHEAT_MULT  = [1.0, 0.7, 0.4]
+// Per-level flat quality bonus added to each solder point result.
+export const FLUX_QUALITY_BONUS  = [0,   0,   0.05]

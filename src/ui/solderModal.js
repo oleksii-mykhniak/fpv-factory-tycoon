@@ -76,9 +76,11 @@ export function createSolderModal(root, { onSolderResult, onAbandon }) {
       return `<div class="solder-dot ${cls}"></div>`
     }).join('')
 
+    const step     = kit?.assemblySteps?.[done]
+    const missMsg  = step?.missMsg ?? 'Холодна пайка — переробляємо'
     const warnHTML = warning === 'cold' ? `
       <div class="warning-cold">
-        Холодна пайка — переробляємо
+        ${missMsg}
         <span class="warning-cold__penalty">−${Math.round(COLD_SOLDER_QUALITY_PENALTY * 100)}% якості</span>
       </div>` : ''
 
@@ -86,7 +88,7 @@ export function createSolderModal(root, { onSolderResult, onAbandon }) {
     if (done !== lastGameIdx || warning === 'cold') {
       destroyGame()
       lastGameIdx = done  // still same index on cold solder — next draw without warning won't recreate
-      const stepLabel = kit?.assemblySteps?.[done] ?? `Крок ${done + 1}`
+      const stepLabel = step?.label ?? `Крок ${done + 1}`
       body.innerHTML = `
         <div class="solder-track">${dotsHTML}</div>
         ${warnHTML}

@@ -10,6 +10,7 @@ import {
   SEMIAUTO_QUALITY_MIN, SEMIAUTO_QUALITY_MAX,
   AUTO_QUALITY_MIN, AUTO_QUALITY_MAX, AUTO_POINT_DELAY_MS,
   SOLDERING_UPGRADE_COSTS, WORKER_UPGRADE_COSTS,
+  CONSUMABLES_UPGRADE_COSTS, FLUX_OVERHEAT_MULT, FLUX_QUALITY_BONUS,
 } from './config.js'
 
 // Assembly behaviour a soldering level drives. main.js branches on this instead of
@@ -55,6 +56,21 @@ export const UPGRADE_TRACKS = Object.freeze({
         mode: WORKER_MODE.SEMI },
       { name: 'Повний авто', effect: 'Робітник доставляє і готується до пайки без тапів',
         mode: WORKER_MODE.AUTO },
+    ],
+  },
+
+  consumables: {
+    id:       'consumables',
+    name:     'Флюс і припій',
+    stateKey: 'consumablesLevel',
+    costs:    CONSUMABLES_UPGRADE_COSTS,
+    levels: [
+      { name: 'Дешевий припій',  effect: 'Базові витратні матеріали',
+        overheatMult: FLUX_OVERHEAT_MULT[0], qualityBonus: FLUX_QUALITY_BONUS[0] },
+      { name: 'Хороший флюс',   effect: `Перегрів −${Math.round((1 - FLUX_OVERHEAT_MULT[1]) * 100)}%`,
+        overheatMult: FLUX_OVERHEAT_MULT[1], qualityBonus: FLUX_QUALITY_BONUS[1] },
+      { name: 'Срібний припій', effect: `Перегрів −${Math.round((1 - FLUX_OVERHEAT_MULT[2]) * 100)}%, якість +${Math.round(FLUX_QUALITY_BONUS[2] * 100)}%`,
+        overheatMult: FLUX_OVERHEAT_MULT[2], qualityBonus: FLUX_QUALITY_BONUS[2] },
     ],
   },
 })

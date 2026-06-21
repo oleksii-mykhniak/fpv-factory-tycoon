@@ -16,13 +16,32 @@
 | Фаза | Назва | Статус | Дата коміту |
 |------|-------|--------|-------------|
 | D1 | UI/UX каркас | ✅ Готово | 2026-06-21 |
-| D2 | Контент магазину | — | — |
+| D2 | Контент магазину | ✅ Готово | 2026-06-21 |
 | D3 | Скарбничка | — | — |
 | D4 | Живий світ | — | — |
 | D5 | Оформлення | — | — |
 | D6 | Слоти + логістика | — | — |
 | D7 | Прогрес локацій | — | — |
 | D8 | Реклама-гачки + поліш | — | — |
+
+---
+
+### D2 — Контент магазину ✅
+
+**Що зроблено:**
+- `kits.js` + `config.js` — 3 нових типи дронів: `racing_drone` (6 точок, $140), `cinematic_drone` (8 точок, $260), `longrange_drone` (5 точок, $180, закритий до Гаражу)
+- `upgrades.js` + `config.js` — трек `consumables` (флюс і припій): 3 рівні, `overheatMult` знижує перегрів на 30%/60%, `qualityBonus` +5% на рівні 2
+- `main.js` — `handleSolderResult` застосовує `fluxData.overheatMult` і `fluxData.qualityBonus` до кожного сolder-point
+- `shopModal.js` — kit cards: emoji, difficulty dots (кружечки × N точок), діапазон ціни продажу, locked-картка для `longrange_drone`
+- `scripts/gen-placeholder-sprites.js` — 3 нові draw-функції (`drawRacingDrone`, `drawCinematicDrone`, `drawLongrangeDrone`) різних кольорів і форм; `public/sprites/` оновлено
+- `gameState.test.js` — 12 нових тестів: повний цикл для кожного нового дрону, consumables-трек (levelData, buyUpgrade, max-level), ціновий порядок (cinema > racing > mini)
+- 90 тестів зелені
+
+**Відхилення від плану / що зроблено понад план:**
+- **`KIT_CONFIGS` у `config.js`** — всі туніровані числа кіту в одному місці: `cost`, `basePrice`, `assemblySteps[]`. `kits.js` містить тільки контент (name, emoji, spriteKey, unlock). Не планувалось — додано за правилом «все у конфіг»
+- **`assemblySteps` → масив об'єктів `{label, missMsg}`** — кожен крок збірки має власне повідомлення при холодній пайці (не одне глобальне «Холодна пайка — переробляємо»). Наприклад: *"Погане з'єднання ESC — переплавляємо контакт"*, *"Мотор вібрує — перетягуємо гвинти"* і т.д. Не планувалось — з'ясувалось під час рев'ю що generic-текст не валідний для різних етапів
+- **`makeKit()` helper** — `solderPointCount` тепер деривується автоматично з `assemblySteps.length`, унеможливлюючи розсинхронізацію між кількістю кроків і лічильником; тест перевіряє інваріант
+- **`isKitLocked()` + placeholder** — `CURRENT_LOCATION = 'apartment'` у shopModal; longrange показується як locked прямо зараз, справжнє прив'язування до стану — D7
 
 ---
 

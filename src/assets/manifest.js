@@ -41,6 +41,21 @@ export const SPRITES = Object.freeze({
     url: '/sprites/worker_walk.png',
     anchors: {},
   },
+
+  racing_drone: {
+    url: '/sprites/racing_drone.png',
+    anchors: {},
+  },
+
+  cinematic_drone: {
+    url: '/sprites/cinematic_drone.png',
+    anchors: {},
+  },
+
+  longrange_drone: {
+    url: '/sprites/longrange_drone.png',
+    anchors: {},
+  },
 })
 
 // ── Helpers ───────────────────────────────────────────────

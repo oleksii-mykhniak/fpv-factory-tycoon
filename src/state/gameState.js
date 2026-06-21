@@ -26,9 +26,10 @@ export function createState() {
     assemblyQuality:    null,
     coldSolderPenalty:  0,   // accumulated quality cap reduction from cold-solder misses
     upgrades: {
-      priceMultiplier: 1,
-      solderingLevel:  0,   // 0=manual, 1=better iron, 2=semi-auto, 3=auto
-      workerLevel:     0,   // 0=manual, 1=auto-deliver, 2=full-auto
+      priceMultiplier:  1,
+      solderingLevel:   0,  // 0=manual, 1=better iron, 2=semi-auto, 3=auto
+      workerLevel:      0,  // 0=manual, 1=auto-deliver, 2=full-auto
+      consumablesLevel: 0,  // 0=cheap solder, 1=good flux, 2=silver solder
     },
   }
 }

@@ -189,19 +189,21 @@ function scheduleAutoPoint() {
 
 // ── Solder result handler ─────────────────────────────────
 
-function solderParams(level) {
-  return { overheatChance: levelData('soldering', level).overheatChance }
-}
-
 function canAffordAfterBurn() {
   const kit = KIT_TYPES[state.activeKit]
   return state.money + kit.cost * SALVAGE_RATE >= kit.cost
 }
 
 function handleSolderResult(quality) {
-  const { overheatChance } = solderParams(state.upgrades.solderingLevel)
-  if (quality < COLD_SOLDER_THRESHOLD) {
-    if (Math.random() < overheatChance && canAffordAfterBurn()) {
+  const solderLevel      = state.upgrades.solderingLevel
+  const consumablesLevel = state.upgrades.consumablesLevel ?? 0
+  const overheatChance   = levelData('soldering', solderLevel).overheatChance
+  const fluxData         = levelData('consumables', consumablesLevel)
+  const effectiveOverheat = overheatChance * fluxData.overheatMult
+  const boostedQuality    = Math.min(1, quality + fluxData.qualityBonus)
+
+  if (boostedQuality < COLD_SOLDER_THRESHOLD) {
+    if (Math.random() < effectiveOverheat && canAffordAfterBurn()) {
       update(burnKit(state))
     } else {
       warning = 'cold'
@@ -209,7 +211,7 @@ function handleSolderResult(quality) {
     }
     return
   }
-  const newState = recordSolderPoint(state, quality)
+  const newState = recordSolderPoint(state, boostedQuality)
   const kit      = KIT_TYPES[newState.activeKit]
   if (newState.solderPoints.length >= kit.solderPointCount) {
     const finished = finishAssembly(newState)

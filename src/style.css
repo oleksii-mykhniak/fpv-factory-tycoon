@@ -191,7 +191,94 @@ body {
   gap: 16px;
 }
 
-/* === Shop modal === */
+/* === Shop modal — kit cards === */
+
+.kit-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: #16162a;
+  border: 1px solid #2a2a3a;
+  border-radius: 10px;
+}
+
+.kit-card--locked {
+  opacity: 0.5;
+}
+
+.kit-card__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.kit-card__emoji {
+  font-size: 1.8rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.kit-card__info { flex: 1; min-width: 0; }
+
+.kit-card__name {
+  font-size: 0.95rem;
+  font-weight: bold;
+  color: #ddd;
+}
+
+.kit-card__meta {
+  font-size: 0.75rem;
+  color: #666;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.kit-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #555;
+}
+
+.kit-dot--filled { background: #7de07d; }
+
+.kit-card__prices {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.kit-card__buy-price {
+  font-size: 1rem;
+  font-weight: bold;
+  color: #e0c97d;
+}
+
+.kit-card__sell-range {
+  font-size: 0.72rem;
+  color: #7de07d;
+  opacity: 0.8;
+}
+
+.kit-card__btn { width: 100%; text-align: center; }
+
+.kit-card__note {
+  font-size: 0.75rem;
+  color: #666;
+  text-align: center;
+}
+
+.kit-card__lock {
+  font-size: 0.8rem;
+  color: #666;
+  text-align: center;
+  padding: 4px 0;
+}
+
+/* === Shop modal — sections (used by upgrade modal) === */
 
 .shop-section {
   display: flex;
