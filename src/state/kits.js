@@ -15,6 +15,7 @@ function makeKit(id, { name, emoji, spriteKey, unlock }) {
     emoji,
     cost:             cfg.cost,
     basePrice:        cfg.basePrice,
+    deliveryMs:       cfg.deliveryMs,
     solderPointCount: cfg.assemblySteps.length,
     assemblySteps:    cfg.assemblySteps,
     spriteKey,

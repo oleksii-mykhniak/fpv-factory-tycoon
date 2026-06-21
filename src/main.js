@@ -79,7 +79,7 @@ const piggyModal = createPiggyModal(uiRoot, {
   onCollect: (taps) => update(collectPiggy(state, taps, Date.now())),
 })
 
-createActionBar(uiRoot, {
+const actionBar = createActionBar(uiRoot, {
   onShopOpen:     () => shopModal.open(state),
   onUpgradeOpen:  () => upgradeModal.open(state),
   onSettingsOpen: () => settingsModal.open(),
@@ -130,16 +130,8 @@ initScene(canvas, {
       return
     }
     if (mode === SOLDER_MODE.SEMI) {
-      const kit  = KIT_TYPES[state.activeKit]
-      const data = levelData('soldering', level)
-      let s = state
-      while (s.solderPoints.length < kit.solderPointCount) {
-        const q = data.qualityMin + Math.random() * (data.qualityMax - data.qualityMin)
-        s = recordSolderPoint(s, q)
-      }
-      const next = finishAssembly(s)
-      sceneRefs?.worker?.notifySolderDone()
-      update(next)
+      // Same step-by-step as AUTO, but user-triggered (not auto-started in draw).
+      scheduleAutoPoint()
       return
     }
     // AUTO: solder fires via scheduleAutoPoint — bench tap is no-op
@@ -167,10 +159,11 @@ function clearDeliveryTimer() {
 }
 
 function scheduleDelivery() {
+  const delay = KIT_TYPES[state.activeKit]?.deliveryMs ?? DELIVERY_DELAY_MS
   deliveryTimer = setTimeout(() => {
     deliveryTimer = null
     if (state.phase === Phase.ORDERED) update(receiveDelivery(state))
-  }, DELIVERY_DELAY_MS)
+  }, delay)
 }
 
 function clearAutoTimer() {
@@ -231,6 +224,7 @@ function handleSolderResult(quality) {
 
 function draw() {
   hud.update(state)
+  actionBar.update(state)
   shopModal.update(state)
   upgradeModal.update(state)
   solderModal.update(state, warning)

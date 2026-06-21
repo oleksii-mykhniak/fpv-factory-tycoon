@@ -126,6 +126,28 @@ body {
 .action-bar__icon  { font-size: 1.3rem; line-height: 1; }
 .action-bar__label { font-size: 0.72rem; font-family: monospace; letter-spacing: 0.03em; }
 
+.action-bar__btn--notify { position: relative; }
+
+.action-bar__badge {
+  position: absolute;
+  top: 5px;
+  right: 8px;
+  background: #e05050;
+  color: #fff;
+  font-size: 0.60rem;
+  font-weight: bold;
+  font-family: monospace;
+  border-radius: 50%;
+  width: 15px;
+  height: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.action-bar__badge[hidden] { display: none; }
+
 /* === Modal overlay (centered) === */
 
 .modal-overlay {

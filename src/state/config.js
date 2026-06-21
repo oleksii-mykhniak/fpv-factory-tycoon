@@ -43,13 +43,23 @@ export const CAMERA_ZOOM_REF = 980   // reference height for zoom=1.0 feel
 export const CAMERA_ZOOM_MIN = 0.78  // floor for small phones (iPhone SE)
 export const CAMERA_ZOOM_MAX = 0.90  // ceiling for large phones (Pro Max)
 
+// ── Scene object proportions (ratios relative to canvas dimensions) ──
+export const SCENE_ROOM_H_RATIO   = 0.70  // room fraction of game canvas height
+export const SCENE_WORKER_W_RATIO = 0.18  // worker size (square) fraction of canvas width
+export const SCENE_DRONE_W_RATIO  = 0.09  // drone width fraction (smaller than worker)
+export const SCENE_BOX_W_RATIO    = 0.12  // delivery box width fraction
+
+// ── Interaction pulse cues ────────────────────────────────
+export const PULSE_FREQ_HZ   = 1.5   // oscillations per second
+export const PULSE_SCALE_AMP = 0.08  // ±amplitude of scale pulse
+
 // ── Kit configs ───────────────────────────────────────────
 // All tunable per-kit params live here: economy, structure, assembly steps.
 // Sprites / names / emoji / unlock conditions are content → kits.js.
 // assemblySteps: label shown during that solder point; missMsg shown on cold-solder failure.
 export const KIT_CONFIGS = Object.freeze({
   mini_drone: {
-    cost: 72, basePrice: 95,
+    cost: 72, basePrice: 95, deliveryMs: 4000,
     assemblySteps: [
       { label: 'Збираю раму',                    missMsg: 'Стійки не вирівняні — підправляємо кут' },
       { label: 'Встановлюю мотори',              missMsg: 'Мотор не зафіксовано — підтягуємо болти' },
@@ -58,7 +68,7 @@ export const KIT_CONFIGS = Object.freeze({
     ],
   },
   racing_drone: {
-    cost: 140, basePrice: 210,
+    cost: 140, basePrice: 210, deliveryMs: 6000,
     assemblySteps: [
       { label: 'Збираю гоночну раму',            missMsg: 'Рама перекошена — вирівнюємо' },
       { label: 'Встановлюю мотори 2306',         missMsg: 'Мотор вібрує — перетягуємо гвинти' },
@@ -69,7 +79,7 @@ export const KIT_CONFIGS = Object.freeze({
     ],
   },
   cinematic_drone: {
-    cost: 260, basePrice: 420,
+    cost: 260, basePrice: 420, deliveryMs: 10000,
     assemblySteps: [
       { label: 'Збираю карбонову раму',          missMsg: 'Карбон не стискується рівно — перезбираємо' },
       { label: 'Встановлюю тихі мотори',         missMsg: 'Мотор шумить — перевіряємо посадку' },
@@ -82,7 +92,7 @@ export const KIT_CONFIGS = Object.freeze({
     ],
   },
   longrange_drone: {
-    cost: 180, basePrice: 300,
+    cost: 180, basePrice: 300, deliveryMs: 8000,
     assemblySteps: [
       { label: 'Збираю раму для далеких польотів', missMsg: "Кріплення не тримає — переробляємо" },
       { label: 'Встановлюю економічні мотори',     missMsg: 'Мотор перегрівається — перевіряємо монтаж' },

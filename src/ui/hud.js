@@ -1,4 +1,5 @@
 import { Phase, KIT_TYPES, calcPrice } from '../state/gameState.js'
+import { levelData, WORKER_MODE, SOLDER_MODE } from '../state/upgrades.js'
 
 export function createHUD(root) {
   const el = document.createElement('div')
@@ -23,11 +24,21 @@ function hint(state) {
   switch (state.phase) {
     case Phase.IDLE:     return ''
     case Phase.ORDERED:  return "Кур'єр їде до вас…"
-    case Phase.DELIVERY: return 'Тапни коробку!'
+    case Phase.DELIVERY: {
+      const wMode = levelData('worker', state.upgrades.workerLevel ?? 0).mode
+      return (wMode === WORKER_MODE.SEMI || wMode === WORKER_MODE.AUTO)
+        ? 'Доставка їде…'
+        : 'Тапни коробку!'
+    }
     case Phase.ASSEMBLY: {
-      const kit   = KIT_TYPES[state.activeKit]
-      const done  = state.solderPoints.length
-      const total = kit?.solderPointCount ?? 0
+      const kit    = KIT_TYPES[state.activeKit]
+      const done   = state.solderPoints.length
+      const total  = kit?.solderPointCount ?? 0
+      const sMode  = levelData('soldering', state.upgrades.solderingLevel ?? 0).mode
+      if (sMode === SOLDER_MODE.AUTO || (sMode === SOLDER_MODE.SEMI && done > 0)) {
+        return `Паяємо… (${done}/${total})`
+      }
+      if (sMode === SOLDER_MODE.SEMI) return `Тапни стіл → запустити пайку`
       return `Тапни стіл → паяти (${done}/${total})`
     }
     case Phase.READY: {
