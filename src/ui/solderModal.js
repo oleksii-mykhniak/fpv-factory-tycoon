@@ -99,6 +99,7 @@ export function createSolderModal(root, { onSolderResult, onAbandon }) {
           pointIndex: done,
           greenHalf,
           onResult: onSolderResult,
+          tapArea: document,
         })
       }
     } else {

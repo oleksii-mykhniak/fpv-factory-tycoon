@@ -29,8 +29,8 @@ export function createWorker(scene, {
 
   const actor = new ex.Actor({
     pos:    idlePos.clone(),
-    width:  W  * 0.09,
-    height: W  * 0.09,
+    width:  W  * 0.18,
+    height: W  * 0.18,
     z: 5,
     color: ex.Color.fromHex('#f0a030'),
   })

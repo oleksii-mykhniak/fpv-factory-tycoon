@@ -37,6 +37,12 @@ export const AUTO_QUALITY_MIN   = 0.55
 export const AUTO_QUALITY_MAX   = 0.75
 export const AUTO_POINT_DELAY_MS = 2000  // ms between auto-soldered points
 
+// ── Camera zoom (dynamic, based on screen height) ────────
+// zoom = clamp(H / CAMERA_ZOOM_REF, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX)
+export const CAMERA_ZOOM_REF = 980   // reference height for zoom=1.0 feel
+export const CAMERA_ZOOM_MIN = 0.78  // floor for small phones (iPhone SE)
+export const CAMERA_ZOOM_MAX = 0.90  // ceiling for large phones (Pro Max)
+
 // ── Upgrade costs ────────────────────────────────────────
 // Index = current level; value = cost to reach next level.
 // Max level is derived from this array's length (see upgrades.js trackMaxLevel).

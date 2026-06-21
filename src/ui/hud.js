@@ -1,17 +1,15 @@
 import { Phase, KIT_TYPES, calcPrice } from '../state/gameState.js'
 
-export function createHUD(root, { onShopOpen }) {
+export function createHUD(root) {
   const el = document.createElement('div')
   el.id = 'hud'
   el.innerHTML = `
-    <div class="hud__top">
-      <button class="hud__shop-btn" id="hud-shop">Магазин</button>
+    <div class="hud__money-wrap">
       <span class="hud__money" id="hud-money">$0.00</span>
     </div>
     <div class="hud__hint" id="hud-hint"></div>
   `
   root.appendChild(el)
-  el.querySelector('#hud-shop').addEventListener('click', onShopOpen)
 
   function update(state) {
     el.querySelector('#hud-money').textContent = `$${state.money.toFixed(2)}`

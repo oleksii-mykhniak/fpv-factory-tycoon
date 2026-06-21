@@ -1,5 +1,5 @@
 import './style.css'
-import { saveGame, loadGame } from './save/storage.js'
+import { saveGame, loadGame, clearSave } from './save/storage.js'
 import {
   createState, Phase, KIT_TYPES,
   orderKit, receiveDelivery, startAssembly,
@@ -15,7 +15,10 @@ import {
 } from './state/config.js'
 import { levelData, SOLDER_MODE, WORKER_MODE } from './state/upgrades.js'
 import { createHUD } from './ui/hud.js'
+import { createActionBar } from './ui/actionBar.js'
 import { createShopModal } from './ui/shopModal.js'
+import { createUpgradeModal } from './ui/upgradeModal.js'
+import { createSettingsModal } from './ui/settingsModal.js'
 import { createSolderModal } from './ui/solderModal.js'
 import { initScene, updateScene } from './scene/scene.js'
 
@@ -48,18 +51,32 @@ const canvas = document.getElementById('game-canvas')
 
 // ── UI components ─────────────────────────────────────────
 
-const hud = createHUD(uiRoot, {
-  onShopOpen: () => shopModal.open(state),
-})
+const hud = createHUD(uiRoot)
 
 const shopModal = createShopModal(uiRoot, {
-  onOrder:      (kitId) => update(orderKit(state, kitId)),
-  onBuyUpgrade: (id)    => update(buyUpgrade(state, id)),
+  onOrder: (kitId) => update(orderKit(state, kitId)),
+})
+
+const upgradeModal = createUpgradeModal(uiRoot, {
+  onBuyUpgrade: (id) => update(buyUpgrade(state, id)),
+})
+
+const settingsModal = createSettingsModal(uiRoot, {
+  onClearSave: () => {
+    clearSave()
+    location.reload()
+  },
 })
 
 const solderModal = createSolderModal(uiRoot, {
   onSolderResult: handleSolderResult,
   onAbandon:      () => update(abandonBurntDrone(state, SALVAGE_RATE)),
+})
+
+createActionBar(uiRoot, {
+  onShopOpen:     () => shopModal.open(state),
+  onUpgradeOpen:  () => upgradeModal.open(state),
+  onSettingsOpen: () => settingsModal.open(),
 })
 
 // ── Loading overlay ───────────────────────────────────────
@@ -208,18 +225,17 @@ function handleSolderResult(quality) {
 function draw() {
   hud.update(state)
   shopModal.update(state)
+  upgradeModal.update(state)
   solderModal.update(state, warning)
   warning = null
 
   const level = state.upgrades.solderingLevel
   const mode  = levelData('soldering', level).mode
 
-  // Auto-solder: start background loop if not running
   if (state.phase === Phase.ASSEMBLY && mode === SOLDER_MODE.AUTO && autoTimer === null) {
     scheduleAutoPoint()
   }
 
-  // Auto-worker: trigger delivery/solder based on worker upgrade mode
   const workerMode = levelData('worker', state.upgrades.workerLevel ?? 0).mode
   if (state.phase === Phase.DELIVERY &&
       (workerMode === WORKER_MODE.SEMI || workerMode === WORKER_MODE.AUTO)) {

@@ -1,3 +1,17 @@
+/* === Font === */
+
+@font-face {
+  font-family: 'Fredoka One';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/FredokaOne-Regular.woff2') format('woff2');
+}
+
+:root {
+  --ab-h: 68px; /* action bar height — must match ACTION_BAR_H in scene.js */
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -23,11 +37,14 @@ body {
 
 #ui-root {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(100dvh - var(--ab-h));
   pointer-events: none;
 }
 
-/* === HUD (always-visible overlay) === */
+/* === HUD === */
 
 #hud {
   position: absolute;
@@ -35,42 +52,27 @@ body {
   pointer-events: none;
 }
 
-.hud__top {
+.hud__money-wrap {
   position: absolute;
   top: 12px;
-  left: 12px;
-  right: 12px;
+  left: 0;
+  right: 0;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  pointer-events: auto;
+  justify-content: center;
+  pointer-events: none;
 }
 
 .hud__money {
-  font-size: 1.4rem;
-  font-weight: bold;
+  font-family: 'Fredoka One', cursive;
+  font-size: 2rem;
   color: #7de07d;
-  letter-spacing: 0.03em;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  letter-spacing: 0.02em;
 }
-
-.hud__shop-btn {
-  background: rgba(42, 42, 62, 0.85);
-  border: 1px solid #555;
-  color: #ccd;
-  font-size: 0.9rem;
-  font-family: monospace;
-  padding: 6px 14px;
-  border-radius: 8px;
-  cursor: pointer;
-  pointer-events: auto;
-  letter-spacing: 0.04em;
-}
-
-.hud__shop-btn:active { background: #34345a; }
 
 .hud__hint {
   position: absolute;
-  bottom: 20px;
+  bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
   font-size: 0.82rem;
@@ -83,17 +85,59 @@ body {
   letter-spacing: 0.03em;
 }
 
-/* === Modal overlay === */
+/* === Action bar === */
+
+#action-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  background: rgba(18, 18, 28, 0.94);
+  border-top: 1px solid #2a2a3a;
+  pointer-events: auto;
+}
+
+.action-bar__btn {
+  flex: 1;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: rgba(42, 42, 62, 0.85);
+  border: 1px solid #444;
+  color: #ccd;
+  border-radius: 10px;
+  cursor: pointer;
+  padding: 8px 4px;
+  transition: background 0.1s, transform 0.1s;
+}
+
+.action-bar__btn:active {
+  background: #34345a;
+  transform: scale(0.96);
+}
+
+.action-bar__icon  { font-size: 1.3rem; line-height: 1; }
+.action-bar__label { font-size: 0.72rem; font-family: monospace; letter-spacing: 0.03em; }
+
+/* === Modal overlay (centered) === */
 
 .modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.7);
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
   z-index: 200;
   pointer-events: auto;
+  padding: 16px;
 }
 
 .modal-overlay[hidden] { display: none; }
@@ -101,10 +145,10 @@ body {
 .modal {
   background: #1e1e2e;
   border: 1px solid #333;
-  border-radius: 16px 16px 0 0;
+  border-radius: 16px;
   width: 100%;
   max-width: 440px;
-  max-height: 72dvh;
+  max-height: 80dvh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -141,7 +185,7 @@ body {
 .modal__close:hover { color: #aaa; }
 
 .modal__body {
-  padding: 16px 20px 32px;
+  padding: 16px 20px 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -220,6 +264,60 @@ body {
 
 .warn { font-size: 0.8rem; color: #e07a7a; }
 .upgrade-effect-hint { font-size: 0.75rem; color: #666; }
+
+/* === Settings modal === */
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.95rem;
+  color: #ccc;
+  padding: 4px 0;
+}
+
+.settings-version {
+  font-size: 0.75rem;
+  color: #555;
+  text-align: center;
+  padding: 4px 0;
+}
+
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 26px;
+  cursor: pointer;
+}
+
+.toggle input { opacity: 0; width: 0; height: 0; }
+
+.toggle__slider {
+  position: absolute;
+  inset: 0;
+  background: #333;
+  border-radius: 13px;
+  transition: background 0.2s;
+}
+
+.toggle__slider::before {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  left: 3px;
+  top: 3px;
+  background: #888;
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.toggle input:checked + .toggle__slider { background: #2d5a8e; }
+.toggle input:checked + .toggle__slider::before {
+  transform: translateX(18px);
+  background: #dde;
+}
 
 /* === Solder modal === */
 
@@ -357,7 +455,7 @@ body {
   text-transform: uppercase;
 }
 
-/* === Auto-notice (in modals or as overlay) === */
+/* === Auto-notice === */
 
 .auto-notice {
   font-size: 0.9rem;

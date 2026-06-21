@@ -1,12 +1,15 @@
 import * as ex from 'excalibur'
 import { Phase } from '../state/gameState.js'
+import { CAMERA_ZOOM_REF, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX } from '../state/config.js'
 import { loadSprites, getSprite } from './loader.js'
 import { createWorker } from './worker.js'
 
 const BG = ex.Color.fromHex('#0e0e18')
 
-// T3: DOM panel removed → full canvas available. Room uses top 88%.
-// Bottom 12% stays dark (visual breathing room below room walls).
+// Height of the action bar (must match --ab-h in style.css).
+const ACTION_BAR_H = 68
+
+// Room occupies top 88% of the game canvas (which already excludes action bar).
 const ROOM_H = 0.88
 
 // Tracks the current game phase so pointer handlers can gate commands.
@@ -92,10 +95,13 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
   const RH = H * ROOM_H
   const scene = engine.currentScene
 
+  // Dynamic zoom: smaller screens pull back more. Tune via config.js.
+  scene.camera.zoom = Math.max(CAMERA_ZOOM_MIN, Math.min(CAMERA_ZOOM_MAX, H / CAMERA_ZOOM_REF))
+
   const { workbench } = buildRoom(scene, W, H)
 
   // Key positions — derived from actual Actor positions where possible.
-  const WORKER_SIZE = W * 0.09                       // matches worker.js
+  const WORKER_SIZE = W * 0.18                       // matches worker.js
   const DOOR        = ex.vec(W * 0.38, RH * 0.88)   // door gap center; box spawns here
   const TABLE       = workbench.pos.clone()           // box lands on workbench center
   const IDLE_POS    = ex.vec(W * 0.72, RH * 0.68)   // worker resting spot (right side)

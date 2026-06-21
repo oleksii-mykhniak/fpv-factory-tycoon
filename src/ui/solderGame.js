@@ -1,7 +1,8 @@
 import { SOLDER_BASE_PERIOD_MS, SOLDER_SPEED_FACTOR } from '../state/config.js'
 
-export function createSolderGame(host, { pointIndex, greenHalf, onResult }) {
-  const period = SOLDER_BASE_PERIOD_MS * Math.pow(SOLDER_SPEED_FACTOR, pointIndex)
+export function createSolderGame(host, { pointIndex, greenHalf, onResult, tapArea }) {
+  const period  = SOLDER_BASE_PERIOD_MS * Math.pow(SOLDER_SPEED_FACTOR, pointIndex)
+  const tapper  = tapArea ?? host
 
   let running   = true
   let startTime = null
@@ -16,7 +17,7 @@ export function createSolderGame(host, { pointIndex, greenHalf, onResult }) {
         "></div>
         <div class="sg__needle" id="sg-needle"></div>
       </div>
-      <p class="sg__hint">Натисни коли повзунок у зеленій зоні</p>
+      <p class="sg__hint">Натисни будь-де або Space щоб зафіксувати</p>
     </div>
   `
 
@@ -33,7 +34,9 @@ export function createSolderGame(host, { pointIndex, greenHalf, onResult }) {
 
   requestAnimationFrame(tick)
 
-  function handleTap() {
+  function handleTap(e) {
+    // Ignore taps on the close button or outside the mini-game area
+    if (e.target.closest?.('.modal__close')) return
     if (!running) return
     running = false
 
@@ -51,16 +54,17 @@ export function createSolderGame(host, { pointIndex, greenHalf, onResult }) {
     setTimeout(() => onResult(quality), 500)
   }
 
-  track.addEventListener('click', handleTap)
+  tapper.addEventListener('pointerdown', handleTap)
 
   function onKey(e) {
-    if (e.code === 'Space') { e.preventDefault(); handleTap() }
+    if (e.code === 'Space') { e.preventDefault(); handleTap(e) }
   }
   document.addEventListener('keydown', onKey)
 
   return {
     destroy() {
       running = false
+      tapper.removeEventListener('pointerdown', handleTap)
       document.removeEventListener('keydown', onKey)
     },
   }
