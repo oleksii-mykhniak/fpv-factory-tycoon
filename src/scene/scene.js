@@ -482,8 +482,8 @@ export function updateScene(refs, phase, piggyInfo = null, droneSpriteKey = null
   }
 
   // Park carry box off-screen when not being carried — prevents invisible actor
-  // from intercepting pointer events on street slot indicators.
-  if (!assembling && !carryingDel) {
+  // from intercepting pointer events (workbench at z=2, box at z=3).
+  if (!carryingDel) {
     box.actions.clearActions()
     box.pos.x = -9999
     box.pos.y = -9999

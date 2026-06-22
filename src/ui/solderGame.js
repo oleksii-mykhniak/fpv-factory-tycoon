@@ -18,11 +18,14 @@ export function createSolderGame(host, { pointIndex, greenHalf, onResult, tapAre
         <div class="sg__needle" id="sg-needle"></div>
       </div>
       <p class="sg__hint">Натисни будь-де або Space щоб зафіксувати</p>
+      <p class="sg__feedback" style="visibility:hidden" aria-hidden="true">Ідеально!</p>
     </div>
   `
 
-  const needle = host.querySelector('#sg-needle')
-  const track  = host.querySelector('#sg-track')
+  const needle   = host.querySelector('#sg-needle')
+  const track    = host.querySelector('#sg-track')
+  const hintEl   = host.querySelector('.sg__hint')
+  const resultEl = host.querySelector('.sg__feedback')
 
   function tick(ts) {
     if (!running) return
@@ -45,11 +48,10 @@ export function createSolderGame(host, { pointIndex, greenHalf, onResult, tapAre
     needle.style.width      = '6px'
     track.style.cursor      = 'default'
 
-    const fb = document.createElement('p')
-    fb.className   = 'sg__feedback'
-    fb.textContent = feedbackText(quality)
-    fb.style.color = qualityColor(quality)
-    host.querySelector('.sg').appendChild(fb)
+    hintEl.style.visibility   = 'hidden'
+    resultEl.textContent      = feedbackText(quality)
+    resultEl.style.color      = qualityColor(quality)
+    resultEl.style.visibility = 'visible'
 
     setTimeout(() => onResult(quality), 500)
   }
