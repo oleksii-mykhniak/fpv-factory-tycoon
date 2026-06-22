@@ -20,9 +20,29 @@
 | D3 | Скарбничка | ✅ Готово | 2026-06-21 |
 | D4 | Живий світ | ✅ Готово | 2026-06-21 |
 | D5 | Оформлення | ✅ Готово | 2026-06-21 |
-| D6 | Слоти + логістика | — | — |
+| D6 | Слоти + логістика | ✅ Готово | 2026-06-22 |
 | D7 | Прогрес локацій | — | — |
 | D8 | Реклама-гачки + поліш | — | — |
+
+---
+
+### D6 — Слоти + логістика ✅
+
+**Що зроблено:**
+- `gameState.js` — рефактор архітектури доставки: `Phase.ORDERED/DELIVERY` → видалено; новий `DeliveryStatus` (`transit`/`carrying`); `deliveries[]` замість `deliveryQueue` + `activeDeliveryReadyAt` + `activeSlotIndex`; нові функції `pickupDelivery(state, id, now)` і оновлений `startAssembly`; `_usedSlots` враховує bench + pending deliveries
+- `gameState.test.js` — повна перезапись: 103 тести (було 133 разом з іншими suite), новий блок D6.6 з тестами `pickupDelivery` (any-order pickup, guards)
+- `scene.js` — `updateScene` нова сигнатура `(refs, phase, piggy, droneSpriteKey, deliveries, carryingSlotIndex)`; slot indicators керуються через `deliveries[].status`; carry box репозиціонується при зміні `carryingDel.id`; поінтер-івент box → знаходить `carrying` delivery
+- `main.js` — `migrateState()` для старих saves (ORDERED/DELIVERY → IDLE + deliveries entry); `scheduleDeliveryCheck()` замість роздільних `deliveryTimer`/`queueCheckTimer`; `draw()` перевіряє carrying delivery замість `Phase.DELIVERY`; `onBoxPicked` і `onSlotTapped` оновлені
+- `hud.js` — підказка для IDLE перевіряє `status=carrying` (→ «Несемо на стіл») і `status=transit` (→ «Кур'єр їде»)
+- `shopModal.js` — `deliveries.length` для підрахунку слотів
+- `solderModal.js` — прибрано `Phase.ORDERED/DELIVERY` з auto-close умови
+- config/upgrades: `storage` і `logistics` треки, `STORAGE_SLOTS_BY_LEVEL`, `LOGISTICS_DELIVERY_MULT`
+
+**Ключове архітектурне рішення:**
+Будь-який воркер може підняти будь-яку коробку в будь-якому порядку — перший замовлений не блокує другий. Bench-стан (ASSEMBLY/READY/BURNT) повністю відокремлений від per-delivery статусу.
+
+**Відхилення від плану:**
+- D6.6 вимагав повного рефактору замість патчу — `Phase.ORDERED/DELIVERY` видалено з моделі, не просто задепрекейчено
 
 ---
 

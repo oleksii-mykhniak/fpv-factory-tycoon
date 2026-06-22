@@ -85,6 +85,46 @@ body {
   letter-spacing: 0.03em;
 }
 
+.hud__delivery-strip {
+  position: absolute;
+  top: 58px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.delivery-slots {
+  display: flex;
+  gap: 6px;
+}
+
+.delivery-slot {
+  font-size: 0.78rem;
+  padding: 2px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #aaa;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.delivery-slot--ready {
+  background: rgba(80, 220, 120, 0.18);
+  color: #6de;
+  border-color: rgba(80, 220, 120, 0.35);
+}
+
+.shop-slot-info {
+  text-align: center;
+  font-size: 0.78rem;
+  color: #9ab;
+  margin: 0 0 10px;
+  padding: 4px 10px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 8px;
+}
+
 /* === Action bar === */
 
 #action-bar {

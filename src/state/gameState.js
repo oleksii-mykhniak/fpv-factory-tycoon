@@ -2,6 +2,7 @@ import {
   STARTING_MONEY,
   PRICE_BASE_COEFF, PRICE_QUALITY_COEFF,
   PIGGY_COOLDOWN_MS, PIGGY_TAP_VALUE, PIGGY_MAX_PAYOUT,
+  STORAGE_SLOTS_BY_LEVEL, LOGISTICS_DELIVERY_MULT,
 } from './config.js'
 import { UPGRADE_TRACKS } from './upgrades.js'
 import { KIT_TYPES } from './kits.js'
@@ -11,30 +12,42 @@ export { KIT_TYPES }
 
 export const Phase = Object.freeze({
   IDLE:     'IDLE',
-  ORDERED:  'ORDERED',
-  DELIVERY: 'DELIVERY',
   ASSEMBLY: 'ASSEMBLY',
   READY:    'READY',
-  BURNT:    'BURNT',   // part overheated during assembly
+  BURNT:    'BURNT',
+})
+
+// Per-delivery status — lives inside each deliveries[] entry.
+export const DeliveryStatus = Object.freeze({
+  TRANSIT:  'transit',   // in transit or arrived but not picked up
+  CARRYING: 'carrying',  // worker picked it up, walking to bench
 })
 
 export function createState() {
   return {
-    money:              STARTING_MONEY,
-    phase:              Phase.IDLE,
-    activeKit:          null,
-    solderPoints:       [],
-    assemblyQuality:    null,
-    coldSolderPenalty:  0,
-    lastPiggyAt:        null,  // timestamp of last piggy session; null = never used
+    money:             STARTING_MONEY,
+    phase:             Phase.IDLE,
+    activeKit:         null,  // kit currently on bench (ASSEMBLY/READY/BURNT)
+    solderPoints:      [],
+    assemblyQuality:   null,
+    coldSolderPenalty: 0,
+    lastPiggyAt:       null,
+    // All deliveries: [{id, kitId, slotIndex, readyAt, status}]
+    // status 'transit'  = en-route or arrived-but-not-picked-up
+    // status 'carrying' = worker is carrying it to bench
+    deliveries:        [],
     upgrades: {
       priceMultiplier:  1,
       solderingLevel:   0,
       workerLevel:      0,
       consumablesLevel: 0,
+      storageLevel:     0,
+      logisticsLevel:   0,
     },
   }
 }
+
+// ── Price/quality helpers ─────────────────────────────────
 
 // ціна = база × (BASE_COEFF + QUALITY_COEFF × якість) × множник
 export function calcPrice(basePrice, quality, priceMultiplier = 1) {
@@ -48,35 +61,88 @@ export function calcQuality(solderPoints) {
 
 // ── FSM transitions ───────────────────────────────────────
 
-export function orderKit(state, kitTypeId) {
-  if (state.phase !== Phase.IDLE)
+// Returns the first street slot index (0..maxSlots-1) not currently occupied.
+// A slot is occupied by any pending delivery (any status).
+function _nextFreeSlotIndex(state) {
+  const storageLevel = state.upgrades.storageLevel ?? 0
+  const maxSlots     = 1 + (STORAGE_SLOTS_BY_LEVEL[storageLevel] ?? 0)
+  const occupied     = new Set((state.deliveries ?? []).map(d => d.slotIndex))
+  for (let i = 0; i < maxSlots; i++) {
+    if (!occupied.has(i)) return i
+  }
+  throw new Error('_nextFreeSlotIndex: всі слоти зайняті')
+}
+
+// Total occupied delivery slots = pending deliveries + bench (if kit is being assembled).
+function _usedSlots(state) {
+  const pending = (state.deliveries ?? []).length
+  const bench   = (state.phase !== Phase.IDLE) ? 1 : 0
+  return pending + bench
+}
+
+export function orderKit(state, kitTypeId, now = Date.now()) {
+  if (state.phase === Phase.BURNT)
     throw new Error(`orderKit: недозволено у фазі ${state.phase}`)
+
   const kit = KIT_TYPES[kitTypeId]
   if (!kit)
     throw new Error(`orderKit: невідомий тип комплекту "${kitTypeId}"`)
   if (state.money < kit.cost)
     throw new Error(`orderKit: недостатньо грошей (є ${state.money}, потрібно ${kit.cost})`)
+
+  const storageLevel = state.upgrades.storageLevel ?? 0
+  const maxSlots     = 1 + (STORAGE_SLOTS_BY_LEVEL[storageLevel] ?? 0)
+  if (_usedSlots(state) >= maxSlots)
+    throw new Error(`orderKit: всі слоти зайняті`)
+
+  const logMult    = LOGISTICS_DELIVERY_MULT[state.upgrades.logisticsLevel ?? 0] ?? 1.0
+  const deliveryMs = Math.round(kit.deliveryMs * logMult)
+  const slotIndex  = _nextFreeSlotIndex(state)
+  const id         = `${now}-${Math.random().toString(36).slice(2, 7)}`
+
   return {
     ...state,
-    money:             state.money - kit.cost,
-    phase:             Phase.ORDERED,
-    activeKit:         kitTypeId,
-    solderPoints:      [],
-    assemblyQuality:   null,
-    coldSolderPenalty: 0,
+    money:     state.money - kit.cost,
+    deliveries: [
+      ...(state.deliveries ?? []),
+      { id, kitId: kitTypeId, slotIndex, readyAt: now + deliveryMs, status: DeliveryStatus.TRANSIT },
+    ],
   }
 }
 
-export function receiveDelivery(state) {
-  if (state.phase !== Phase.ORDERED)
-    throw new Error(`receiveDelivery: недозволено у фазі ${state.phase}`)
-  return { ...state, phase: Phase.DELIVERY }
+// Worker picks up an arrived delivery: TRANSIT → CARRYING.
+// Bench must be IDLE and no other delivery currently being carried.
+export function pickupDelivery(state, deliveryId, now = Date.now()) {
+  if (state.phase !== Phase.IDLE)
+    throw new Error(`pickupDelivery: недозволено у фазі ${state.phase}`)
+  if ((state.deliveries ?? []).some(d => d.status === DeliveryStatus.CARRYING))
+    throw new Error('pickupDelivery: інша доставка вже несеться')
+  const d = (state.deliveries ?? []).find(d => d.id === deliveryId)
+  if (!d)
+    throw new Error(`pickupDelivery: доставку ${deliveryId} не знайдено`)
+  if (d.readyAt > now)
+    throw new Error(`pickupDelivery: доставка ще в дорозі`)
+  return {
+    ...state,
+    deliveries: (state.deliveries ?? []).map(d2 =>
+      d2.id === deliveryId ? { ...d2, status: DeliveryStatus.CARRYING } : d2
+    ),
+  }
 }
 
+// Worker arrives at bench with box: removes carrying delivery, puts kit on bench.
 export function startAssembly(state) {
-  if (state.phase !== Phase.DELIVERY)
+  if (state.phase !== Phase.IDLE)
     throw new Error(`startAssembly: недозволено у фазі ${state.phase}`)
-  return { ...state, phase: Phase.ASSEMBLY }
+  const carrying = (state.deliveries ?? []).find(d => d.status === DeliveryStatus.CARRYING)
+  if (!carrying)
+    throw new Error('startAssembly: немає активної доставки (статус carrying)')
+  return {
+    ...state,
+    phase:      Phase.ASSEMBLY,
+    activeKit:  carrying.kitId,
+    deliveries: (state.deliveries ?? []).filter(d => d.id !== carrying.id),
+  }
 }
 
 export function recordSolderPoint(state, quality) {
@@ -123,15 +189,7 @@ export function abandonBurntDrone(state, salvageRate = 0) {
     throw new Error(`abandonBurntDrone: недозволено у фазі ${state.phase}`)
   const kit     = KIT_TYPES[state.activeKit]
   const salvage = kit.cost * salvageRate
-  return {
-    ...state,
-    money:             state.money + salvage,
-    phase:             Phase.IDLE,
-    activeKit:         null,
-    solderPoints:      [],
-    assemblyQuality:   null,
-    coldSolderPenalty: 0,
-  }
+  return _afterBenchClear(state, state.money + salvage)
 }
 
 export function sell(state) {
@@ -139,14 +197,23 @@ export function sell(state) {
     throw new Error(`sell: недозволено у фазі ${state.phase}`)
   const kit   = KIT_TYPES[state.activeKit]
   const price = calcPrice(kit.basePrice, state.assemblyQuality, state.upgrades.priceMultiplier)
+  return _afterBenchClear(state, state.money + price)
+}
+
+// After bench is cleared (sell or abandon): return to IDLE.
+// deliveries (transit/carrying) stay intact — any worker independently picks up
+// an arrived delivery via pickupDelivery(). This fully decouples bench state
+// from per-delivery state and enables parallel multi-worker operation.
+function _afterBenchClear(state, newMoney) {
   return {
     ...state,
-    money:             state.money + price,
-    phase:             Phase.IDLE,
-    activeKit:         null,
+    money:             newMoney,
     solderPoints:      [],
     assemblyQuality:   null,
     coldSolderPenalty: 0,
+    activeKit:         null,
+    phase:             Phase.IDLE,
+    // deliveries intentionally preserved
   }
 }
 

@@ -122,3 +122,13 @@ export const CONSUMABLES_UPGRADE_COSTS  = [120, 280]
 export const FLUX_OVERHEAT_MULT  = [1.0, 0.7, 0.4]
 // Per-level flat quality bonus added to each solder point result.
 export const FLUX_QUALITY_BONUS  = [0,   0,   0.05]
+
+// ── Upgrade: Storage (extra delivery slots) ───────────────
+export const STORAGE_UPGRADE_COSTS  = [300, 700]
+// How many SECONDARY delivery slots are unlocked per level (primary is always 1).
+export const STORAGE_SLOTS_BY_LEVEL = [0, 1, 2]
+
+// ── Upgrade: Logistics (faster delivery) ─────────────────
+export const LOGISTICS_UPGRADE_COSTS  = [200, 500]
+// Delivery time multiplier per level: 1.0 = standard, 0.7 = 30% faster, 0.5 = 50% faster.
+export const LOGISTICS_DELIVERY_MULT  = [1.0, 0.7, 0.5]

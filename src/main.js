@@ -1,8 +1,8 @@
 import './style.css'
 import { saveGame, loadGame, clearSave } from './save/storage.js'
 import {
-  createState, Phase, KIT_TYPES,
-  orderKit, receiveDelivery, startAssembly,
+  createState, Phase, DeliveryStatus, KIT_TYPES,
+  orderKit, startAssembly, pickupDelivery,
   recordSolderPoint, finishAssembly, sell,
   burnKit, abandonBurntDrone, buyUpgrade,
   applyColdSolderPenalty,
@@ -10,7 +10,6 @@ import {
   canOpenPiggy, collectPiggy,
 } from './state/gameState.js'
 import {
-  DELIVERY_DELAY_MS,
   COLD_SOLDER_THRESHOLD, SALVAGE_RATE,
   COLD_SOLDER_QUALITY_PENALTY,
 } from './state/config.js'
@@ -26,6 +25,45 @@ import { initScene, updateScene } from './scene/scene.js'
 
 // ── State init ────────────────────────────────────────────
 
+// Migrate saves written before the per-delivery-status refactor.
+// Old saves may have phase=ORDERED/DELIVERY, activeDeliveryReadyAt,
+// activeSlotIndex, and deliveryQueue instead of deliveries[].
+function migrateState(raw) {
+  let s = raw
+  const now = Date.now()
+
+  // Convert legacy deliveryQueue → deliveries
+  if (!s.deliveries && s.deliveryQueue) {
+    s = {
+      ...s,
+      deliveries: (s.deliveryQueue ?? []).map(d => ({ ...d, status: DeliveryStatus.TRANSIT })),
+    }
+  }
+  if (!s.deliveries) s = { ...s, deliveries: [] }
+
+  // Convert legacy ORDERED / DELIVERY phase → IDLE + delivery entry
+  if (s.phase === 'ORDERED' || s.phase === 'DELIVERY') {
+    const readyAt = s.phase === 'DELIVERY'
+      ? now - 1   // already arrived — force readyAt in past
+      : (s.activeDeliveryReadyAt ?? now)
+    const primary = {
+      id:       `migrated-${now}`,
+      kitId:    s.activeKit,
+      slotIndex: s.activeSlotIndex ?? 0,
+      readyAt,
+      status:   DeliveryStatus.TRANSIT,
+    }
+    s = {
+      ...s,
+      phase:     Phase.IDLE,
+      activeKit: null,
+      deliveries: [primary, ...s.deliveries.filter(d => d.slotIndex !== primary.slotIndex)],
+    }
+  }
+
+  return s
+}
+
 function initState() {
   const defaults = createState()
   const saved    = loadGame()
@@ -36,7 +74,7 @@ function initState() {
     ...saved.state,
     upgrades: { ...defaults.upgrades, ...saved.state.upgrades },
   }
-  if (state.phase === Phase.ORDERED) state = receiveDelivery(state)
+  state = migrateState(state)
   return { state, salesLog: saved.salesLog }
 }
 
@@ -44,9 +82,9 @@ const loaded   = initState()
 let state      = loaded.state
 const salesLog = loaded.salesLog
 
-let autoTimer     = null
-let deliveryTimer = null
-let warning       = null
+let autoTimer         = null
+let deliveryCheckTimer = null  // fires draw() when earliest transit delivery arrives
+let warning           = null
 
 const uiRoot = document.getElementById('ui-root')
 const canvas = document.getElementById('game-canvas')
@@ -115,7 +153,9 @@ if (import.meta.env.MODE === 'debug') {
 let sceneRefs = null
 initScene(canvas, {
   onBoxPicked: () => {
-    if (state.phase === Phase.DELIVERY) update(startAssembly(state))
+    // Worker delivered box to bench — any carrying delivery triggers assembly.
+    const hasCarrying = (state.deliveries ?? []).some(d => d.status === DeliveryStatus.CARRYING)
+    if (hasCarrying) update(startAssembly(state))
   },
   onPiggyRequested: () => {
     const { can } = canOpenPiggy(state, Date.now())
@@ -130,7 +170,6 @@ initScene(canvas, {
       return
     }
     if (mode === SOLDER_MODE.SEMI) {
-      // Same step-by-step as AUTO, but user-triggered (not auto-started in draw).
       scheduleAutoPoint()
       return
     }
@@ -146,6 +185,18 @@ initScene(canvas, {
   onLoadProgress: (loaded, total) => {
     if (loadBar) loadBar.style.width = `${Math.round((loaded / total) * 100)}%`
   },
+  onSlotTapped: (deliveryId) => {
+    if (state.phase !== Phase.IDLE) return
+    const now      = Date.now()
+    const delivery = (state.deliveries ?? []).find(d => d.id === deliveryId)
+    if (!delivery || delivery.readyAt > now) return
+    update(pickupDelivery(state, deliveryId, now))
+    // MANUAL worker: draw() won't auto-deliver — trigger explicitly
+    const workerMode = levelData('worker', state.upgrades.workerLevel ?? 0).mode
+    if (workerMode === WORKER_MODE.MANUAL) {
+      sceneRefs?.worker?.commandDeliver(sceneRefs?.activeBoxSpawn)
+    }
+  },
 }).then(refs => {
   sceneRefs = refs
   hideOverlay()
@@ -154,20 +205,24 @@ initScene(canvas, {
 
 // ── Timers ────────────────────────────────────────────────
 
-function clearDeliveryTimer() {
-  if (deliveryTimer !== null) { clearTimeout(deliveryTimer); deliveryTimer = null }
-}
-
-function scheduleDelivery() {
-  const delay = KIT_TYPES[state.activeKit]?.deliveryMs ?? DELIVERY_DELAY_MS
-  deliveryTimer = setTimeout(() => {
-    deliveryTimer = null
-    if (state.phase === Phase.ORDERED) update(receiveDelivery(state))
-  }, delay)
-}
-
 function clearAutoTimer() {
   if (autoTimer !== null) { clearTimeout(autoTimer); autoTimer = null }
+}
+
+function clearDeliveryCheckTimer() {
+  if (deliveryCheckTimer !== null) { clearTimeout(deliveryCheckTimer); deliveryCheckTimer = null }
+}
+
+// Schedule draw() for when the earliest transit delivery arrives.
+// Fires regardless of bench phase so indicators update and auto-pickup triggers.
+function scheduleDeliveryCheck() {
+  clearDeliveryCheckTimer()
+  const transit = (state.deliveries ?? []).filter(d => d.status === DeliveryStatus.TRANSIT)
+  if (!transit.length) return
+  const now  = Date.now()
+  const next = transit.reduce((min, d) => Math.min(min, d.readyAt), Infinity)
+  if (next <= now) { draw(); return }
+  deliveryCheckTimer = setTimeout(() => { deliveryCheckTimer = null; draw() }, next - now + 50)
 }
 
 function scheduleAutoPoint() {
@@ -237,27 +292,56 @@ function draw() {
     scheduleAutoPoint()
   }
 
-  const workerMode = levelData('worker', state.upgrades.workerLevel ?? 0).mode
-  if (state.phase === Phase.DELIVERY &&
-      (workerMode === WORKER_MODE.SEMI || workerMode === WORKER_MODE.AUTO)) {
-    sceneRefs?.worker?.commandDeliver()
-  }
-  if (state.phase === Phase.ASSEMBLY && workerMode === WORKER_MODE.AUTO) {
-    sceneRefs?.worker?.commandSolder()
-  }
-
+  // Sync scene state BEFORE issuing worker commands:
+  //   – updates _carryingSlotIndex so commandDeliver targets the right street slot
+  //   – fires worker.reset() for IDLE so workerCanDeliver is true on auto-pickup
+  //   – parks carry box off-screen during IDLE (no pointer interference with slot indicators)
   const minCost        = Math.min(...Object.values(KIT_TYPES).map(k => k.cost))
   const showPiggy      = state.money < minCost && state.phase === Phase.IDLE
   const droneSpriteKey = state.activeKit ? (KIT_TYPES[state.activeKit]?.spriteKey ?? null) : null
-  updateScene(sceneRefs, state.phase, { show: showPiggy, lastAt: state.lastPiggyAt ?? null }, droneSpriteKey)
+  const carrying       = (state.deliveries ?? []).find(d => d.status === DeliveryStatus.CARRYING)
+  updateScene(
+    sceneRefs,
+    state.phase,
+    { show: showPiggy, lastAt: state.lastPiggyAt ?? null },
+    droneSpriteKey,
+    state.deliveries ?? [],
+    carrying?.slotIndex ?? 0,
+  )
+
+  const workerMode = levelData('worker', state.upgrades.workerLevel ?? 0).mode
+
+  // IDLE + arrived delivery → auto-pickup (SEMI/AUTO) or schedule timer for arrival (MANUAL).
+  if (state.phase === Phase.IDLE && !carrying) {
+    const now     = Date.now()
+    const arrived = (state.deliveries ?? []).find(d =>
+      d.status === DeliveryStatus.TRANSIT && d.readyAt <= now
+    )
+    if (arrived) {
+      if (workerMode === WORKER_MODE.SEMI || workerMode === WORKER_MODE.AUTO) {
+        update(pickupDelivery(state, arrived.id, now))
+        return
+      }
+    } else if (deliveryCheckTimer === null) {
+      scheduleDeliveryCheck()
+    }
+  }
+
+  // carrying delivery → trigger worker to fetch it
+  if (carrying && (workerMode === WORKER_MODE.SEMI || workerMode === WORKER_MODE.AUTO)) {
+    sceneRefs?.worker?.commandDeliver(sceneRefs?.activeBoxSpawn)
+  }
+
+  if (state.phase === Phase.ASSEMBLY && workerMode === WORKER_MODE.AUTO) {
+    sceneRefs?.worker?.commandSolder()
+  }
 }
 
 function update(newState) {
-  if (newState.phase !== Phase.ORDERED)  clearDeliveryTimer()
   if (newState.phase !== Phase.ASSEMBLY) clearAutoTimer()
   state = newState
   saveGame(state, salesLog)
-  if (state.phase === Phase.ORDERED && deliveryTimer === null) scheduleDelivery()
+  scheduleDeliveryCheck()
   draw()
 }
 

@@ -1,5 +1,5 @@
 import { Phase, KIT_TYPES, calcPrice } from '../state/gameState.js'
-import { PRICE_BASE_COEFF, PRICE_QUALITY_COEFF } from '../state/config.js'
+import { PRICE_BASE_COEFF, PRICE_QUALITY_COEFF, STORAGE_SLOTS_BY_LEVEL } from '../state/config.js'
 
 // Current location — will be wired to real location state in D7.
 // For now: only 'apartment' kits (unlock: null) are available.
@@ -54,14 +54,26 @@ export function createShopModal(root, { onOrder }) {
   }
 
   function render(state) {
-    const body     = overlay.querySelector('#shop-body')
-    const canOrder = state.phase === Phase.IDLE
-    const mult     = state.upgrades.priceMultiplier
+    const body         = overlay.querySelector('#shop-body')
+    const mult         = state.upgrades.priceMultiplier
+    const storageLevel  = state.upgrades?.storageLevel ?? 0
+    const maxSecondary  = STORAGE_SLOTS_BY_LEVEL[storageLevel] ?? 0
+    const maxSlots      = 1 + maxSecondary
+    const deliveryCount = (state.deliveries ?? []).length
+    const usedSlots     = deliveryCount + (state.phase !== Phase.IDLE ? 1 : 0)
+    // Ordering allowed from any phase except BURNT, as long as a slot is free.
+    const canOrderAny   = state.phase !== Phase.BURNT && usedSlots < maxSlots
 
-    body.innerHTML = Object.entries(KIT_TYPES).map(([id, kit]) => {
-      const locked      = isKitLocked(kit)
-      const noMoney     = state.money < kit.cost
-      const disabled    = locked || !canOrder || noMoney
+    // Slot indicator header (only shown when Storage upgrade is active)
+    const totalSlots = maxSlots
+    const slotHeader = maxSecondary > 0
+      ? `<p class="shop-slot-info">Слоти доставки: ${usedSlots}/${totalSlots}</p>`
+      : ''
+
+    body.innerHTML = slotHeader + Object.entries(KIT_TYPES).map(([id, kit]) => {
+      const locked   = isKitLocked(kit)
+      const noMoney  = state.money < kit.cost
+      const disabled = locked || !canOrderAny || noMoney
 
       if (locked) {
         return `
@@ -75,6 +87,15 @@ export function createShopModal(root, { onOrder }) {
             </div>
             <div class="kit-card__lock">🔒 Відкривається в Гаражі</div>
           </div>`
+      }
+
+      let note = ''
+      if (!canOrderAny) {
+        if (state.phase === Phase.BURNT)       note = '<p class="kit-card__note">Спочатку відремонтуйте</p>'
+        else if (maxSecondary === 0)           note = '<p class="kit-card__note">Потрібен апгрейд Складу</p>'
+        else                                   note = '<p class="kit-card__note">Всі слоти зайняті</p>'
+      } else if (noMoney) {
+        note = '<p class="kit-card__note warn">Недостатньо грошей</p>'
       }
 
       return `
@@ -93,11 +114,7 @@ export function createShopModal(root, { onOrder }) {
           <button class="btn btn--primary kit-card__btn" data-order="${id}" ${disabled ? 'disabled' : ''}>
             Замовити — $${kit.cost}
           </button>
-          ${!canOrder
-            ? '<p class="kit-card__note">Доступно між циклами</p>'
-            : noMoney
-              ? '<p class="kit-card__note warn">Недостатньо грошей</p>'
-              : ''}
+          ${note}
         </div>`
     }).join('')
 

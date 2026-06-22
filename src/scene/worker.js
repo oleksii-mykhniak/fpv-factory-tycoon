@@ -61,9 +61,10 @@ export function createWorker(scene, {
   }
 
   // ── Delivery: worker exits outside → picks up box → carries to bench ──
-  // Flat action chain (no nested actor.actions inside callMethod — avoids
-  // Excalibur queue re-entry issues).
-  function commandDeliver() {
+  // overrideTarget: optional world position of the box (for secondary delivery slots).
+  // If omitted, defaults to the original boxSpawnPos from config.
+  function commandDeliver(overrideTarget) {
+    const pickupPos = overrideTarget ?? boxSpawnPos
     if (!workerCanDeliver(ws)) return
     actor.actions.clearActions()   // cancel any free walk
     dispatch('startDelivery')
@@ -73,9 +74,8 @@ export function createWorker(scene, {
       .moveTo(doorPos, 150)
       .callMethod(() => {
         dispatch('arrivedAtDoor')
-        // direction update: now heading outside (down)
       })
-      .moveTo(boxSpawnPos, 120)
+      .moveTo(pickupPos, 120)
       .callMethod(() => {
         dispatch('arrivedOutside')
         setMoving(false)
@@ -86,7 +86,7 @@ export function createWorker(scene, {
         box.actions.clearActions()
         actor.addChild(box)
         box.pos = ex.vec(WORKER_SIZE * 0.15, -WORKER_SIZE * 0.25)
-        setMoving(true, benchPos.x > boxSpawnPos.x)
+        setMoving(true, benchPos.x > pickupPos.x)
       })
       .moveTo(doorPos, 120)
       .moveTo(benchPos, 170)

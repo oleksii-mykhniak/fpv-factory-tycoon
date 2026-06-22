@@ -11,6 +11,8 @@ import {
   AUTO_QUALITY_MIN, AUTO_QUALITY_MAX, AUTO_POINT_DELAY_MS,
   SOLDERING_UPGRADE_COSTS, WORKER_UPGRADE_COSTS,
   CONSUMABLES_UPGRADE_COSTS, FLUX_OVERHEAT_MULT, FLUX_QUALITY_BONUS,
+  STORAGE_UPGRADE_COSTS, STORAGE_SLOTS_BY_LEVEL,
+  LOGISTICS_UPGRADE_COSTS, LOGISTICS_DELIVERY_MULT,
 } from './config.js'
 
 // Assembly behaviour a soldering level drives. main.js branches on this instead of
@@ -71,6 +73,30 @@ export const UPGRADE_TRACKS = Object.freeze({
         overheatMult: FLUX_OVERHEAT_MULT[1], qualityBonus: FLUX_QUALITY_BONUS[1] },
       { name: 'Срібний припій', effect: `Перегрів −${Math.round((1 - FLUX_OVERHEAT_MULT[2]) * 100)}%, якість +${Math.round(FLUX_QUALITY_BONUS[2] * 100)}%`,
         overheatMult: FLUX_OVERHEAT_MULT[2], qualityBonus: FLUX_QUALITY_BONUS[2] },
+    ],
+  },
+
+  storage: {
+    id:       'storage',
+    name:     'Склад',
+    stateKey: 'storageLevel',
+    costs:    STORAGE_UPGRADE_COSTS,
+    levels: [
+      { name: 'Без складу',   effect: '1 доставка за раз',        extraSlots: STORAGE_SLOTS_BY_LEVEL[0] },
+      { name: 'Мале сховище', effect: '2 паралельних доставки',   extraSlots: STORAGE_SLOTS_BY_LEVEL[1] },
+      { name: 'Повний склад', effect: '3 паралельних доставки',   extraSlots: STORAGE_SLOTS_BY_LEVEL[2] },
+    ],
+  },
+
+  logistics: {
+    id:       'logistics',
+    name:     'Логістика',
+    stateKey: 'logisticsLevel',
+    costs:    LOGISTICS_UPGRADE_COSTS,
+    levels: [
+      { name: 'Звичайна доставка', effect: 'Стандартний час',         deliveryMult: LOGISTICS_DELIVERY_MULT[0] },
+      { name: 'Пришвидшена',       effect: 'Доставка на 30% швидше', deliveryMult: LOGISTICS_DELIVERY_MULT[1] },
+      { name: 'Express',           effect: 'Доставка на 50% швидше', deliveryMult: LOGISTICS_DELIVERY_MULT[2] },
     ],
   },
 })

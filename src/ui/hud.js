@@ -1,4 +1,4 @@
-import { Phase, KIT_TYPES, calcPrice } from '../state/gameState.js'
+import { Phase, DeliveryStatus, KIT_TYPES, calcPrice } from '../state/gameState.js'
 import { levelData, WORKER_MODE, SOLDER_MODE } from '../state/upgrades.js'
 
 export function createHUD(root) {
@@ -14,7 +14,7 @@ export function createHUD(root) {
 
   function update(state) {
     el.querySelector('#hud-money').textContent = `$${state.money.toFixed(2)}`
-    el.querySelector('#hud-hint').textContent = hint(state)
+    el.querySelector('#hud-hint').textContent  = hint(state)
   }
 
   return { update }
@@ -22,13 +22,16 @@ export function createHUD(root) {
 
 function hint(state) {
   switch (state.phase) {
-    case Phase.IDLE:     return ''
-    case Phase.ORDERED:  return "Кур'єр їде до вас…"
-    case Phase.DELIVERY: {
-      const wMode = levelData('worker', state.upgrades.workerLevel ?? 0).mode
-      return (wMode === WORKER_MODE.SEMI || wMode === WORKER_MODE.AUTO)
-        ? 'Доставка їде…'
-        : 'Тапни коробку!'
+    case Phase.IDLE: {
+      const carrying = (state.deliveries ?? []).find(d => d.status === DeliveryStatus.CARRYING)
+      if (carrying) {
+        const wMode = levelData('worker', state.upgrades.workerLevel ?? 0).mode
+        return (wMode === WORKER_MODE.SEMI || wMode === WORKER_MODE.AUTO)
+          ? 'Несемо на стіл…'
+          : 'Тапни коробку!'
+      }
+      const hasTransit = (state.deliveries ?? []).some(d => d.status === DeliveryStatus.TRANSIT)
+      return hasTransit ? "Кур'єр їде до вас…" : ''
     }
     case Phase.ASSEMBLY: {
       const kit    = KIT_TYPES[state.activeKit]

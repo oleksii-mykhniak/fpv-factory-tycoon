@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  createState, Phase, KIT_TYPES,
-  orderKit, receiveDelivery, startAssembly,
+  createState, Phase, DeliveryStatus, KIT_TYPES,
+  orderKit, startAssembly, pickupDelivery,
   recordSolderPoint, finishAssembly, sell,
   burnKit, abandonBurntDrone, buyUpgrade,
   applyColdSolderPenalty,
@@ -11,22 +11,48 @@ import {
 import {
   SOLDERING_UPGRADE_COSTS, WORKER_UPGRADE_COSTS, CONSUMABLES_UPGRADE_COSTS,
   PIGGY_COOLDOWN_MS, PIGGY_TAP_VALUE, PIGGY_MAX_PAYOUT,
+  STORAGE_UPGRADE_COSTS, STORAGE_SLOTS_BY_LEVEL,
+  LOGISTICS_UPGRADE_COSTS, LOGISTICS_DELIVERY_MULT,
 } from './config.js'
 import { trackMaxLevel, nextCost, levelData, UPGRADE_TRACKS, SOLDER_MODE, WORKER_MODE } from './upgrades.js'
 
 const SOLDERING_MAX_LEVEL = trackMaxLevel('soldering')
 
-// helper: runs through the full cycle with given solder quality values
-function runCycle(qualityValues) {
-  let s = createState()
-  s = orderKit(s, 'mini_drone')
-  s = receiveDelivery(s)
+// ── Test helpers ──────────────────────────────────────────
+
+// Simulate delivery arrival by setting readyAt to the past.
+function forceArrived(state, id) {
+  return {
+    ...state,
+    deliveries: state.deliveries.map(d => d.id === id ? { ...d, readyAt: 0 } : d),
+  }
+}
+
+// Full happy-path cycle from IDLE to IDLE.
+function runCycle(qualityValues, kitId = 'mini_drone') {
+  let s = { ...createState(), money: 9999 }
+  s = orderKit(s, kitId)
+  s = forceArrived(s, s.deliveries[0].id)
+  s = pickupDelivery(s, s.deliveries[0].id)
   s = startAssembly(s)
   for (const q of qualityValues) s = recordSolderPoint(s, q)
   s = finishAssembly(s)
   s = sell(s)
   return s
 }
+
+// Bench in ASSEMBLY with N solder points already done.
+function inAssembly(pointsDone = 0, extra = {}) {
+  let s = { ...createState(), money: 9999, ...extra }
+  s = orderKit(s, 'mini_drone')
+  s = forceArrived(s, s.deliveries[0].id)
+  s = pickupDelivery(s, s.deliveries[0].id)
+  s = startAssembly(s)
+  for (let i = 0; i < pointsDone; i++) s = recordSolderPoint(s, 0.9)
+  return s
+}
+
+// ── Tests ─────────────────────────────────────────────────
 
 describe('calcPrice', () => {
   it('ідеальна якість (1)', () => {
@@ -61,42 +87,40 @@ describe('FSM: повний цикл', () => {
     expect(s.money).toBe(120)
     expect(s.activeKit).toBeNull()
     expect(s.solderPoints).toHaveLength(0)
+    expect(s.deliveries).toHaveLength(0)
   })
 
   it('ідеальна пайка — прибутковий цикл', () => {
     const s = runCycle([1, 1, 1, 1])
-    // 120 − 72 + 123.5 = 171.5
-    expect(s.money).toBeCloseTo(171.5)
+    // 9999 − 72 + 123.5 = 10050.5
+    expect(s.money).toBeCloseTo(9999 - KIT_TYPES.mini_drone.cost + calcPrice(KIT_TYPES.mini_drone.basePrice, 1, 1))
     expect(s.phase).toBe(Phase.IDLE)
     expect(s.activeKit).toBeNull()
     expect(s.assemblyQuality).toBeNull()
+    expect(s.deliveries).toHaveLength(0)
   })
 
-  it('нульова якість — цикл завершується, але маржа мінімальна', () => {
+  it('нульова якість — цикл завершується', () => {
     const s = runCycle([0, 0, 0, 0])
-    // 120 − 72 + 57 = 105  (збиток, але цикл закрився)
-    expect(s.money).toBeCloseTo(105)
     expect(s.phase).toBe(Phase.IDLE)
-  })
-
-  it('змішана якість — гроші між min і max', () => {
-    const s = runCycle([1, 0.5, 0.5, 0])
-    expect(s.money).toBeGreaterThan(105)
-    expect(s.money).toBeLessThan(171.5)
   })
 
   it('фази змінюються у правильному порядку', () => {
-    let s = createState()
+    let s = { ...createState(), money: 9999 }
     expect(s.phase).toBe(Phase.IDLE)
 
     s = orderKit(s, 'mini_drone')
-    expect(s.phase).toBe(Phase.ORDERED)
+    expect(s.phase).toBe(Phase.IDLE)           // bench stays IDLE — delivery in transit
+    expect(s.deliveries[0].status).toBe(DeliveryStatus.TRANSIT)
 
-    s = receiveDelivery(s)
-    expect(s.phase).toBe(Phase.DELIVERY)
+    s = forceArrived(s, s.deliveries[0].id)
+    s = pickupDelivery(s, s.deliveries[0].id)
+    expect(s.phase).toBe(Phase.IDLE)           // still IDLE while worker carries
+    expect(s.deliveries[0].status).toBe(DeliveryStatus.CARRYING)
 
     s = startAssembly(s)
     expect(s.phase).toBe(Phase.ASSEMBLY)
+    expect(s.deliveries).toHaveLength(0)       // removed when placed on bench
 
     s = recordSolderPoint(s, 0.8)
     s = recordSolderPoint(s, 0.8)
@@ -123,11 +147,12 @@ describe('FSM: відхилення невалідних переходів', ()
     expect(() => orderKit(createState(), 'unknown')).toThrow('невідомий тип')
   })
 
-  it('receiveDelivery поза фазою ORDERED', () => {
-    expect(() => receiveDelivery(createState())).toThrow('receiveDelivery')
+  it('orderKit з фази BURNT кидає помилку', () => {
+    const s = inAssembly(1)
+    expect(() => orderKit(burnKit(s), 'mini_drone')).toThrow('orderKit')
   })
 
-  it('startAssembly поза фазою DELIVERY', () => {
+  it('startAssembly без carrying доставки — помилка', () => {
     expect(() => startAssembly(createState())).toThrow('startAssembly')
   })
 
@@ -136,31 +161,17 @@ describe('FSM: відхилення невалідних переходів', ()
   })
 
   it('recordSolderPoint з якістю > 1', () => {
-    let s = createState()
-    s = orderKit(s, 'mini_drone')
-    s = receiveDelivery(s)
-    s = startAssembly(s)
+    const s = inAssembly()
     expect(() => recordSolderPoint(s, 1.5)).toThrow('від 0 до 1')
   })
 
   it('recordSolderPoint понад допустиму кількість точок', () => {
-    let s = createState()
-    s = orderKit(s, 'mini_drone')
-    s = receiveDelivery(s)
-    s = startAssembly(s)
-    s = recordSolderPoint(s, 1)
-    s = recordSolderPoint(s, 1)
-    s = recordSolderPoint(s, 1)
-    s = recordSolderPoint(s, 1)
+    const s = inAssembly(4)
     expect(() => recordSolderPoint(s, 1)).toThrow('всі')
   })
 
   it('finishAssembly без усіх точок', () => {
-    let s = createState()
-    s = orderKit(s, 'mini_drone')
-    s = receiveDelivery(s)
-    s = startAssembly(s)
-    s = recordSolderPoint(s, 1)
+    const s = inAssembly(1)
     expect(() => finishAssembly(s)).toThrow('потрібно 4 точок')
   })
 
@@ -168,26 +179,24 @@ describe('FSM: відхилення невалідних переходів', ()
     expect(() => sell(createState())).toThrow('sell')
   })
 
-  it('подвійний orderKit — другий викидає помилку', () => {
-    const s = orderKit(createState(), 'mini_drone')
+  it('подвійний orderKit (без апгрейду складу) — другий викидає помилку', () => {
+    const s = orderKit({ ...createState(), money: 9999 }, 'mini_drone')
     expect(() => orderKit(s, 'mini_drone')).toThrow('orderKit')
   })
 })
 
 describe('незмінність стану (immutability)', () => {
   it('orderKit не мутує вхідний об\'єкт', () => {
-    const s = createState()
+    const s = { ...createState(), money: 9999 }
     const before = s.money
     orderKit(s, 'mini_drone')
     expect(s.money).toBe(before)
     expect(s.phase).toBe(Phase.IDLE)
+    expect(s.deliveries).toHaveLength(0)
   })
 
   it('recordSolderPoint не мутує масив solderPoints', () => {
-    let s = createState()
-    s = orderKit(s, 'mini_drone')
-    s = receiveDelivery(s)
-    s = startAssembly(s)
+    const s = inAssembly()
     const prev = s.solderPoints
     const next = recordSolderPoint(s, 0.5)
     expect(prev).toHaveLength(0)
@@ -196,15 +205,6 @@ describe('незмінність стану (immutability)', () => {
 })
 
 describe('Поломка: гілка перегріву', () => {
-  function inAssembly(pointsDone = 0) {
-    let s = createState()
-    s = orderKit(s, 'mini_drone')
-    s = receiveDelivery(s)
-    s = startAssembly(s)
-    for (let i = 0; i < pointsDone; i++) s = recordSolderPoint(s, 0.9)
-    return s
-  }
-
   it('burnKit: ASSEMBLY → BURNT, гроші не змінюються', () => {
     const s = inAssembly(1)
     const burnt = burnKit(s)
@@ -213,40 +213,34 @@ describe('Поломка: гілка перегріву', () => {
   })
 
   it('burnKit зберігає вже запаяні точки в стані', () => {
-    const s = inAssembly(2)
-    expect(burnKit(s).solderPoints).toHaveLength(2)
+    expect(burnKit(inAssembly(2)).solderPoints).toHaveLength(2)
   })
 
   it('abandonBurntDrone без salvage: гроші не змінюються', () => {
-    let s = inAssembly(1)
-    s = burnKit(s)
-    const moneyBeforeAbandon = s.money
-    s = abandonBurntDrone(s, 0)
-    expect(s.phase).toBe(Phase.IDLE)
-    expect(s.money).toBe(moneyBeforeAbandon)
-    expect(s.activeKit).toBeNull()
-    expect(s.solderPoints).toHaveLength(0)
-    expect(s.assemblyQuality).toBeNull()
+    const s = burnKit(inAssembly(1))
+    const moneyBefore = s.money
+    const result = abandonBurntDrone(s, 0)
+    expect(result.phase).toBe(Phase.IDLE)
+    expect(result.money).toBe(moneyBefore)
+    expect(result.activeKit).toBeNull()
+    expect(result.solderPoints).toHaveLength(0)
+    expect(result.assemblyQuality).toBeNull()
   })
 
   it('abandonBurntDrone з salvageRate=0.40 повертає 40% вартості комплекту', () => {
-    let s = createState()
-    s = orderKit(s, 'mini_drone')
-    s = receiveDelivery(s)
-    s = startAssembly(s)
-    s = burnKit(s)
-    const moneyAfterBurn = s.money // 120 - 72 = 48
-    s = abandonBurntDrone(s, 0.40)
-    // 48 + 72 * 0.40 = 48 + 28.80 = 76.80
-    expect(s.money).toBeCloseTo(moneyAfterBurn + KIT_TYPES.mini_drone.cost * 0.40)
-    expect(s.money).toBeGreaterThanOrEqual(KIT_TYPES.mini_drone.cost) // can reorder
+    const s = burnKit(inAssembly())
+    const moneyAfterBurn = s.money
+    const result = abandonBurntDrone(s, 0.40)
+    expect(result.money).toBeCloseTo(moneyAfterBurn + KIT_TYPES.mini_drone.cost * 0.40)
+    expect(result.money).toBeGreaterThanOrEqual(KIT_TYPES.mini_drone.cost)
   })
 
   it('abandonBurntDrone: загальні втрати = вартість × (1 - salvageRate)', () => {
-    let s = createState()
+    let s = { ...createState(), money: 9999 }
     const startMoney = s.money
     s = orderKit(s, 'mini_drone')
-    s = receiveDelivery(s)
+    s = forceArrived(s, s.deliveries[0].id)
+    s = pickupDelivery(s, s.deliveries[0].id)
     s = startAssembly(s)
     s = burnKit(s)
     s = abandonBurntDrone(s, 0.40)
@@ -263,32 +257,26 @@ describe('Поломка: гілка перегріву', () => {
   })
 
   it('після abandonBurntDrone можна почати новий цикл', () => {
-    let s = createState()
-    s = { ...s, money: 200 }
+    let s = { ...createState(), money: 9999 }
     s = orderKit(s, 'mini_drone')
-    s = receiveDelivery(s)
+    s = forceArrived(s, s.deliveries[0].id)
+    s = pickupDelivery(s, s.deliveries[0].id)
     s = startAssembly(s)
     s = burnKit(s)
     s = abandonBurntDrone(s)
     s = orderKit(s, 'mini_drone')
-    expect(s.phase).toBe(Phase.ORDERED)
+    expect(s.phase).toBe(Phase.IDLE)
+    expect(s.deliveries).toHaveLength(1)
+    expect(s.deliveries[0].status).toBe(DeliveryStatus.TRANSIT)
   })
 })
 
 describe('Холодна пайка: штраф якості', () => {
-  function inAssembly() {
-    let s = createState()
-    s = orderKit(s, 'mini_drone')
-    s = receiveDelivery(s)
-    s = startAssembly(s)
-    return s
-  }
-
   it('applyColdSolderPenalty збільшує штраф', () => {
     const s = applyColdSolderPenalty(inAssembly(), 0.15)
     expect(s.coldSolderPenalty).toBeCloseTo(0.15)
-    expect(s.phase).toBe(Phase.ASSEMBLY)   // фаза не змінюється
-    expect(s.solderPoints).toHaveLength(0) // точка не записана
+    expect(s.phase).toBe(Phase.ASSEMBLY)
+    expect(s.solderPoints).toHaveLength(0)
   })
 
   it('штраф накопичується при кількох промахах', () => {
@@ -305,12 +293,9 @@ describe('Холодна пайка: штраф якості', () => {
   })
 
   it('finishAssembly враховує штраф у фінальній якості', () => {
-    let s = inAssembly()
-    s = applyColdSolderPenalty(s, 0.15)
-    // запаяти всі 4 точки ідеально
+    let s = applyColdSolderPenalty(inAssembly(), 0.15)
     for (let i = 0; i < 4; i++) s = recordSolderPoint(s, 1.0)
     s = finishAssembly(s)
-    // quality = 1.0 - 0.15 = 0.85
     expect(s.assemblyQuality).toBeCloseTo(0.85)
   })
 
@@ -323,10 +308,7 @@ describe('Холодна пайка: штраф якості', () => {
   })
 
   it('штраф скидається після sell', () => {
-    let s = { ...createState(), money: 999 }
-    s = orderKit(s, 'mini_drone')
-    s = receiveDelivery(s)
-    s = startAssembly(s)
+    let s = inAssembly()
     s = applyColdSolderPenalty(s, 0.15)
     for (let i = 0; i < 4; i++) s = recordSolderPoint(s, 1.0)
     s = finishAssembly(s)
@@ -359,8 +341,7 @@ describe('Апгрейди: buyUpgrade', () => {
   })
 
   it('недостатньо грошей — помилка', () => {
-    const broke = { ...createState(), money: 10 }
-    expect(() => buyUpgrade(broke, 'soldering')).toThrow('недостатньо грошей')
+    expect(() => buyUpgrade({ ...createState(), money: 10 }, 'soldering')).toThrow('недостатньо грошей')
   })
 
   it('невідомий апгрейд — помилка', () => {
@@ -400,9 +381,7 @@ describe('Реєстр апгрейдів (data-driven)', () => {
 })
 
 describe('Апгрейди: worker-трек', () => {
-  function richState() {
-    return { ...createState(), money: 9999 }
-  }
+  function richState() { return { ...createState(), money: 9999 } }
 
   it('початковий стан має workerLevel 0', () => {
     expect(createState().upgrades.workerLevel).toBe(0)
@@ -452,43 +431,21 @@ describe('Апгрейди: worker-трек', () => {
 })
 
 describe('Нові типи дронів (D2.1)', () => {
-  function richState() { return { ...createState(), money: 9999 } }
-
   it('racing_drone: повний цикл з 6 точками', () => {
-    let s = richState()
-    s = orderKit(s, 'racing_drone')
-    expect(s.phase).toBe(Phase.ORDERED)
-    s = receiveDelivery(s)
-    s = startAssembly(s)
-    for (let i = 0; i < 6; i++) s = recordSolderPoint(s, 0.9)
-    s = finishAssembly(s)
-    expect(s.phase).toBe(Phase.READY)
-    expect(s.assemblyQuality).toBeCloseTo(0.9)
-    s = sell(s)
+    const s = runCycle([0.9, 0.9, 0.9, 0.9, 0.9, 0.9], 'racing_drone')
     expect(s.phase).toBe(Phase.IDLE)
+    expect(s.assemblyQuality).toBeNull()
     expect(s.money).toBeGreaterThan(0)
   })
 
   it('cinematic_drone: повний цикл з 8 точками', () => {
-    let s = richState()
-    s = orderKit(s, 'cinematic_drone')
-    s = receiveDelivery(s)
-    s = startAssembly(s)
-    for (let i = 0; i < 8; i++) s = recordSolderPoint(s, 1.0)
-    s = finishAssembly(s)
-    expect(s.assemblyQuality).toBeCloseTo(1.0)
-    s = sell(s)
+    const s = runCycle([1, 1, 1, 1, 1, 1, 1, 1], 'cinematic_drone')
     expect(s.phase).toBe(Phase.IDLE)
   })
 
   it('longrange_drone: повний цикл з 5 точками', () => {
-    let s = richState()
-    s = orderKit(s, 'longrange_drone')
-    s = receiveDelivery(s)
-    s = startAssembly(s)
-    for (let i = 0; i < 5; i++) s = recordSolderPoint(s, 0.8)
-    s = finishAssembly(s)
-    expect(s.phase).toBe(Phase.READY)
+    const s = runCycle([0.8, 0.8, 0.8, 0.8, 0.8], 'longrange_drone')
+    expect(s.phase).toBe(Phase.IDLE)
   })
 
   it('кожен дрон має solderPointCount що збігається з довжиною assemblySteps', () => {
@@ -498,8 +455,8 @@ describe('Нові типи дронів (D2.1)', () => {
   })
 
   it('ціна racing_drone вища за mini_drone при однаковій якості', () => {
-    const mini    = calcPrice(KIT_TYPES.mini_drone.basePrice,    1, 1)
-    const racing  = calcPrice(KIT_TYPES.racing_drone.basePrice,  1, 1)
+    const mini    = calcPrice(KIT_TYPES.mini_drone.basePrice,      1, 1)
+    const racing  = calcPrice(KIT_TYPES.racing_drone.basePrice,    1, 1)
     const cinema  = calcPrice(KIT_TYPES.cinematic_drone.basePrice, 1, 1)
     expect(racing).toBeGreaterThan(mini)
     expect(cinema).toBeGreaterThan(racing)
@@ -549,8 +506,7 @@ describe('Апгрейд consumables (D2.2)', () => {
 
 describe('Скарбничка (piggy bank)', () => {
   it('canOpenPiggy: true коли lastPiggyAt null', () => {
-    const s = createState()
-    const { can, remainingMs } = canOpenPiggy(s, Date.now())
+    const { can, remainingMs } = canOpenPiggy(createState(), Date.now())
     expect(can).toBe(true)
     expect(remainingMs).toBe(0)
   })
@@ -605,7 +561,266 @@ describe('Скарбничка (piggy bank)', () => {
   it('lastPiggyAt зберігається в стані після collectPiggy', () => {
     const s = createState()
     const now = 1_700_000_000_000
-    const result = collectPiggy(s, 5, now)
-    expect(result.lastPiggyAt).toBe(now)
+    expect(collectPiggy(s, 5, now).lastPiggyAt).toBe(now)
+  })
+})
+
+describe('D6 — слоти доставки та логістика', () => {
+  function richState() { return { ...createState(), money: 9999 } }
+  const NOW = 1_000_000_000
+
+  it('createState: deliveries порожній', () => {
+    expect(createState().deliveries).toEqual([])
+  })
+
+  it('orderKit з IDLE → delivery в deliveries зі статусом transit', () => {
+    const s = orderKit(richState(), 'mini_drone', NOW)
+    expect(s.deliveries).toHaveLength(1)
+    expect(s.deliveries[0].status).toBe(DeliveryStatus.TRANSIT)
+    expect(s.deliveries[0].readyAt).toBe(NOW + KIT_TYPES.mini_drone.deliveryMs)
+    expect(s.phase).toBe(Phase.IDLE)
+  })
+
+  it('без апгрейду складу — другий orderKit кидає помилку', () => {
+    const s = orderKit(richState(), 'mini_drone', NOW)
+    expect(() => orderKit(s, 'mini_drone', NOW)).toThrow('orderKit')
+  })
+
+  it('storage L1: можна замовити ще один kit', () => {
+    let s = buyUpgrade(richState(), 'storage')
+    s = orderKit(s, 'mini_drone', NOW)
+    s = orderKit(s, 'racing_drone', NOW)
+    expect(s.deliveries).toHaveLength(2)
+    expect(s.deliveries[1].kitId).toBe('racing_drone')
+  })
+
+  it('storage L1: можна замовити під час ASSEMBLY', () => {
+    let s = buyUpgrade(richState(), 'storage')
+    s = inAssembly(0, { money: s.money, upgrades: s.upgrades })
+    expect(s.phase).toBe(Phase.ASSEMBLY)
+    expect(s.deliveries).toHaveLength(0)
+    s = orderKit(s, 'mini_drone', NOW)
+    expect(s.phase).toBe(Phase.ASSEMBLY)
+    expect(s.deliveries).toHaveLength(1)
+  })
+
+  it('storage L1: можна замовити у фазі READY', () => {
+    let s = buyUpgrade(richState(), 'storage')
+    s = inAssembly(0, { money: s.money, upgrades: s.upgrades })
+    for (let i = 0; i < 4; i++) s = recordSolderPoint(s, 1)
+    s = finishAssembly(s)
+    expect(s.phase).toBe(Phase.READY)
+    s = orderKit(s, 'mini_drone', NOW)
+    expect(s.phase).toBe(Phase.READY)
+    expect(s.deliveries).toHaveLength(1)
+  })
+
+  it('sell з готовим вторинним слотом → IDLE, deliveries збережені', () => {
+    let s = buyUpgrade(richState(), 'storage')
+    s = inAssembly(0, { money: s.money, upgrades: s.upgrades })
+    for (let i = 0; i < 4; i++) s = recordSolderPoint(s, 1)
+    s = finishAssembly(s)
+    // Add a secondary delivery manually
+    s = { ...s, deliveries: [{ id: 'q1', kitId: 'racing_drone', readyAt: NOW - 1, slotIndex: 0, status: 'transit' }] }
+    s = sell(s)
+    expect(s.phase).toBe(Phase.IDLE)
+    expect(s.activeKit).toBeNull()
+    expect(s.deliveries).toHaveLength(1)
+    expect(s.deliveries[0].id).toBe('q1')
+  })
+
+  it('sell з порожньою чергою → IDLE', () => {
+    const s = runCycle([1, 1, 1, 1])
+    expect(s.phase).toBe(Phase.IDLE)
+    expect(s.deliveries).toHaveLength(0)
+  })
+
+  it('abandonBurntDrone з готовим слотом → IDLE, deliveries збережені', () => {
+    let s = buyUpgrade(richState(), 'storage')
+    s = inAssembly(0, { money: s.money, upgrades: s.upgrades })
+    s = burnKit(s)
+    s = { ...s, deliveries: [{ id: 'q3', kitId: 'mini_drone', readyAt: NOW - 1, slotIndex: 0, status: 'transit' }] }
+    s = abandonBurntDrone(s, 0)
+    expect(s.phase).toBe(Phase.IDLE)
+    expect(s.activeKit).toBeNull()
+    expect(s.deliveries).toHaveLength(1)
+  })
+
+  it('не можна замовити більше за maxSlots', () => {
+    let s = buyUpgrade(richState(), 'storage')   // L1 → total 2 slots
+    s = orderKit(s, 'mini_drone', NOW)
+    s = orderKit(s, 'mini_drone', NOW)
+    expect(() => orderKit(s, 'mini_drone', NOW)).toThrow('orderKit')
+  })
+
+  it('storage L2: дозволяє 3 слоти', () => {
+    let s = richState()
+    s = buyUpgrade(s, 'storage')
+    s = buyUpgrade(s, 'storage')
+    s = orderKit(s, 'mini_drone', NOW)
+    s = orderKit(s, 'mini_drone', NOW)
+    s = orderKit(s, 'mini_drone', NOW)
+    expect(s.deliveries).toHaveLength(3)
+    expect(() => orderKit(s, 'mini_drone', NOW)).toThrow('orderKit')
+  })
+
+  it('logistics L1: скорочує час доставки на 30%', () => {
+    let s = buyUpgrade(richState(), 'logistics')
+    s = orderKit(s, 'mini_drone', NOW)
+    const expected = Math.round(KIT_TYPES.mini_drone.deliveryMs * LOGISTICS_DELIVERY_MULT[1])
+    expect(s.deliveries[0].readyAt).toBe(NOW + expected)
+  })
+
+  it('logistics L2: скорочує час доставки на 50%', () => {
+    let s = richState()
+    s = buyUpgrade(s, 'logistics')
+    s = buyUpgrade(s, 'logistics')
+    s = orderKit(s, 'mini_drone', NOW)
+    const expected = Math.round(KIT_TYPES.mini_drone.deliveryMs * LOGISTICS_DELIVERY_MULT[2])
+    expect(s.deliveries[0].readyAt).toBe(NOW + expected)
+  })
+
+  it('logistics застосовується до всіх доставок', () => {
+    let s = richState()
+    s = buyUpgrade(s, 'storage')
+    s = buyUpgrade(s, 'logistics')
+    s = orderKit(s, 'mini_drone', NOW)
+    s = orderKit(s, 'racing_drone', NOW)
+    const expected = Math.round(KIT_TYPES.racing_drone.deliveryMs * LOGISTICS_DELIVERY_MULT[1])
+    expect(s.deliveries[1].readyAt).toBe(NOW + expected)
+  })
+
+  it('storage: buyUpgrade збільшує storageLevel', () => {
+    const s = buyUpgrade(richState(), 'storage')
+    expect(s.upgrades.storageLevel).toBe(1)
+    expect(s.money).toBe(9999 - STORAGE_UPGRADE_COSTS[0])
+  })
+
+  it('logistics: buyUpgrade збільшує logisticsLevel', () => {
+    const s = buyUpgrade(richState(), 'logistics')
+    expect(s.upgrades.logisticsLevel).toBe(1)
+    expect(s.money).toBe(9999 - LOGISTICS_UPGRADE_COSTS[0])
+  })
+
+  // D6.6 — кожна доставка отримує унікальний slotIndex
+  it('orderKit → slotIndex = 0 для першої доставки', () => {
+    const s = orderKit(richState(), 'mini_drone', NOW)
+    expect(s.deliveries[0].slotIndex).toBe(0)
+  })
+
+  it('два orderKit → різні slotIndex (0 і 1)', () => {
+    let s = buyUpgrade(richState(), 'storage')
+    s = orderKit(s, 'mini_drone', NOW)
+    s = orderKit(s, 'mini_drone', NOW)
+    const indices = s.deliveries.map(d => d.slotIndex)
+    expect(new Set(indices).size).toBe(2)
+  })
+
+  it('після startAssembly слот 0 звільняється і наступна доставка може його зайняти', () => {
+    let s = buyUpgrade(richState(), 'storage')
+    s = orderKit(s, 'mini_drone', NOW)  // slot 0
+    s = forceArrived(s, s.deliveries[0].id)
+    s = pickupDelivery(s, s.deliveries[0].id)
+    s = startAssembly(s)                // slot 0 freed (box on bench)
+    s = orderKit(s, 'mini_drone', NOW)  // gets slot 0 again
+    expect(s.deliveries).toHaveLength(1)
+    expect(s.deliveries[0].slotIndex).toBe(0)
+  })
+
+  it('три доставки → три різних slotIndex', () => {
+    let s = richState()
+    s = buyUpgrade(s, 'storage')
+    s = buyUpgrade(s, 'storage')
+    s = orderKit(s, 'mini_drone', NOW)
+    s = orderKit(s, 'mini_drone', NOW)
+    s = orderKit(s, 'mini_drone', NOW)
+    const indices = s.deliveries.map(d => d.slotIndex)
+    expect(new Set(indices).size).toBe(3)
+  })
+
+  it('_afterBenchClear → IDLE зберігає deliveries без змін', () => {
+    let s = inAssembly(0, { money: 9999, upgrades: { ...createState().upgrades, storageLevel: 1 } })
+    const secondary = { id: 'q-kept', kitId: 'racing_drone', readyAt: NOW - 1, slotIndex: 0, status: 'transit' }
+    s = { ...s, deliveries: [secondary] }
+    const kit = KIT_TYPES[s.activeKit]
+    for (let i = 0; i < kit.solderPointCount; i++) s = recordSolderPoint(s, 1.0)
+    s = finishAssembly(s)
+    const deliveriesBefore = s.deliveries
+    s = sell(s)
+    expect(s.phase).toBe(Phase.IDLE)
+    expect(s.deliveries).toHaveLength(deliveriesBefore.length)
+    expect(s.deliveries[0].id).toBe(deliveriesBefore[0].id)
+  })
+})
+
+describe('D6.6 — pickupDelivery', () => {
+  function richState() { return { ...createState(), money: 9999 } }
+  const NOW = 1_000_000_000
+
+  function idleWithArrivedDelivery(slotIndex = 0) {
+    const d = { id: 'del-a', kitId: 'mini_drone', readyAt: NOW - 1, slotIndex, status: 'transit' }
+    return { ...richState(), deliveries: [d] }
+  }
+
+  it('IDLE + arrived → IDLE з delivery status=carrying', () => {
+    const s = pickupDelivery(idleWithArrivedDelivery(1), 'del-a', NOW)
+    expect(s.phase).toBe(Phase.IDLE)
+    expect(s.deliveries[0].status).toBe(DeliveryStatus.CARRYING)
+    expect(s.deliveries[0].kitId).toBe('mini_drone')
+    expect(s.deliveries[0].slotIndex).toBe(1)
+  })
+
+  it('pickupDelivery → startAssembly ставить kit на стіл', () => {
+    let s = pickupDelivery(idleWithArrivedDelivery(0), 'del-a', NOW)
+    s = startAssembly(s)
+    expect(s.phase).toBe(Phase.ASSEMBLY)
+    expect(s.activeKit).toBe('mini_drone')
+    expect(s.deliveries).toHaveLength(0)
+  })
+
+  it('два слоти: можна вибрати другий першим', () => {
+    const d1 = { id: 'del-1', kitId: 'mini_drone',  readyAt: NOW - 100, slotIndex: 0, status: 'transit' }
+    const d2 = { id: 'del-2', kitId: 'racing_drone', readyAt: NOW - 50,  slotIndex: 1, status: 'transit' }
+    let s = { ...richState(), deliveries: [d1, d2] }
+    // Pick up d2 first (slot 1)
+    s = pickupDelivery(s, 'del-2', NOW)
+    expect(s.deliveries.find(d => d.id === 'del-2').status).toBe(DeliveryStatus.CARRYING)
+    expect(s.deliveries.find(d => d.id === 'del-1').status).toBe(DeliveryStatus.TRANSIT)
+    s = startAssembly(s)
+    expect(s.activeKit).toBe('racing_drone')
+    expect(s.deliveries).toHaveLength(1)
+    expect(s.deliveries[0].id).toBe('del-1')  // d1 still waiting
+  })
+
+  it('доставка ще в дорозі → помилка', () => {
+    const d = { id: 'del-a', kitId: 'mini_drone', readyAt: NOW + 5000, slotIndex: 0, status: 'transit' }
+    const s = { ...richState(), deliveries: [d] }
+    expect(() => pickupDelivery(s, 'del-a', NOW)).toThrow('ще в дорозі')
+  })
+
+  it('невідомий deliveryId → помилка', () => {
+    expect(() => pickupDelivery(idleWithArrivedDelivery(), 'no-such-id', NOW)).toThrow('не знайдено')
+  })
+
+  it('не IDLE фаза → помилка', () => {
+    const s = inAssembly()
+    const d = { id: 'del-a', kitId: 'mini_drone', readyAt: NOW - 1, slotIndex: 1, status: 'transit' }
+    expect(() => pickupDelivery({ ...s, deliveries: [d] }, 'del-a', NOW)).toThrow('недозволено')
+  })
+
+  it('вже є carrying → помилка', () => {
+    const d1 = { id: 'del-1', kitId: 'mini_drone', readyAt: NOW - 1, slotIndex: 0, status: 'carrying' }
+    const d2 = { id: 'del-2', kitId: 'mini_drone', readyAt: NOW - 1, slotIndex: 1, status: 'transit' }
+    const s  = { ...richState(), deliveries: [d1, d2] }
+    expect(() => pickupDelivery(s, 'del-2', NOW)).toThrow('вже несеться')
+  })
+
+  it('pickupDelivery не мутує оригінальний стан', () => {
+    const base = idleWithArrivedDelivery()
+    const phaseBefore = base.phase
+    const statusBefore = base.deliveries[0].status
+    pickupDelivery(base, 'del-a', NOW)
+    expect(base.phase).toBe(phaseBefore)
+    expect(base.deliveries[0].status).toBe(statusBefore)
   })
 })

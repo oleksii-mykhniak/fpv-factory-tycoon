@@ -46,8 +46,7 @@ export function createSolderModal(root, { onSolderResult, onAbandon }) {
     const { phase } = state
 
     // Auto-close when cycle ends
-    if (phase === Phase.READY || phase === Phase.IDLE ||
-        phase === Phase.ORDERED || phase === Phase.DELIVERY) {
+    if (phase === Phase.READY || phase === Phase.IDLE) {
       close()
       return
     }
