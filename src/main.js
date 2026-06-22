@@ -297,7 +297,8 @@ function draw() {
   //   – fires worker.reset() for IDLE so workerCanDeliver is true on auto-pickup
   //   – parks carry box off-screen during IDLE (no pointer interference with slot indicators)
   const minCost        = Math.min(...Object.values(KIT_TYPES).map(k => k.cost))
-  const showPiggy      = state.money < minCost && state.phase === Phase.IDLE
+  const hasAnyBoxOrDrone = (state.deliveries ?? []).length > 0 || state.phase !== Phase.IDLE
+  const showPiggy      = state.money < minCost && !hasAnyBoxOrDrone
   const droneSpriteKey = state.activeKit ? (KIT_TYPES[state.activeKit]?.spriteKey ?? null) : null
   const carrying       = (state.deliveries ?? []).find(d => d.status === DeliveryStatus.CARRYING)
   updateScene(
