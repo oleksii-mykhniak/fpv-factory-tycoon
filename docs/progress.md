@@ -21,8 +21,32 @@
 | D4 | Живий світ | ✅ Готово | 2026-06-21 |
 | D5 | Оформлення | ✅ Готово | 2026-06-21 |
 | D6 | Слоти + логістика | ✅ Готово | 2026-06-22 |
-| D7 | Прогрес локацій | — | — |
+| D7 | Прогрес локацій | ✅ Готово | 2026-06-23 |
 | D8 | Реклама-гачки + поліш | — | — |
+
+---
+
+### D7 — Прогрес локацій ✅
+
+**Що зроблено:**
+- `state/locations.js` — новий файл: реєстр `LOCATIONS` (Квартира/Гараж/Майстерня) з `kitIds`, `upgradeCaps` per-track, `unlockCost`, `unlockReq.minUpgrades`, `sceneConfig`; хелпери `currentLocation`, `kitsForLocation`, `capFor`, `canMoveToLocation`; `LOCATION_ORDER`
+- `gameState.js` — `locationId: 'apartment'` у `createState()`; `buyUpgrade` перевіряє `capFor(state, trackId)` перед покупкою — throws "заблоковано" якщо cap досягнуто; `moveToLocation(state, targetId)` — чиста функція переїзду з перевіркою умов
+- `gameState.test.js` — 24 нових D7 тести: caps, canMoveToLocation, moveToLocation; всі `richState()` переведено на `locationId: 'workshop'` щоб існуючі D6-тести не конфліктували з кепами
+- `upgradeModal.js` — кожен трек показує "Ліміт локації — переїдьте далі" коли cap досягнуто; нова секція «Локація» внизу: поточна + наступна, умови, кнопка «Переїхати»
+- `shopModal.js` — `isKitLocked` тепер використовує `kitsForLocation(state)` замість хардкоду 'apartment'; замок показує правильну назву локації
+- `actionBar.js` — badge "!" на Поліпшеннях включається і коли `canMoveToLocation` = true
+- `scene.js` — `applyLocationTheme(sceneConfig)` змінює `engine.backgroundColor` і `floor.color`; зберігає `_engine`, `_floorActor` на рівні модуля; застосовується при старті і після переїзду
+- `main.js` — імпорт `moveToLocation`, `currentLocation`, `applyLocationTheme`; `upgradeModal` отримує `onMoveToLocation`; тема застосовується після `initScene`; explicit merge `locationId` в `initState` для старих saves
+
+**Ключові рішення:**
+- Кепи живуть у `locations.js` (контент), не в `config.js` (баланс) — по плану D7
+- `buyUpgrade` перевіряє абсолютний max ПЕРЕД cap → коли cap=max помилка "максимальний рівень", не "заблоковано"
+- Переїзд вбудовано в upgradeModal (не окрема модалка) — природна точка контакту з upgrades
+- `applyLocationTheme` модуль-рівневий (не через refs) — безпечно викликати до/після initScene
+
+**Відхилення від плану:**
+- D7.4: замість окремого `moveModal.js` — секція в `upgradeModal.js`; UX чистіший (не потрібна нова кнопка в action bar)
+- Сцена перебудовується мінімально (колір підлоги + BG), не повна реконструкція — достатньо для demo-цілі D7
 
 ---
 
