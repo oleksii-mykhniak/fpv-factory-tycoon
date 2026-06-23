@@ -7,6 +7,7 @@ import {
   applyColdSolderPenalty,
   calcPrice, calcQuality,
   canOpenPiggy, collectPiggy,
+  moveToLocation,
 } from './gameState.js'
 import {
   SOLDERING_UPGRADE_COSTS, WORKER_UPGRADE_COSTS, CONSUMABLES_UPGRADE_COSTS,
@@ -15,6 +16,7 @@ import {
   LOGISTICS_UPGRADE_COSTS, LOGISTICS_DELIVERY_MULT,
 } from './config.js'
 import { trackMaxLevel, nextCost, levelData, UPGRADE_TRACKS, SOLDER_MODE, WORKER_MODE } from './upgrades.js'
+import { LOCATIONS, LOCATION_ORDER, capFor, canMoveToLocation, currentLocation } from './locations.js'
 
 const SOLDERING_MAX_LEVEL = trackMaxLevel('soldering')
 
@@ -319,7 +321,7 @@ describe('Холодна пайка: штраф якості', () => {
 
 describe('Апгрейди: buyUpgrade', () => {
   function richState() {
-    return { ...createState(), money: 9999 }
+    return { ...createState(), money: 9999, locationId: 'workshop' }
   }
 
   it('рівень 0 → 1: гроші зменшуються, solderingLevel зростає', () => {
@@ -381,7 +383,7 @@ describe('Реєстр апгрейдів (data-driven)', () => {
 })
 
 describe('Апгрейди: worker-трек', () => {
-  function richState() { return { ...createState(), money: 9999 } }
+  function richState() { return { ...createState(), money: 9999, locationId: 'workshop' } }
 
   it('початковий стан має workerLevel 0', () => {
     expect(createState().upgrades.workerLevel).toBe(0)
@@ -464,7 +466,7 @@ describe('Нові типи дронів (D2.1)', () => {
 })
 
 describe('Апгрейд consumables (D2.2)', () => {
-  function richState() { return { ...createState(), money: 9999 } }
+  function richState() { return { ...createState(), money: 9999, locationId: 'workshop' } }
 
   it('початковий стан має consumablesLevel 0', () => {
     expect(createState().upgrades.consumablesLevel).toBe(0)
@@ -566,7 +568,7 @@ describe('Скарбничка (piggy bank)', () => {
 })
 
 describe('D6 — слоти доставки та логістика', () => {
-  function richState() { return { ...createState(), money: 9999 } }
+  function richState() { return { ...createState(), money: 9999, locationId: 'workshop' } }
   const NOW = 1_000_000_000
 
   it('createState: deliveries порожній', () => {
@@ -754,7 +756,7 @@ describe('D6 — слоти доставки та логістика', () => {
 })
 
 describe('D6.6 — pickupDelivery', () => {
-  function richState() { return { ...createState(), money: 9999 } }
+  function richState() { return { ...createState(), money: 9999, locationId: 'workshop' } }
   const NOW = 1_000_000_000
 
   function idleWithArrivedDelivery(slotIndex = 0) {
@@ -822,5 +824,172 @@ describe('D6.6 — pickupDelivery', () => {
     pickupDelivery(base, 'del-a', NOW)
     expect(base.phase).toBe(phaseBefore)
     expect(base.deliveries[0].status).toBe(statusBefore)
+  })
+})
+
+// ── D7 — Прогрес локацій ──────────────────────────────────
+
+describe('D7 — Реєстр локацій', () => {
+  it('createState: locationId = apartment', () => {
+    expect(createState().locationId).toBe('apartment')
+  })
+
+  it('LOCATION_ORDER містить apartment, garage, workshop', () => {
+    expect(LOCATION_ORDER).toEqual(['apartment', 'garage', 'workshop'])
+  })
+
+  it('currentLocation(apartment): повертає дані квартири', () => {
+    const s = createState()
+    expect(currentLocation(s).id).toBe('apartment')
+    expect(currentLocation(s).emoji).toBe('🏠')
+  })
+
+  it('currentLocation: default apartment якщо locationId відсутній', () => {
+    const s = { ...createState(), locationId: undefined }
+    expect(currentLocation(s).id).toBe('apartment')
+  })
+
+  it('capFor: apartment — storage cap = 0, soldering cap = 2', () => {
+    const s = createState()
+    expect(capFor(s, 'storage')).toBe(0)
+    expect(capFor(s, 'soldering')).toBe(2)
+  })
+
+  it('capFor: garage — storage cap = 1, logistics cap = 1', () => {
+    const s = { ...createState(), locationId: 'garage' }
+    expect(capFor(s, 'storage')).toBe(1)
+    expect(capFor(s, 'logistics')).toBe(1)
+  })
+
+  it('capFor: workshop — всі кепи = max', () => {
+    const s = { ...createState(), locationId: 'workshop' }
+    expect(capFor(s, 'storage')).toBe(2)
+    expect(capFor(s, 'soldering')).toBe(3)
+    expect(capFor(s, 'worker')).toBe(2)
+  })
+})
+
+describe('D7 — Кепи апгрейдів за локацією', () => {
+  it('buyUpgrade storage в apartment → помилка "заблоковано"', () => {
+    const s = { ...createState(), money: 9999 }
+    expect(() => buyUpgrade(s, 'storage')).toThrow('заблоковано')
+  })
+
+  it('buyUpgrade logistics в apartment → помилка "заблоковано"', () => {
+    const s = { ...createState(), money: 9999 }
+    expect(() => buyUpgrade(s, 'logistics')).toThrow('заблоковано')
+  })
+
+  it('buyUpgrade soldering в apartment: можна до рівня 2', () => {
+    let s = { ...createState(), money: 9999 }
+    s = buyUpgrade(s, 'soldering')  // level 0 → 1
+    s = buyUpgrade(s, 'soldering')  // level 1 → 2
+    expect(s.upgrades.solderingLevel).toBe(2)
+  })
+
+  it('buyUpgrade soldering до рівня 3 в apartment → помилка "заблоковано"', () => {
+    let s = { ...createState(), money: 9999 }
+    s = buyUpgrade(s, 'soldering')
+    s = buyUpgrade(s, 'soldering')
+    expect(() => buyUpgrade(s, 'soldering')).toThrow('заблоковано')
+  })
+
+  it('buyUpgrade worker в apartment: до рівня 1, але не 2', () => {
+    let s = { ...createState(), money: 9999 }
+    s = buyUpgrade(s, 'worker')
+    expect(s.upgrades.workerLevel).toBe(1)
+    expect(() => buyUpgrade(s, 'worker')).toThrow('заблоковано')
+  })
+
+  it('після переїзду до garage: storage можна купити', () => {
+    let s = { ...createState(), money: 9999, locationId: 'garage' }
+    s = buyUpgrade(s, 'storage')
+    expect(s.upgrades.storageLevel).toBe(1)
+  })
+})
+
+describe('D7 — canMoveToLocation', () => {
+  it('apartment → garage: причини без грошей і солдерингу', () => {
+    const s = createState()  // money=120, solderingLevel=0
+    const { can, reasons } = canMoveToLocation(s, 'garage')
+    expect(can).toBe(false)
+    expect(reasons.length).toBeGreaterThan(0)
+    expect(reasons.some(r => r.includes('800'))).toBe(true)
+  })
+
+  it('apartment → garage: can=true коли є гроші + soldering=2', () => {
+    let s = { ...createState(), money: 9999, locationId: 'apartment' }
+    s = buyUpgrade(s, 'soldering')
+    s = buyUpgrade(s, 'soldering')
+    const { can, reasons } = canMoveToLocation(s, 'garage')
+    expect(can).toBe(true)
+    expect(reasons).toHaveLength(0)
+  })
+
+  it('apartment → garage: нема грошей — у причинах вартість', () => {
+    let s = { ...createState(), money: 100, locationId: 'apartment' }
+    s = { ...s, upgrades: { ...s.upgrades, solderingLevel: 2 } }
+    const { can, reasons } = canMoveToLocation(s, 'garage')
+    expect(can).toBe(false)
+    expect(reasons.some(r => r.includes('800'))).toBe(true)
+  })
+
+  it('вже в garage: переїзд до apartment → помилка', () => {
+    const s = { ...createState(), locationId: 'garage' }
+    const { can, reasons } = canMoveToLocation(s, 'apartment')
+    expect(can).toBe(false)
+    expect(reasons[0]).toMatch(/Вже/)
+  })
+
+  it('невідома локація → can=false', () => {
+    expect(canMoveToLocation(createState(), 'moon').can).toBe(false)
+  })
+})
+
+describe('D7 — moveToLocation', () => {
+  it('переїзд до garage: locationId змінюється, гроші знімаються', () => {
+    let s = { ...createState(), money: 9999, locationId: 'apartment' }
+    s = buyUpgrade(s, 'soldering')
+    s = buyUpgrade(s, 'soldering')
+    const before = s.money
+    s = moveToLocation(s, 'garage')
+    expect(s.locationId).toBe('garage')
+    expect(s.money).toBe(before - LOCATIONS.garage.unlockCost)
+  })
+
+  it('після переїзду до garage: capFor storage = 1', () => {
+    let s = { ...createState(), money: 9999, locationId: 'apartment' }
+    s = { ...s, upgrades: { ...s.upgrades, solderingLevel: 2 } }
+    s = moveToLocation(s, 'garage')
+    expect(capFor(s, 'storage')).toBe(1)
+  })
+
+  it('moveToLocation кидає якщо умови не виконані', () => {
+    const s = createState()  // solderingLevel=0, money=120
+    expect(() => moveToLocation(s, 'garage')).toThrow('moveToLocation')
+  })
+
+  it('moveToLocation не мутує оригінальний стан', () => {
+    let s = { ...createState(), money: 9999, locationId: 'apartment' }
+    s = { ...s, upgrades: { ...s.upgrades, solderingLevel: 2 } }
+    const locBefore  = s.locationId
+    const monBefore  = s.money
+    moveToLocation(s, 'garage')
+    expect(s.locationId).toBe(locBefore)
+    expect(s.money).toBe(monBefore)
+  })
+
+  it('garage → workshop: requires soldering=3 і worker=2', () => {
+    const s = { ...createState(), money: 9999, locationId: 'garage',
+      upgrades: { ...createState().upgrades, solderingLevel: 3, workerLevel: 2 } }
+    const result = moveToLocation(s, 'workshop')
+    expect(result.locationId).toBe('workshop')
+  })
+
+  it('старий save без locationId: createState дефолт — apartment', () => {
+    const defaults = createState()
+    const saved    = { money: 500, phase: 'IDLE', upgrades: {} }
+    const merged   = { ...defaults, ...saved, upgrades: { ...defaults.upgrades } }
+    expect(merged.locationId).toBe('apartment')
   })
 })

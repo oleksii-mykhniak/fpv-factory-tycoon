@@ -8,12 +8,14 @@ import {
   applyColdSolderPenalty,
   calcPrice,
   canOpenPiggy, collectPiggy,
+  moveToLocation,
 } from './state/gameState.js'
 import {
   COLD_SOLDER_THRESHOLD, SALVAGE_RATE,
   COLD_SOLDER_QUALITY_PENALTY,
 } from './state/config.js'
 import { levelData, SOLDER_MODE, WORKER_MODE } from './state/upgrades.js'
+import { currentLocation } from './state/locations.js'
 import { createHUD } from './ui/hud.js'
 import { createActionBar } from './ui/actionBar.js'
 import { createShopModal } from './ui/shopModal.js'
@@ -21,7 +23,7 @@ import { createUpgradeModal } from './ui/upgradeModal.js'
 import { createSettingsModal } from './ui/settingsModal.js'
 import { createSolderModal } from './ui/solderModal.js'
 import { createPiggyModal } from './ui/piggyModal.js'
-import { initScene, updateScene } from './scene/scene.js'
+import { initScene, updateScene, applyLocationTheme } from './scene/scene.js'
 
 // ── State init ────────────────────────────────────────────
 
@@ -72,7 +74,8 @@ function initState() {
   let state = {
     ...defaults,
     ...saved.state,
-    upgrades: { ...defaults.upgrades, ...saved.state.upgrades },
+    upgrades:   { ...defaults.upgrades, ...saved.state.upgrades },
+    locationId: saved.state.locationId ?? defaults.locationId,
   }
   state = migrateState(state)
   return { state, salesLog: saved.salesLog }
@@ -98,7 +101,11 @@ const shopModal = createShopModal(uiRoot, {
 })
 
 const upgradeModal = createUpgradeModal(uiRoot, {
-  onBuyUpgrade: (id) => update(buyUpgrade(state, id)),
+  onBuyUpgrade:     (id) => update(buyUpgrade(state, id)),
+  onMoveToLocation: (id) => {
+    applyLocationTheme(currentLocation({ ...state, locationId: id }).sceneConfig)
+    update(moveToLocation(state, id))
+  },
 })
 
 const settingsModal = createSettingsModal(uiRoot, {
@@ -199,6 +206,7 @@ initScene(canvas, {
   },
 }).then(refs => {
   sceneRefs = refs
+  applyLocationTheme(currentLocation(state).sceneConfig)
   hideOverlay()
   draw()
 })

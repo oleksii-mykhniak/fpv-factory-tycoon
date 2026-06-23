@@ -14,6 +14,10 @@ const BG = ex.Color.fromHex('#0e0e18')
 // Height of the action bar (must match --ab-h in style.css).
 const ACTION_BAR_H = 68
 
+// Stored after initScene for use by applyLocationTheme.
+let _engine    = null
+let _floorActor = null
+
 // Tracks the current game phase so pointer handlers can gate commands.
 let currentPhase = Phase.IDLE
 
@@ -167,6 +171,7 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
     displayMode: ex.DisplayMode.FillScreen,
     antialiasing: false,
   })
+  _engine = engine
 
   await loadSprites(onLoadProgress)
   await engine.start()
@@ -179,6 +184,7 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
   scene.camera.zoom = Math.max(CAMERA_ZOOM_MIN, Math.min(CAMERA_ZOOM_MAX, H / CAMERA_ZOOM_REF))
 
   const { workbench, floor, mailbox, lamp, HW, EXT_H } = buildRoom(scene, W, H, RH)
+  _floorActor = floor
 
   // Apply environment sprites (swap colored rects to textured sprites)
   applySprite(workbench, 'workbench')
@@ -491,4 +497,14 @@ export function updateScene(refs, phase, piggyInfo = null, droneSpriteKey = null
 
   // Return worker to idle between cycles
   if (phase === Phase.IDLE) worker?.reset()
+}
+
+// Apply location-specific visual theme (background colour, floor colour).
+// Safe to call any time after initScene.
+export function applyLocationTheme(sceneConfig) {
+  if (!sceneConfig) return
+  if (sceneConfig.bgColor && _engine)
+    _engine.backgroundColor = ex.Color.fromHex(sceneConfig.bgColor)
+  if (sceneConfig.floorColor && _floorActor)
+    _floorActor.color = ex.Color.fromHex(sceneConfig.floorColor)
 }

@@ -6,6 +6,7 @@ import {
 } from './config.js'
 import { UPGRADE_TRACKS } from './upgrades.js'
 import { KIT_TYPES } from './kits.js'
+import { capFor, canMoveToLocation, LOCATIONS } from './locations.js'
 
 // Re-export so existing consumers keep importing kit data from gameState.js.
 export { KIT_TYPES }
@@ -32,6 +33,7 @@ export function createState() {
     assemblyQuality:   null,
     coldSolderPenalty: 0,
     lastPiggyAt:       null,
+    locationId:        'apartment',
     // All deliveries: [{id, kitId, slotIndex, readyAt, status}]
     // status 'transit'  = en-route or arrived-but-not-picked-up
     // status 'carrying' = worker is carrying it to bench
@@ -242,6 +244,9 @@ export function buyUpgrade(state, trackId) {
   const level = state.upgrades[track.stateKey] ?? 0
   if (level >= track.costs.length)
     throw new Error('buyUpgrade: апгрейд вже на максимальному рівні')
+  const cap   = capFor(state, trackId)
+  if (level >= cap)
+    throw new Error(`buyUpgrade: апгрейд "${trackId}" заблоковано в поточній локації`)
   const cost = track.costs[level]
   if (state.money < cost)
     throw new Error(`buyUpgrade: недостатньо грошей (є ${state.money}, потрібно ${cost})`)
@@ -249,5 +254,18 @@ export function buyUpgrade(state, trackId) {
     ...state,
     money:    state.money - cost,
     upgrades: { ...state.upgrades, [track.stateKey]: level + 1 },
+  }
+}
+
+// Move to a new location (must be further along LOCATION_ORDER, conditions met).
+export function moveToLocation(state, targetId) {
+  const { can, reasons } = canMoveToLocation(state, targetId)
+  if (!can)
+    throw new Error(`moveToLocation: ${reasons.join('; ')}`)
+  const target = LOCATIONS[targetId]
+  return {
+    ...state,
+    money:      state.money - target.unlockCost,
+    locationId: targetId,
   }
 }

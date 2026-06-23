@@ -1,5 +1,6 @@
 import { Phase } from '../state/gameState.js'
 import { UPGRADE_TRACKS } from '../state/upgrades.js'
+import { LOCATION_ORDER, canMoveToLocation } from '../state/locations.js'
 
 export function createActionBar(root, { onShopOpen, onUpgradeOpen, onSettingsOpen }) {
   const el = document.createElement('div')
@@ -38,12 +39,15 @@ export function createActionBar(root, { onShopOpen, onUpgradeOpen, onSettingsOpe
     badge.hidden = !idle
     shopBtn.classList.toggle('action-bar__btn--notify', idle)
 
-    // "!" on Upgrades when idle and player can afford at least one upgrade.
-    const canUpgrade = idle && Object.values(UPGRADE_TRACKS).some(track => {
+    // "!" on Upgrades when idle and player can afford at least one upgrade OR can move location.
+    const currentIdx  = LOCATION_ORDER.indexOf(state.locationId ?? 'apartment')
+    const nextLocId   = LOCATION_ORDER[currentIdx + 1]
+    const canMove     = nextLocId ? canMoveToLocation(state, nextLocId).can : false
+    const canUpgrade  = idle && (canMove || Object.values(UPGRADE_TRACKS).some(track => {
       const level    = state.upgrades[track.stateKey] ?? 0
       const nextCost = level < track.costs.length ? track.costs[level] : null
       return nextCost !== null && state.money >= nextCost
-    })
+    }))
     upgradeBadge.hidden = !canUpgrade
     upgradeBtn.classList.toggle('action-bar__btn--notify', canUpgrade)
   }

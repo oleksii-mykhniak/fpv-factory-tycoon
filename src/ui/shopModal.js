@@ -1,12 +1,15 @@
 import { Phase, KIT_TYPES, calcPrice } from '../state/gameState.js'
 import { PRICE_BASE_COEFF, PRICE_QUALITY_COEFF, STORAGE_SLOTS_BY_LEVEL } from '../state/config.js'
+import { kitsForLocation, LOCATIONS } from '../state/locations.js'
 
-// Current location — will be wired to real location state in D7.
-// For now: only 'apartment' kits (unlock: null) are available.
-const CURRENT_LOCATION = 'apartment'
+function isKitLocked(kit, locationKitIds) {
+  return !locationKitIds.includes(kit.id)
+}
 
-function isKitLocked(kit) {
-  return kit.unlock?.location != null && kit.unlock.location !== CURRENT_LOCATION
+function lockReasonText(kit) {
+  const locId = kit.unlock?.location
+  const name  = locId ? (LOCATIONS[locId]?.name ?? locId) : 'іншій локації'
+  return `🔒 Відкривається в ${name}`
 }
 
 function difficultyDots(count) {
@@ -54,15 +57,16 @@ export function createShopModal(root, { onOrder }) {
   }
 
   function render(state) {
-    const body         = overlay.querySelector('#shop-body')
-    const mult         = state.upgrades.priceMultiplier
+    const body          = overlay.querySelector('#shop-body')
+    const mult          = state.upgrades.priceMultiplier
     const storageLevel  = state.upgrades?.storageLevel ?? 0
     const maxSecondary  = STORAGE_SLOTS_BY_LEVEL[storageLevel] ?? 0
     const maxSlots      = 1 + maxSecondary
     const deliveryCount = (state.deliveries ?? []).length
     const usedSlots     = deliveryCount + (state.phase !== Phase.IDLE ? 1 : 0)
     // Ordering allowed from any phase except BURNT, as long as a slot is free.
-    const canOrderAny   = state.phase !== Phase.BURNT && usedSlots < maxSlots
+    const canOrderAny    = state.phase !== Phase.BURNT && usedSlots < maxSlots
+    const locationKitIds = kitsForLocation(state)
 
     // Slot indicator header (only shown when Storage upgrade is active)
     const totalSlots = maxSlots
@@ -71,7 +75,7 @@ export function createShopModal(root, { onOrder }) {
       : ''
 
     body.innerHTML = slotHeader + Object.entries(KIT_TYPES).map(([id, kit]) => {
-      const locked   = isKitLocked(kit)
+      const locked   = isKitLocked(kit, locationKitIds)
       const noMoney  = state.money < kit.cost
       const disabled = locked || !canOrderAny || noMoney
 
@@ -85,7 +89,7 @@ export function createShopModal(root, { onOrder }) {
                 <div class="kit-card__meta">${difficultyDots(kit.solderPointCount)} ${kit.solderPointCount} точок</div>
               </div>
             </div>
-            <div class="kit-card__lock">🔒 Відкривається в Гаражі</div>
+            <div class="kit-card__lock">${lockReasonText(kit)}</div>
           </div>`
       }
 
