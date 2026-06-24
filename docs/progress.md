@@ -28,6 +28,27 @@
 
 ## Post-D8 — баги та дрібні покращення
 
+### 2026-06-24 — feat: смітник + тіндер-гра → дрон з брухту (реальна збірка)
+
+**Що зроблено:**
+- Магазин: нова картка «Дрон з брухту ♻️» (cost=0, sell $40–$55) — `isSpecial: true` у `kits.js`, відфільтрована з основного списку; при активній грі показує «Іду до смітника…»
+- Воркер: після кліку «Збирати зі смітника» автоматично йде до смітника (auto-trigger у `draw()`), `commandScrapPickup()` / `resumeScrapSuccess()` / `resumeScrapFail()`
+- Нові FSM-стани: `SCRAP_WALK → AT_TRASH → SCRAP_CARRY`; `reset()` не переривається під час scrap-циклу (`workerIsDoingScrap` guard)
+- Тіндер-міні-гра (`trashModal.js` повний перезапис): 6 карток (3 корисних + 3 сміття), перемішані щоразу; drag + rotate, або кнопки ❌/✅; анімація вильоту картки; ≥2 збережених корисних → успіх
+- На успіх: воркер несе деталі до верстака → `startScrapAssembly(state)` → фаза ASSEMBLY з kit=`scrap_drone` (3 кроки пайки), продаж як звичайний дрон
+- На провал: воркер повертається idle, гравець отримує 5 UAH (consolation = `SCRAP_CONSOLATION`)
+- `config.js`: SCRAP_* константи → TINDER_GOOD_CARDS/TINDER_JUNK_CARDS/TINDER_MIN_GOOD/SCRAP_CONSOLATION; `scrap_drone` у KIT_CONFIGS (cost=0, basePrice=55, 3 кроки)
+- `manifest.test.js`: skip solderPoints-check для `isSpecial` кітів (scrap_drone reuses mini_drone sprite з 4 точками, але має лише 3 кроки)
+- 157 тестів зелені
+
+**Ключові рішення:**
+- `isSpecial: true` у kits.js — єдиний прапор що відокремлює scrap_drone від regular flow (shop, manifest test)
+- Auto-trigger у `draw()` замість ручного тапу на смітник — відразу після відкриття магазину воркер іде сам; тап на смітник як fallback
+- Тіндер-гра ніколи не відкривається безпосередньо з магазину — тільки через `onScrapArrivedAtTrash` колбек, щоб анімація ходьби воркера була видна
+- scrap_drone reuses `mini_drone` spriteKey (ті самі anchor-точки на спрайті, хоча кроків менше)
+
+---
+
 ### 2026-06-24 — fix: воркер застигав при замовленні 2-ї коробки під час доставки 1-ї
 
 **Проблема:** `updateScene` завжди викликав `worker.reset()` коли `phase === IDLE`. Але фаза лишається IDLE весь час поки воркер несе коробку (переходить в ASSEMBLY тільки при `onBoxPicked`). Будь-який `draw()` під час доставки (timer `scheduleDeliveryCheck`, `update` від нового замовлення) скасовував walk chain і воркер "застигав", потім перезапускав доставку заново.

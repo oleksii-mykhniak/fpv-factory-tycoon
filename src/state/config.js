@@ -102,6 +102,14 @@ export const KIT_CONFIGS = Object.freeze({
       { label: 'Прошиваю польотний контролер',     missMsg: 'Прошивка не завантажилась — повторюємо' },
     ],
   },
+  scrap_drone: {
+    cost: 0, basePrice: 55, deliveryMs: 0,
+    assemblySteps: [
+      { label: 'Збираю раму з брухту',  missMsg: 'Криво — виправляємо' },
+      { label: 'Монтую б/в мотори',     missMsg: 'Мотор хитається — підтягуємо' },
+      { label: 'Паяю контролер',        missMsg: "Слабкий контакт — переплавляємо" },
+    ],
+  },
 })
 
 // ── Piggy bank (rescue mini-game) ────────────────────────────
@@ -110,6 +118,13 @@ export const PIGGY_TAP_VALUE   = 1        // money per tap
 export const PIGGY_DURATION_MS = 8000     // tap window (ms)
 export const PIGGY_COOLDOWN_MS = 900000   // 15 min between sessions
 export const PIGGY_MAX_PAYOUT  = 72       // cap = cheapest kit cost → guaranteed rescue in one session
+
+// ── Scrap / Tinder mini-game ──────────────────────────────
+// Player swipes good parts right, junk left, to unlock free drone assembly.
+export const TINDER_GOOD_CARDS = 3    // good part cards per round
+export const TINDER_JUNK_CARDS = 3    // junk cards per round
+export const TINDER_MIN_GOOD   = 2    // right-swipes on good parts needed to proceed
+export const SCRAP_CONSOLATION = 5    // UAH awarded if player fails Tinder game
 
 // ── Monetization ─────────────────────────────────────────
 // Set true only when a real ad SDK is integrated and configured.

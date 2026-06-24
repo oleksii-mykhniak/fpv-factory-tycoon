@@ -2,32 +2,38 @@ import * as ex from 'excalibur'
 import {
   WS, createWorkerState, workerTransition,
   workerCanDeliver, workerCanSolder, workerCanSell,
+  workerCanTrash, workerCanScrapPickup, workerIsDoingScrap,
 } from './workerFSM.js'
 
 // Worker Actor + movement. FSM logic lives in workerFSM.js (testable in Node).
 //
 // config:
-//   W, RH            — canvas/room dimensions
-//   doorPos          — door threshold inside the room (near bottom wall gap)
-//   boxSpawnPos      — outside position where box waits to be picked up
-//   benchPos         — where worker stands when soldering
-//   idlePos          — default resting position
-//   mailboxPos       — mailbox outside (for sell animation)
-//   box              — delivery box Actor (animated during carry)
-//   tablePos         — where box lands on workbench
-//   droneRef         — drone Actor (hidden when worker "carries" it to mailbox)
-//   onBoxPicked      — called after worker delivers box to bench
-//   onSolderRequested — called when worker starts soldering
-//   onSellRequested  — called after worker drops drone at mailbox
+//   W, RH             — canvas/room dimensions
+//   doorPos           — door threshold inside the room (near bottom wall gap)
+//   boxSpawnPos       — outside position where box waits to be picked up
+//   benchPos          — where worker stands when soldering
+//   idlePos           — default resting position
+//   mailboxPos        — mailbox outside (for sell animation)
+//   trashbinPos       — trash bin outside (for burnt-drone discard animation)
+//   box               — delivery box Actor (animated during carry)
+//   tablePos          — where box lands on workbench
+//   droneRef          — drone Actor (hidden when worker "carries" it to mailbox/trashbin)
+//   onBoxPicked            — called after worker delivers box to bench
+//   onSolderRequested      — called when worker starts soldering
+//   onSellRequested        — called after worker drops drone at mailbox
+//   onTrashRequested       — called after worker drops burnt drone at trash bin
+//   onScrapArrivedAtTrash  — called when worker reaches trash bin for scrap pickup
+//   onScrapDelivered       — called when worker returns to bench with scrap parts
 
 const FRAME_W = 64
 const FRAME_H = 64
 
 export function createWorker(scene, {
   W, RH,
-  doorPos, boxSpawnPos, benchPos, idlePos, mailboxPos,
+  doorPos, boxSpawnPos, benchPos, idlePos, mailboxPos, trashbinPos,
   box, tablePos, droneRef,
-  onBoxPicked, onSolderRequested, onSellRequested,
+  onBoxPicked, onSolderRequested, onSellRequested, onTrashRequested,
+  onScrapArrivedAtTrash, onScrapDelivered,
 }) {
   let ws = createWorkerState()
 
@@ -144,6 +150,85 @@ export function createWorker(scene, {
       .callMethod(() => setMoving(false))
   }
 
+  // ── Trash: worker carries burnt drone to trash bin, then returns to idle ──
+  function commandTrash() {
+    if (!workerCanTrash(ws)) return
+    actor.actions.clearActions()
+    dispatch('startTrash')
+
+    // Carry drone only if it's currently visible on the bench (burnt case).
+    const hasDrone = !!droneRef?.graphics?.visible
+    if (hasDrone) {
+      actor.addChild(droneRef)
+      droneRef.pos = ex.vec(-WORKER_SIZE * 0.1, -WORKER_SIZE * 0.28)
+      droneRef.graphics.visible = true
+    }
+
+    setMoving(true, doorPos.x > actor.pos.x)
+    actor.actions
+      .moveTo(doorPos, 150)
+      .moveTo(trashbinPos, 130)
+      .callMethod(() => {
+        dispatch('trashDone')
+        setMoving(false)
+        if (hasDrone && droneRef) {
+          actor.removeChild(droneRef)
+          scene.add(droneRef)
+          droneRef.pos = tablePos.clone()
+          droneRef.graphics.visible = false
+        }
+        onTrashRequested?.()
+      })
+      .callMethod(() => setMoving(true, idlePos.x > trashbinPos.x))
+      .moveTo(doorPos, 120)
+      .moveTo(idlePos, 150)
+      .callMethod(() => setMoving(false))
+  }
+
+  // ── Scrap pickup: worker walks to trash bin, Tinder game fires on arrival ──
+  function commandScrapPickup() {
+    if (!workerCanScrapPickup(ws)) return
+    actor.actions.clearActions()
+    dispatch('startScrapWalk')
+
+    setMoving(true, doorPos.x > actor.pos.x)
+    actor.actions
+      .moveTo(doorPos, 150)
+      .moveTo(trashbinPos, 130)
+      .callMethod(() => {
+        dispatch('arrivedAtTrash')
+        setMoving(false)
+        onScrapArrivedAtTrash?.()
+        // Worker waits; Tinder game runs; resumeScrap* is called from outside.
+      })
+  }
+
+  // Called after successful Tinder game: worker carries parts to bench.
+  function resumeScrapSuccess() {
+    if (ws.state !== WS.AT_TRASH) return
+    dispatch('scrapDone')
+    setMoving(true, doorPos.x > trashbinPos.x)
+    actor.actions
+      .moveTo(doorPos, 120)
+      .moveTo(benchPos, 170)
+      .callMethod(() => {
+        dispatch('arrivedAtBench')
+        setMoving(false)
+        onScrapDelivered?.()
+      })
+  }
+
+  // Called when Tinder game fails: worker returns to idle.
+  function resumeScrapFail() {
+    if (ws.state !== WS.AT_TRASH) return
+    dispatch('scrapFailed')
+    setMoving(true, idlePos.x > trashbinPos.x)
+    actor.actions
+      .moveTo(doorPos, 120)
+      .moveTo(idlePos, 150)
+      .callMethod(() => setMoving(false))
+  }
+
   // ── Free walk (D4.7): tap on floor moves worker; interrupted by real commands ──
   function walkTo(x, y) {
     if (ws.state !== WS.IDLE && ws.state !== WS.FREE_WALK) return
@@ -163,9 +248,10 @@ export function createWorker(scene, {
     dispatch('solderDone')
   }
 
-  // Reset to idle (no-op if already IDLE — handles sell-animation case).
+  // Reset to idle (no-op if already IDLE or mid-scrap — handles sell-animation case).
   function reset() {
     if (ws.state === WS.IDLE) return
+    if (workerIsDoingScrap(ws)) return  // don't interrupt scrap walk/game/carry
     actor.actions.clearActions()
     setMoving(true, idlePos.x > actor.pos.x)
     actor.actions.moveTo(idlePos, 150).callMethod(() => setMoving(false))
@@ -195,8 +281,10 @@ export function createWorker(scene, {
 
   return {
     actor,
-    commandDeliver, commandSolder, commandSell, walkTo,
-    notifySolderDone, reset, setupSprite,
+    commandDeliver, commandSolder, commandSell, commandTrash,
+    commandScrapPickup, resumeScrapSuccess, resumeScrapFail,
+    walkTo, notifySolderDone, reset, setupSprite,
     getState: () => ws.state,
+    isDoingScrap: () => workerIsDoingScrap(ws),
   }
 }

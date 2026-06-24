@@ -7,7 +7,7 @@
 // unlock: null = always available; { location: 'id' } = gated until that location (D7).
 import { KIT_CONFIGS } from './config.js'
 
-function makeKit(id, { name, emoji, spriteKey, unlock }) {
+function makeKit(id, { name, emoji, spriteKey, unlock, isSpecial = false }) {
   const cfg = KIT_CONFIGS[id]
   return {
     id,
@@ -20,6 +20,7 @@ function makeKit(id, { name, emoji, spriteKey, unlock }) {
     assemblySteps:    cfg.assemblySteps,
     spriteKey,
     unlock,
+    isSpecial,
   }
 }
 
@@ -28,4 +29,5 @@ export const KIT_TYPES = Object.freeze({
   racing_drone:    makeKit('racing_drone',    { name: 'Гоночний дрон',       emoji: '⚡', spriteKey: 'racing_drone',    unlock: null }),
   cinematic_drone: makeKit('cinematic_drone', { name: 'Кінематографічний',   emoji: '🎬', spriteKey: 'cinematic_drone', unlock: null }),
   longrange_drone: makeKit('longrange_drone', { name: 'Далекобійний',        emoji: '📡', spriteKey: 'longrange_drone', unlock: { location: 'garage' } }),
+  scrap_drone:     makeKit('scrap_drone',     { name: 'Дрон з брухту',       emoji: '♻️', spriteKey: 'mini_drone',      unlock: null, isSpecial: true }),
 })

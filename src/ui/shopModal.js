@@ -24,7 +24,7 @@ function priceRange(kit, priceMultiplier) {
   return `$${min.toFixed(0)}–$${max.toFixed(0)}`
 }
 
-export function createShopModal(root, { onOrder }) {
+export function createShopModal(root, { onOrder, onScrapStart }) {
   const overlay = document.createElement('div')
   overlay.id = 'shop-modal'
   overlay.className = 'modal-overlay'
@@ -74,7 +74,7 @@ export function createShopModal(root, { onOrder }) {
       ? `<p class="shop-slot-info">Слоти доставки: ${usedSlots}/${totalSlots}</p>`
       : ''
 
-    body.innerHTML = slotHeader + Object.entries(KIT_TYPES).map(([id, kit]) => {
+    body.innerHTML = slotHeader + Object.entries(KIT_TYPES).filter(([, kit]) => !kit.isSpecial).map(([id, kit]) => {
       const locked   = isKitLocked(kit, locationKitIds)
       const noMoney  = state.money < kit.cost
       const disabled = locked || !canOrderAny || noMoney
@@ -125,6 +125,48 @@ export function createShopModal(root, { onOrder }) {
     body.querySelectorAll('[data-order]').forEach(btn => {
       btn.addEventListener('click', () => { onOrder(btn.dataset.order); close() })
     })
+
+    // Scrap drone card — free, Tinder mini-game, always at bottom
+    const scrapKit      = KIT_TYPES['scrap_drone']
+    const scrapSellMin  = calcPrice(scrapKit.basePrice, 0,   state.upgrades.priceMultiplier)
+    const scrapSellMax  = calcPrice(scrapKit.basePrice, 1.0, state.upgrades.priceMultiplier)
+    const scrapCard = document.createElement('div')
+    scrapCard.className = 'kit-card kit-card--scrap'
+
+    if (state.phase === Phase.IDLE && !state.scrapAvailable) {
+      scrapCard.innerHTML = `
+        <div class="kit-card__header">
+          <span class="kit-card__emoji">♻️</span>
+          <div class="kit-card__info">
+            <div class="kit-card__name">Дрон з брухту</div>
+            <div class="kit-card__meta">Безкоштовно · Тіндер-гра</div>
+          </div>
+          <div class="kit-card__prices">
+            <div class="kit-card__buy-price">$0</div>
+            <div class="kit-card__sell-range">$${scrapSellMin.toFixed(0)}–$${scrapSellMax.toFixed(0)}</div>
+          </div>
+        </div>
+        <button class="btn btn--success kit-card__btn" id="btn-scrap-start">
+          Збирати зі смітника — $0
+        </button>
+      `
+      body.appendChild(scrapCard)
+      scrapCard.querySelector('#btn-scrap-start').addEventListener('click', () => {
+        onScrapStart?.()
+        close()
+      })
+    } else if (state.scrapAvailable) {
+      scrapCard.innerHTML = `
+        <div class="kit-card__header">
+          <span class="kit-card__emoji">♻️</span>
+          <div class="kit-card__info">
+            <div class="kit-card__name">Іду до смітника…</div>
+            <div class="kit-card__meta">Воркер збирає деталі</div>
+          </div>
+        </div>
+      `
+      body.appendChild(scrapCard)
+    }
   }
 
   return { open, close, update }

@@ -27,6 +27,7 @@ describe('manifest structure', () => {
 
   it('solderPoints anchors length matches kit solderPointCount', () => {
     for (const kit of Object.values(KIT_TYPES)) {
+      if (kit.isSpecial) continue  // special kits may reuse sprites with different step counts
       const entry = SPRITES[kit.spriteKey]
       if (!entry?.anchors?.solderPoints) continue
       expect(

@@ -914,6 +914,150 @@ body {
   will-change: width;
 }
 
+/* === Scrap mini-game modal === */
+
+/* === Tinder swipe mini-game === */
+
+.tinder-overlay .modal {
+  max-width: 360px;
+}
+
+.tinder-game {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.tinder-hints {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: #666;
+  padding: 0 12px;
+}
+
+.tinder-hint--active {
+  color: #e0c97d;
+  font-weight: bold;
+}
+
+.tinder-card-wrap {
+  width: 200px;
+  height: 200px;
+  perspective: 800px;
+}
+
+.tinder-card {
+  width: 200px;
+  height: 200px;
+  border-radius: 20px;
+  background: #1a1a2e;
+  border: 2px solid #333;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  will-change: transform;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  transform-origin: center bottom;
+}
+
+.tinder-card:active { cursor: grabbing; }
+
+.tinder-card--good { border-color: rgba(80, 180, 80, 0.5); }
+.tinder-card--junk { border-color: rgba(180, 80, 80, 0.4); }
+
+.tinder-card__emoji {
+  font-size: 3.2rem;
+  line-height: 1;
+}
+
+.tinder-card__name {
+  font-family: 'Fredoka One', cursive;
+  font-size: 1.1rem;
+  color: #e8e8f0;
+  text-align: center;
+}
+
+.tinder-card__desc {
+  font-size: 0.78rem;
+  color: #888;
+  text-align: center;
+}
+
+.tinder-counter {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.tinder-btns {
+  display: flex;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.tinder-btn {
+  padding: 10px 22px;
+  border-radius: 24px;
+  border: none;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.12s;
+}
+
+.tinder-btn:active { transform: scale(0.94); }
+
+.tinder-btn--toss {
+  background: rgba(200, 80, 80, 0.2);
+  color: #e07a7a;
+  border: 1.5px solid rgba(200, 80, 80, 0.4);
+}
+
+.tinder-btn--keep {
+  background: rgba(80, 180, 80, 0.2);
+  color: #7de07d;
+  border: 1.5px solid rgba(80, 180, 80, 0.4);
+}
+
+.tinder-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 0;
+}
+
+.tinder-result__emoji {
+  font-size: 3.5rem;
+}
+
+.tinder-result__text {
+  font-family: 'Fredoka One', cursive;
+  font-size: 1.4rem;
+  color: #e0c97d;
+  text-align: center;
+}
+
+.tinder-result__sub {
+  font-size: 0.88rem;
+  color: #888;
+  text-align: center;
+}
+
+/* Scrap kit-card variant */
+.kit-card--scrap {
+  border-color: rgba(80, 140, 60, 0.4);
+  background: rgba(40, 70, 30, 0.25);
+}
+
 /* === Auto-solder result toast === */
 
 #assembly-toast {

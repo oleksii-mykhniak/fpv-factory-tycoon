@@ -148,7 +148,27 @@ function buildRoom(scene, W, H, RH) {
     z: 4,
   })
 
-  return { workbench, floor, mailbox, lamp, HW, EXT_H }
+  // ── Trash bin (outside, right side) ───────────────────
+  const TB_SIZE = W * 0.09
+  const trashbin = new ex.Actor({
+    pos:    ex.vec(W * 0.86, RH + EXT_H * 0.62),
+    width:  TB_SIZE,
+    height: TB_SIZE * 1.10,
+    z: 3,
+    color:  ex.Color.fromHex('#4a6a3a'),
+  })
+  scene.add(trashbin)
+  // Trash bin lid detail
+  colorRect(scene, {
+    x: W * 0.86,
+    y: RH + EXT_H * 0.50,
+    w: TB_SIZE * 1.1,
+    h: H * 0.008,
+    hex: '#3a5a2a',
+    z: 4,
+  })
+
+  return { workbench, floor, mailbox, trashbin, lamp, HW, EXT_H }
 }
 
 // ── Sprite swap ───────────────────────────────────────────
@@ -358,7 +378,7 @@ function createBenchProgress(scene, benchActor) {
 
 // ── Scene entry points ────────────────────────────────────
 
-export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSellRequested, onLoadProgress, onPiggyRequested, onSlotTapped }) {
+export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSellRequested, onLoadProgress, onPiggyRequested, onSlotTapped, onTrashRequested, onScrapRequested, onScrapArrivedAtTrash, onScrapDelivered }) {
   const engine = new ex.Engine({
     canvasElement: canvas,
     backgroundColor: BG,
@@ -377,13 +397,14 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
 
   scene.camera.zoom = Math.max(CAMERA_ZOOM_MIN, Math.min(CAMERA_ZOOM_MAX, H / CAMERA_ZOOM_REF))
 
-  const { workbench, floor, mailbox, lamp, HW, EXT_H } = buildRoom(scene, W, H, RH)
+  const { workbench, floor, mailbox, trashbin, lamp, HW, EXT_H } = buildRoom(scene, W, H, RH)
   _floorActor = floor
 
   // Apply environment sprites (swap colored rects to textured sprites)
   applySprite(workbench, 'workbench')
   applySprite(lamp, 'lamp')
   applySprite(mailbox, 'mailbox')
+  applySprite(trashbin, 'trashbin')
 
   // ── Key positions ──────────────────────────────────────
   const WORKER_SIZE  = W * 0.18
@@ -397,10 +418,11 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
     ex.vec(W * 0.62, RH + EXT_H * 0.35),
     ex.vec(W * 0.82, RH + EXT_H * 0.35),
   ]
-  const TABLE        = workbench.pos.clone()
-  const IDLE_POS     = ex.vec(W * 0.72, RH * 0.66)
-  const BENCH_POS    = ex.vec(workbench.pos.x, workbench.pos.y + workbench.height / 2 + WORKER_SIZE / 2)
-  const MAILBOX_POS  = mailbox.pos.clone()
+  const TABLE         = workbench.pos.clone()
+  const IDLE_POS      = ex.vec(W * 0.72, RH * 0.66)
+  const BENCH_POS     = ex.vec(workbench.pos.x, workbench.pos.y + workbench.height / 2 + WORKER_SIZE / 2)
+  const MAILBOX_POS   = mailbox.pos.clone()
+  const TRASHBIN_POS  = trashbin.pos.clone()
 
   // ── Delivery box — spawns in exterior zone ─────────────
   const BOX_W = W * SCENE_BOX_W_RATIO
@@ -560,24 +582,32 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
   // ── Worker ─────────────────────────────────────────────
   const worker = createWorker(scene, {
     W, RH,
-    doorPos:     DOOR,
-    boxSpawnPos: BOX_SPAWN,
-    benchPos:    BENCH_POS,
-    idlePos:     IDLE_POS,
-    mailboxPos:  MAILBOX_POS,
+    doorPos:      DOOR,
+    boxSpawnPos:  BOX_SPAWN,
+    benchPos:     BENCH_POS,
+    idlePos:      IDLE_POS,
+    mailboxPos:   MAILBOX_POS,
+    trashbinPos:  TRASHBIN_POS,
     box,
-    tablePos:    TABLE,
-    droneRef:    drone,
+    tablePos:     TABLE,
+    droneRef:     drone,
     onBoxPicked,
     onSolderRequested,
     onSellRequested,
+    onTrashRequested,
+    onScrapArrivedAtTrash,
+    onScrapDelivered,
   })
   worker.setupSprite(getSprite('worker_walk'))
+
+  // ── Trash bin tap: open scrap mini-game ───────────────
+  trashbin.on('pointerup', () => onScrapRequested?.())
 
   // ── Pulse controllers ──────────────────────────────────
   const boxPulse      = addPulse(box)
   const benchPulse    = addPulse(workbench)
   const mailboxPulse  = addPulse(mailbox)
+  const trashbinPulse = addPulse(trashbin)
 
   // ── Bench progress (auto / semi soldering) ────────────
   const benchProgress = createBenchProgress(scene, workbench)
@@ -617,10 +647,10 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
   return {
     engine: { getFps: () => engine.clock.fpsSampler.fps, _ex: engine },
     scene,
-    box, boxOpen, drone, worker, piggy, mailbox,
+    box, boxOpen, drone, worker, piggy, mailbox, trashbin,
     benchProgress,
     _boxSpawn: BOX_SPAWN,
-    _pulses: { box: boxPulse, bench: benchPulse, mailbox: mailboxPulse },
+    _pulses: { box: boxPulse, bench: benchPulse, mailbox: mailboxPulse, trashbin: trashbinPulse },
     get activeBoxSpawn() { return _slotSpawns[_activeSlotIndex] ?? BOX_SPAWN },
   }
 }
@@ -629,7 +659,8 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
 // droneSpriteKey:   string | null — spriteKey of the active kit
 // deliveries:       DeliveryEntry[] — [{id, kitId, slotIndex, readyAt, status}]; all pending deliveries
 // carryingSlotIndex: number — slotIndex of the delivery currently being carried (0 if none)
-export function updateScene(refs, phase, piggyInfo = null, droneSpriteKey = null, deliveries = [], carryingSlotIndex = 0) {
+// scrapAvailable:   boolean — pulse trash bin when true and phase is IDLE
+export function updateScene(refs, phase, piggyInfo = null, droneSpriteKey = null, deliveries = [], carryingSlotIndex = 0, scrapAvailable = false) {
   if (!refs?.box) return
 
   currentPhase = phase
@@ -677,13 +708,15 @@ export function updateScene(refs, phase, piggyInfo = null, droneSpriteKey = null
     _pulses.box.stop()
     _pulses.bench.stop()
     _pulses.mailbox.stop()
+    _pulses.trashbin?.stop()
 
-    if (carryingDel)           _pulses.box.start()
+    if (carryingDel)              _pulses.box.start()
     if (phase === Phase.ASSEMBLY) _pulses.bench.start()
     if (phase === Phase.READY) {
       _pulses.bench.start()
       _pulses.mailbox.start()
     }
+    if (scrapAvailable && phase === Phase.IDLE) _pulses.trashbin?.start()
   }
 
   // Park carry box off-screen when not being carried — prevents invisible actor

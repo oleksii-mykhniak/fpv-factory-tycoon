@@ -4,6 +4,7 @@ import {
   PIGGY_COOLDOWN_MS, PIGGY_TAP_VALUE, PIGGY_MAX_PAYOUT,
   STORAGE_SLOTS_BY_LEVEL, LOGISTICS_DELIVERY_MULT,
 } from './config.js'
+
 import { UPGRADE_TRACKS } from './upgrades.js'
 import { KIT_TYPES } from './kits.js'
 import { capFor, canMoveToLocation, LOCATIONS } from './locations.js'
@@ -35,6 +36,7 @@ export function createState() {
     lastPiggyAt:       null,
     locationId:        'apartment',
     onboarded:         false,
+    scrapAvailable:    false, // true when player has "ordered" scrap from the trash
     // All deliveries: [{id, kitId, slotIndex, readyAt, status}]
     // status 'transit'  = en-route or arrived-but-not-picked-up
     // status 'carrying' = worker is carrying it to bench
@@ -218,6 +220,36 @@ function _afterBenchClear(state, newMoney) {
     phase:             Phase.IDLE,
     // deliveries intentionally preserved
   }
+}
+
+// ── Scrap (Tinder mini-game → free drone assembly) ───────
+
+export function startScrap(state) {
+  if (state.phase !== Phase.IDLE)
+    throw new Error('startScrap: недозволено поза фазою IDLE')
+  if (state.scrapAvailable)
+    throw new Error('startScrap: вже активовано')
+  return { ...state, scrapAvailable: true }
+}
+
+// Called after successful Tinder game — worker returns to bench, assembly begins.
+export function startScrapAssembly(state) {
+  if (state.phase !== Phase.IDLE)
+    throw new Error('startScrapAssembly: phase must be IDLE')
+  return {
+    ...state,
+    phase:             Phase.ASSEMBLY,
+    activeKit:         'scrap_drone',
+    scrapAvailable:    false,
+    solderPoints:      [],
+    assemblyQuality:   null,
+    coldSolderPenalty: 0,
+  }
+}
+
+// Called when Tinder game fails — clear scrap mode and award consolation UAH.
+export function cancelScrap(state, consolation = 0) {
+  return { ...state, scrapAvailable: false, money: state.money + consolation }
 }
 
 // ── Piggy bank ────────────────────────────────────────────

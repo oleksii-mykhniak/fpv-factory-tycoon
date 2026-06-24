@@ -9,11 +9,12 @@ import {
   calcPrice,
   canOpenPiggy, collectPiggy,
   moveToLocation,
+  startScrap, startScrapAssembly, cancelScrap,
 } from './state/gameState.js'
 import {
   COLD_SOLDER_THRESHOLD, SALVAGE_RATE,
   COLD_SOLDER_QUALITY_PENALTY,
-  ADS_ENABLED,
+  ADS_ENABLED, SCRAP_CONSOLATION,
 } from './state/config.js'
 import { levelData, SOLDER_MODE, WORKER_MODE } from './state/upgrades.js'
 import { currentLocation } from './state/locations.js'
@@ -26,6 +27,7 @@ import { createUpgradeModal } from './ui/upgradeModal.js'
 import { createSettingsModal } from './ui/settingsModal.js'
 import { createSolderModal } from './ui/solderModal.js'
 import { createPiggyModal } from './ui/piggyModal.js'
+import { createTrashModal } from './ui/trashModal.js'
 import { initScene, updateScene, applyLocationTheme } from './scene/scene.js'
 
 // ── State init ────────────────────────────────────────────
@@ -146,6 +148,9 @@ const shopModal = createShopModal(uiRoot, {
     dismissOnboarding()
     update(orderKit(state, kitId))
   },
+  onScrapStart: () => {
+    update(startScrap(state))
+  },
 })
 
 const upgradeModal = createUpgradeModal(uiRoot, {
@@ -172,13 +177,32 @@ const settingsModal = createSettingsModal(uiRoot, {
 
 const solderModal = createSolderModal(uiRoot, {
   onSolderResult: handleSolderResult,
-  onAbandon:      () => update(abandonBurntDrone(state, SALVAGE_RATE)),
+  onAbandon: () => {
+    // Trigger trash animation; state update fires from onTrashRequested at animation end.
+    if (sceneRefs?.worker) {
+      sceneRefs.worker.commandTrash()
+    } else {
+      update(abandonBurntDrone(state, SALVAGE_RATE))
+    }
+  },
 })
 
 const piggyModal = createPiggyModal(uiRoot, {
   onCollect:         (taps) => update(collectPiggy(state, taps, Date.now())),
   adsEnabled:        ADS_ENABLED,
   onRewardedRequest: () => showRewarded(PLACEMENTS.REWARD_PIGGY_DOUBLE),
+})
+
+const trashModal = createTrashModal(uiRoot, {
+  onSuccess: () => {
+    haptic('light')
+    sceneRefs?.worker?.resumeScrapSuccess()
+  },
+  onFail: () => {
+    haptic('medium')
+    sceneRefs?.worker?.resumeScrapFail()
+    update(cancelScrap(state, SCRAP_CONSOLATION))
+  },
 })
 
 const actionBar = createActionBar(uiRoot, {
@@ -277,6 +301,24 @@ initScene(canvas, {
     if (workerMode === WORKER_MODE.MANUAL) {
       sceneRefs?.worker?.commandDeliver(sceneRefs?.activeBoxSpawn)
     }
+  },
+  onTrashRequested: () => {
+    if (state.phase !== Phase.BURNT) return
+    playSfx('sell')
+    haptic('medium')
+    update(abandonBurntDrone(state, SALVAGE_RATE))
+  },
+  onScrapRequested: () => {
+    // Manual tap on trash bin — trigger scrap walk if worker is free
+    if (state.scrapAvailable && state.phase === Phase.IDLE) {
+      sceneRefs?.worker?.commandScrapPickup()
+    }
+  },
+  onScrapArrivedAtTrash: () => {
+    trashModal.open()
+  },
+  onScrapDelivered: () => {
+    update(startScrapAssembly(state))
   },
 }).then(refs => {
   sceneRefs = refs
@@ -428,6 +470,7 @@ function draw() {
     droneSpriteKey,
     state.deliveries ?? [],
     carrying?.slotIndex ?? 0,
+    state.scrapAvailable ?? false,
   )
 
   const workerMode = levelData('worker', state.upgrades.workerLevel ?? 0).mode
@@ -455,6 +498,11 @@ function draw() {
 
   if (state.phase === Phase.ASSEMBLY && workerMode === WORKER_MODE.AUTO) {
     sceneRefs?.worker?.commandSolder()
+  }
+
+  // Auto-trigger scrap walk when shop activates scrapAvailable: true
+  if (state.scrapAvailable && state.phase === Phase.IDLE && !carrying && !sceneRefs?.worker?.isDoingScrap?.()) {
+    sceneRefs?.worker?.commandScrapPickup()
   }
 }
 
