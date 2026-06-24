@@ -10,7 +10,7 @@ function saveSettings(s) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)) } catch {}
 }
 
-export function createSettingsModal(root, { onClearSave }) {
+export function createSettingsModal(root, { onClearSave, onSoundChange, onHapticsChange }) {
   let settings = { sound: true, haptics: true, ...loadSettings() }
 
   const overlay = document.createElement('div')
@@ -60,10 +60,12 @@ export function createSettingsModal(root, { onClearSave }) {
   overlay.querySelector('#settings-sound').addEventListener('change', e => {
     settings.sound = e.target.checked
     saveSettings(settings)
+    onSoundChange?.(settings.sound)
   })
   overlay.querySelector('#settings-haptics').addEventListener('change', e => {
     settings.haptics = e.target.checked
     saveSettings(settings)
+    onHapticsChange?.(settings.haptics)
   })
   overlay.querySelector('#settings-reset').addEventListener('click', () => {
     if (confirm('Скинути збереження? Прогрес буде втрачено.')) {

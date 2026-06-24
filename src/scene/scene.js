@@ -162,6 +162,200 @@ function applySprite(actor, key) {
   actor.graphics.use(sprite)
 }
 
+// ── Bench progress (auto / semi-auto soldering indicator) ─
+//
+// Rendered as Excalibur actors positioned above a workbench actor in world
+// space. Intentionally scene-native so future multi-bench layouts get one
+// progress card per bench automatically.
+function createBenchProgress(scene, benchActor) {
+  const BW    = benchActor.width
+  const BH    = benchActor.height
+  const CARD_W = Math.min(BW * 0.88, 210)
+  const CARD_H = 52
+  const GAP    = 6
+
+  const cx  = benchActor.pos.x
+  const cy  = benchActor.pos.y - BH / 2 - GAP - CARD_H / 2
+
+  const BAR_W    = CARD_W * 0.80
+  const BAR_H    = 5
+  const barY     = cy + CARD_H * 0.28
+  const LEFT_X   = cx - BAR_W / 2
+  const MAX_DOTS = 8
+  const DOT_R    = 3
+  const DOT_GAP  = DOT_R * 2.8
+
+  let running  = false
+  let elapsed  = 0
+  let duration = 2000
+
+  // Card border (1px wider on each side, rendered behind the fill)
+  const cardBorder = new ex.Actor({
+    pos: ex.vec(cx, cy), width: CARD_W + 2, height: CARD_H + 2,
+    z: 11, color: ex.Color.fromHex('#3a4a80'),
+  })
+  cardBorder.graphics.visible = false
+  scene.add(cardBorder)
+
+  // Card background
+  const card = new ex.Actor({
+    pos: ex.vec(cx, cy), width: CARD_W, height: CARD_H,
+    z: 12, color: ex.Color.fromHex('#1c1c38'),
+  })
+  card.graphics.visible = false
+  scene.add(card)
+
+  // Step label
+  const stepLbl = new ex.Label({
+    text: '',
+    pos:  ex.vec(cx, cy - CARD_H * 0.16),
+    color: ex.Color.fromHex('#cce0ff'),
+    font: new ex.Font({ size: 11, family: 'monospace', textAlign: ex.TextAlign.Center }),
+    z: 13,
+  })
+  stepLbl.graphics.visible = false
+  scene.add(stepLbl)
+
+  // Progress dots — small square actors (more reliable than ex.Circle in WebGL)
+  const DOT_SZ = DOT_R * 2
+  const dotActors = Array.from({ length: MAX_DOTS }, () => {
+    const d = new ex.Actor({
+      pos: ex.vec(cx, cy + CARD_H * 0.08), width: DOT_SZ, height: DOT_SZ,
+      z: 13, color: ex.Color.fromHex('#6868a0'),
+    })
+    d.graphics.visible = false
+    scene.add(d)
+    return d
+  })
+
+  // Timer bar background
+  const barBg = new ex.Actor({
+    pos: ex.vec(cx, barY), width: BAR_W, height: BAR_H + 2,
+    z: 13, color: ex.Color.fromHex('#3a3a60'),
+  })
+  barBg.graphics.visible = false
+  scene.add(barBg)
+
+  // Timer bar fill — uses graphic swap for left-to-right fill
+  const barFill = new ex.Actor({ pos: ex.vec(cx, barY), z: 14 })
+  barFill.graphics.visible = false
+  barFill.on('preupdate', (evt) => {
+    if (!running) return
+    elapsed += evt.delta
+    const p = Math.max(Math.min(elapsed / duration, 1), 0.01)
+    const fillW = Math.max(BAR_W * p, 2)
+    barFill.graphics.use(new ex.Rectangle({ width: fillW, height: BAR_H + 2, color: ex.Color.fromHex('#7aa0ff') }))
+    barFill.pos.x = LEFT_X + fillW / 2
+  })
+  scene.add(barFill)
+
+  // Result toast — card + label that fade out
+  const TOAST_H = 28
+  const toastCard = new ex.Actor({
+    pos: ex.vec(cx, cy), width: CARD_W, height: TOAST_H,
+    z: 12, color: ex.Color.fromHex('#0a1e0e'),
+  })
+  toastCard.graphics.visible = false
+  scene.add(toastCard)
+
+  const toastLbl = new ex.Label({
+    text:  '',
+    pos:   ex.vec(cx, cy),
+    color: ex.Color.fromHex('#7de07d'),
+    font:  new ex.Font({ size: 13, family: 'monospace', textAlign: ex.TextAlign.Center }),
+    z: 13,
+  })
+  toastLbl.graphics.visible = false
+  scene.add(toastLbl)
+
+  let toastAge = 0, toastDur = 0, toasting = false
+  toastCard.on('preupdate', (evt) => {
+    if (!toasting) return
+    toastAge += evt.delta
+    if (toastAge >= toastDur) {
+      toasting = false
+      toastCard.graphics.visible = false
+      toastLbl.graphics.visible  = false
+      return
+    }
+    const fadeStart = toastDur * 0.55
+    const a = toastAge > fadeStart
+      ? 1 - (toastAge - fadeStart) / (toastDur - fadeStart)
+      : 1
+    toastCard.graphics.opacity = a
+    toastLbl.graphics.opacity  = a
+  })
+
+  function _placeDots(total, done) {
+    const dotsW  = (total - 1) * DOT_GAP
+    const startX = cx - dotsW / 2
+    const dotY   = cy + CARD_H * 0.08
+    dotActors.forEach((d, i) => {
+      if (i < total) {
+        d.pos = ex.vec(startX + i * DOT_GAP, dotY)
+        const col = ex.Color.fromHex(i < done ? '#7de07d' : '#6868a0')
+        d.graphics.use(new ex.Rectangle({ width: DOT_SZ, height: DOT_SZ, color: col }))
+        d.graphics.visible = true
+      } else {
+        d.graphics.visible = false
+      }
+    })
+  }
+
+  function _resetBar() {
+    elapsed = 0
+    barFill.pos.x = LEFT_X + 1
+    barFill.graphics.use(new ex.Rectangle({ width: 2, height: BAR_H + 2, color: ex.Color.fromHex('#7aa0ff') }))
+  }
+
+  function startStep(lbl, total, done, durationMs) {
+    elapsed  = 0
+    duration = durationMs
+    running  = true
+    stepLbl.text = lbl
+    cardBorder.graphics.visible = true
+    card.graphics.visible     = true
+    stepLbl.graphics.visible  = true
+    barBg.graphics.visible    = true
+    barFill.graphics.visible  = true
+    _resetBar()
+    _placeDots(total, done)
+    toasting = false
+    toastCard.graphics.visible = false
+    toastLbl.graphics.visible  = false
+  }
+
+  function advanceDots(total, done) {
+    elapsed = 0
+    _resetBar()
+    _placeDots(total, done)
+  }
+
+  function hide() {
+    running = false
+    cardBorder.graphics.visible = false
+    card.graphics.visible    = false
+    stepLbl.graphics.visible = false
+    barBg.graphics.visible   = false
+    barFill.graphics.visible = false
+    dotActors.forEach(d => { d.graphics.visible = false })
+  }
+
+  function showResult(text, durationMs = 2200) {
+    hide()
+    toastLbl.text = text
+    toastCard.graphics.opacity = 1
+    toastLbl.graphics.opacity  = 1
+    toastCard.graphics.visible = true
+    toastLbl.graphics.visible  = true
+    toastAge = 0
+    toastDur = durationMs
+    toasting = true
+  }
+
+  return { startStep, advanceDots, hide, showResult }
+}
+
 // ── Scene entry points ────────────────────────────────────
 
 export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSellRequested, onLoadProgress, onPiggyRequested, onSlotTapped }) {
@@ -384,6 +578,9 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
   const benchPulse    = addPulse(workbench)
   const mailboxPulse  = addPulse(mailbox)
 
+  // ── Bench progress (auto / semi soldering) ────────────
+  const benchProgress = createBenchProgress(scene, workbench)
+
   // ── Pointer events ─────────────────────────────────────
 
   // Tap box → worker fetches (when a delivery has status=carrying).
@@ -420,6 +617,7 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
     engine: { getFps: () => engine.clock.fpsSampler.fps, _ex: engine },
     scene,
     box, boxOpen, drone, worker, piggy, mailbox,
+    benchProgress,
     _boxSpawn: BOX_SPAWN,
     _pulses: { box: boxPulse, bench: benchPulse, mailbox: mailboxPulse },
     get activeBoxSpawn() { return _slotSpawns[_activeSlotIndex] ?? BOX_SPAWN },

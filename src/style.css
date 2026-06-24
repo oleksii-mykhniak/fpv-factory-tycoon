@@ -750,3 +750,195 @@ body {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.4; }
 }
+
+/* === Rewarded ad button === */
+
+.btn--rewarded {
+  background: #2a4a1e;
+  color: #a0e070;
+  border: 1px solid #4a7a2e;
+  width: 100%;
+  text-align: center;
+  font-size: 1rem;
+  padding: 14px 20px;
+  border-radius: 10px;
+}
+.btn--rewarded:not(:disabled):hover { background: #335922; }
+.btn--rewarded:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* === Piggy result screen === */
+
+.piggy-result-screen {
+  justify-content: center;
+  gap: 20px !important;
+}
+
+.piggy-result-amount {
+  font-family: 'Fredoka One', cursive;
+  font-size: 3rem;
+  color: #e0c97d;
+  text-align: center;
+}
+
+/* === Onboarding hint === */
+
+#onboarding {
+  position: fixed;
+  inset: 0;
+  bottom: var(--ab-h);
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 150;
+  pointer-events: auto;
+  animation: fadeIn 0.4s ease;
+}
+
+#onboarding[hidden] { display: none; }
+
+.onboarding__box {
+  background: #1e1e2e;
+  border: 1px solid #44446a;
+  border-radius: 16px;
+  padding: 24px 28px 20px;
+  max-width: 300px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.onboarding__title {
+  font-family: 'Fredoka One', cursive;
+  font-size: 1.25rem;
+  color: #c8c8ff;
+}
+
+.onboarding__steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.onboarding__step {
+  background: rgba(255,255,255,0.07);
+  border-radius: 8px;
+  padding: 7px 11px;
+  font-size: 0.82rem;
+  color: #dde;
+  white-space: nowrap;
+}
+
+.onboarding__arrow {
+  color: #7de07d;
+  font-size: 1rem;
+}
+
+.onboarding__tap {
+  font-size: 0.75rem;
+  color: #666;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* === Auto-solder progress strip === */
+
+#assembly-progress {
+  position: absolute;
+  top: 92px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 32px);
+  max-width: 320px;
+  background: rgba(12, 12, 22, 0.92);
+  border: 1px solid #2a2a4e;
+  border-radius: 12px;
+  padding: 10px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 50;
+}
+
+#assembly-progress[hidden] { display: none; }
+
+.ap__label {
+  font-size: 0.84rem;
+  color: #aac;
+  letter-spacing: 0.02em;
+}
+
+.ap__dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.ap__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #222;
+  border: 2px solid #3a3a5a;
+  transition: background 0.25s, border-color 0.25s;
+}
+
+.ap__dot--done {
+  background: #7de07d;
+  border-color: #7de07d;
+}
+
+.ap__bar-wrap {
+  width: 100%;
+  height: 3px;
+  background: #1a1a2e;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.ap__bar-fill {
+  height: 100%;
+  background: #5a8ae0;
+  border-radius: 2px;
+  will-change: width;
+}
+
+/* === Auto-solder result toast === */
+
+#assembly-toast {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(12, 12, 22, 0.94);
+  border: 1px solid #3a4a6a;
+  border-radius: 12px;
+  padding: 10px 22px;
+  font-family: 'Fredoka One', cursive;
+  font-size: 1.15rem;
+  color: #7de07d;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 160;
+}
+
+#assembly-toast[hidden] { display: none; }
+
+.assembly-toast--fade {
+  animation: assembly-toast-fade linear forwards;
+}
+
+@keyframes assembly-toast-fade {
+  0%   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  55%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-18px); }
+}

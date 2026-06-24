@@ -29,8 +29,9 @@ export const BETTER_IRON_GREEN_HALF     = 0.22  // wider zone
 export const BETTER_IRON_OVERHEAT_CHANCE = 0.10  // 60% less overheat risk
 
 // ── Upgrade: Semi-auto / template (level 2) ──────────────
-export const SEMIAUTO_QUALITY_MIN = 0.65
-export const SEMIAUTO_QUALITY_MAX = 0.85
+export const SEMIAUTO_QUALITY_MIN    = 0.65
+export const SEMIAUTO_QUALITY_MAX    = 0.85
+export const SEMIAUTO_POINT_DELAY_MS = 800   // ms per auto-solder point (faster than full-auto)
 
 // ── Upgrade: Auto-solder (level 3) ───────────────────────
 export const AUTO_QUALITY_MIN   = 0.55
@@ -109,6 +110,14 @@ export const PIGGY_TAP_VALUE   = 1        // money per tap
 export const PIGGY_DURATION_MS = 8000     // tap window (ms)
 export const PIGGY_COOLDOWN_MS = 900000   // 15 min between sessions
 export const PIGGY_MAX_PAYOUT  = 72       // cap = cheapest kit cost → guaranteed rescue in one session
+
+// ── Monetization ─────────────────────────────────────────
+// Set true only when a real ad SDK is integrated and configured.
+export const ADS_ENABLED = false
+
+// ── Audio / Haptics defaults ──────────────────────────────
+export const DEFAULT_SOUND   = true
+export const DEFAULT_HAPTICS = true
 
 // ── Upgrade costs ────────────────────────────────────────
 // Index = current level; value = cost to reach next level.

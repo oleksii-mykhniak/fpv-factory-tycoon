@@ -7,7 +7,7 @@
 import {
   SOLDER_GREEN_HALF, OVERHEAT_CHANCE,
   BETTER_IRON_GREEN_HALF, BETTER_IRON_OVERHEAT_CHANCE,
-  SEMIAUTO_QUALITY_MIN, SEMIAUTO_QUALITY_MAX,
+  SEMIAUTO_QUALITY_MIN, SEMIAUTO_QUALITY_MAX, SEMIAUTO_POINT_DELAY_MS,
   AUTO_QUALITY_MIN, AUTO_QUALITY_MAX, AUTO_POINT_DELAY_MS,
   SOLDERING_UPGRADE_COSTS, WORKER_UPGRADE_COSTS,
   CONSUMABLES_UPGRADE_COSTS, FLUX_OVERHEAT_MULT, FLUX_QUALITY_BONUS,
@@ -41,7 +41,7 @@ export const UPGRADE_TRACKS = Object.freeze({
       { name: 'Кращий паяльник', effect: 'Ширша зона +47%, перегрів −60%',
         mode: SOLDER_MODE.MANUAL, greenHalf: BETTER_IRON_GREEN_HALF, overheatChance: BETTER_IRON_OVERHEAT_CHANCE },
       { name: 'Напівавтомат', effect: '1 тап — вся збірка, якість 65–85%',
-        mode: SOLDER_MODE.SEMI, qualityMin: SEMIAUTO_QUALITY_MIN, qualityMax: SEMIAUTO_QUALITY_MAX },
+        mode: SOLDER_MODE.SEMI, qualityMin: SEMIAUTO_QUALITY_MIN, qualityMax: SEMIAUTO_QUALITY_MAX, pointDelayMs: SEMIAUTO_POINT_DELAY_MS },
       { name: 'Автопаяльник', effect: 'Паяє сам, якість 55–75%, без участі',
         mode: SOLDER_MODE.AUTO, qualityMin: AUTO_QUALITY_MIN, qualityMax: AUTO_QUALITY_MAX, pointDelayMs: AUTO_POINT_DELAY_MS },
     ],

@@ -13,9 +13,12 @@ import {
 import {
   COLD_SOLDER_THRESHOLD, SALVAGE_RATE,
   COLD_SOLDER_QUALITY_PENALTY,
+  ADS_ENABLED,
 } from './state/config.js'
 import { levelData, SOLDER_MODE, WORKER_MODE } from './state/upgrades.js'
 import { currentLocation } from './state/locations.js'
+import { playSfx, setMuted } from './audio/sfx.js'
+import { showRewarded, PLACEMENTS } from './monetization/ads.js'
 import { createHUD } from './ui/hud.js'
 import { createActionBar } from './ui/actionBar.js'
 import { createShopModal } from './ui/shopModal.js'
@@ -92,12 +95,57 @@ let warning           = null
 const uiRoot = document.getElementById('ui-root')
 const canvas = document.getElementById('game-canvas')
 
+// ── Haptics ───────────────────────────────────────────────
+
+let hapticsEnabled = true
+
+function haptic(style = 'light') {
+  if (!hapticsEnabled) return
+  try {
+    const ms = style === 'heavy' ? 50 : style === 'medium' ? 30 : 15
+    navigator.vibrate?.(ms)
+  } catch {}
+}
+
+// ── Onboarding ────────────────────────────────────────────
+
+const onboardingEl = document.createElement('div')
+onboardingEl.id = 'onboarding'
+onboardingEl.innerHTML = `
+  <div class="onboarding__box">
+    <div class="onboarding__title">Як грати</div>
+    <div class="onboarding__steps">
+      <span class="onboarding__step">🛒 Замов дрон</span>
+      <span class="onboarding__arrow">→</span>
+      <span class="onboarding__step">🔧 Запаяй</span>
+      <span class="onboarding__arrow">→</span>
+      <span class="onboarding__step">💰 Продай</span>
+    </div>
+    <div class="onboarding__tap">Тап щоб почати</div>
+  </div>
+`
+if (state.onboarded) onboardingEl.setAttribute('hidden', '')
+
+function dismissOnboarding() {
+  if (state.onboarded) return
+  onboardingEl.setAttribute('hidden', '')
+  update({ ...state, onboarded: true })
+}
+
+onboardingEl.addEventListener('click', dismissOnboarding, { once: true })
+uiRoot.appendChild(onboardingEl)
+
 // ── UI components ─────────────────────────────────────────
 
 const hud = createHUD(uiRoot)
 
 const shopModal = createShopModal(uiRoot, {
-  onOrder: (kitId) => update(orderKit(state, kitId)),
+  onOrder: (kitId) => {
+    playSfx('order')
+    haptic('medium')
+    dismissOnboarding()
+    update(orderKit(state, kitId))
+  },
 })
 
 const upgradeModal = createUpgradeModal(uiRoot, {
@@ -109,11 +157,17 @@ const upgradeModal = createUpgradeModal(uiRoot, {
 })
 
 const settingsModal = createSettingsModal(uiRoot, {
-  onClearSave: () => {
-    clearSave()
-    location.reload()
-  },
+  onClearSave:     () => { clearSave(); location.reload() },
+  onSoundChange:   (on) => setMuted(!on),
+  onHapticsChange: (on) => { hapticsEnabled = on },
 })
+
+// Apply persisted sound/haptics settings immediately
+{
+  const s = settingsModal.getSettings()
+  setMuted(!s.sound)
+  hapticsEnabled = s.haptics
+}
 
 const solderModal = createSolderModal(uiRoot, {
   onSolderResult: handleSolderResult,
@@ -121,7 +175,9 @@ const solderModal = createSolderModal(uiRoot, {
 })
 
 const piggyModal = createPiggyModal(uiRoot, {
-  onCollect: (taps) => update(collectPiggy(state, taps, Date.now())),
+  onCollect:         (taps) => update(collectPiggy(state, taps, Date.now())),
+  adsEnabled:        ADS_ENABLED,
+  onRewardedRequest: () => showRewarded(PLACEMENTS.REWARD_PIGGY_DOUBLE),
 })
 
 const actionBar = createActionBar(uiRoot, {
@@ -182,12 +238,29 @@ initScene(canvas, {
     }
     // AUTO: solder fires via scheduleAutoPoint — bench tap is no-op
   },
-  onSellRequested: () => {
+  onSellRequested: async () => {
     if (state.phase !== Phase.READY) return
-    const kit   = KIT_TYPES[state.activeKit]
-    const price = calcPrice(kit.basePrice, state.assemblyQuality, state.upgrades.priceMultiplier)
-    salesLog.push({ quality: state.assemblyQuality, price })
-    update(sell(state))
+
+    // D8.2: rewarded ×2 sale hook (button is hidden when ADS_ENABLED=false)
+    let priceMultBonus = 1
+    if (ADS_ENABLED) {
+      const granted = await showRewarded(PLACEMENTS.REWARD_DOUBLE_SALE)
+      if (granted) priceMultBonus = 2
+    }
+
+    const kit        = KIT_TYPES[state.activeKit]
+    const basePrice  = calcPrice(kit.basePrice, state.assemblyQuality, state.upgrades.priceMultiplier)
+    const finalPrice = basePrice * priceMultBonus
+    salesLog.push({ quality: state.assemblyQuality, price: finalPrice })
+    playSfx('sell')
+    haptic('heavy')
+
+    // sell() adds basePrice internally; add the bonus delta on top if applicable
+    let nextState = sell(state)
+    if (priceMultBonus > 1) {
+      nextState = { ...nextState, money: nextState.money + (finalPrice - basePrice) }
+    }
+    update(nextState)
   },
   onLoadProgress: (loaded, total) => {
     if (loadBar) loadBar.style.width = `${Math.round((loaded / total) * 100)}%`
@@ -209,6 +282,19 @@ initScene(canvas, {
   applyLocationTheme(currentLocation(state).sceneConfig)
   hideOverlay()
   draw()
+  // If an auto-solder timer is already running (started before scene was ready),
+  // retroactively show the progress strip for the current in-progress step.
+  const _solderMode = levelData('soldering', state.upgrades.solderingLevel).mode
+  if (autoTimer !== null && state.phase === Phase.ASSEMBLY &&
+      (_solderMode === SOLDER_MODE.AUTO || _solderMode === SOLDER_MODE.SEMI)) {
+    const _data = levelData('soldering', state.upgrades.solderingLevel)
+    const _kit  = KIT_TYPES[state.activeKit]
+    if (_kit) {
+      const _done  = state.solderPoints.length
+      const _label = _kit.assemblySteps?.[_done]?.label ?? `Крок ${_done + 1}`
+      sceneRefs.benchProgress?.startStep(_label, _kit.solderPointCount, _done, _data.pointDelayMs)
+    }
+  }
 })
 
 // ── Timers ────────────────────────────────────────────────
@@ -235,18 +321,32 @@ function scheduleDeliveryCheck() {
 
 function scheduleAutoPoint() {
   const data = levelData('soldering', state.upgrades.solderingLevel)
+  const kit  = KIT_TYPES[state.activeKit]
+  if (!kit) return
+
+  const done  = state.solderPoints.length
+  const total = kit.solderPointCount
+  const label = kit.assemblySteps?.[done]?.label ?? `Крок ${done + 1}`
+
+  sceneRefs?.benchProgress?.startStep(label, total, done, data.pointDelayMs)
+
   autoTimer = setTimeout(() => {
     autoTimer = null
     if (state.phase !== Phase.ASSEMBLY) return
 
-    const q   = data.qualityMin + Math.random() * (data.qualityMax - data.qualityMin)
-    const kit = KIT_TYPES[state.activeKit]
-    const s   = recordSolderPoint(state, q)
-    if (s.solderPoints.length >= kit.solderPointCount) {
-      const next = finishAssembly(s)
+    const q = data.qualityMin + Math.random() * (data.qualityMax - data.qualityMin)
+    const s = recordSolderPoint(state, q)
+
+    if (s.solderPoints.length >= total) {
+      const finished = finishAssembly(s)
+      const finalQ   = finished.assemblyQuality
+      const price    = calcPrice(kit.basePrice, finalQ, s.upgrades.priceMultiplier)
+      const pct      = Math.round(finalQ * 100)
+      sceneRefs?.benchProgress?.showResult(`✓ Зібрано! ${pct}% → $${price.toFixed(0)}`)
       sceneRefs?.worker?.notifySolderDone()
-      update(next)
+      update(finished)
     } else {
+      sceneRefs?.benchProgress?.advanceDots(total, s.solderPoints.length)
       update(s)
       scheduleAutoPoint()
     }
@@ -265,13 +365,19 @@ function handleSolderResult(quality) {
 
   if (boostedQuality < COLD_SOLDER_THRESHOLD) {
     if (Math.random() < effectiveOverheat) {
+      playSfx('overheat')
+      haptic('heavy')
       update(burnKit(state))
     } else {
+      playSfx('solder_cold')
+      haptic('medium')
       warning = 'cold'
       update(applyColdSolderPenalty(state, COLD_SOLDER_QUALITY_PENALTY))
     }
     return
   }
+  playSfx('solder_good')
+  haptic('light')
   const newState = recordSolderPoint(state, boostedQuality)
   const kit      = KIT_TYPES[newState.activeKit]
   if (newState.solderPoints.length >= kit.solderPointCount) {
@@ -295,6 +401,11 @@ function draw() {
 
   const level = state.upgrades.solderingLevel
   const mode  = levelData('soldering', level).mode
+
+  // Hide auto-solder progress when not in semi/auto assembly
+  if (state.phase !== Phase.ASSEMBLY || mode === SOLDER_MODE.MANUAL) {
+    sceneRefs?.benchProgress?.hide()
+  }
 
   if (state.phase === Phase.ASSEMBLY && mode === SOLDER_MODE.AUTO && autoTimer === null) {
     scheduleAutoPoint()

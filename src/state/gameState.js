@@ -34,6 +34,7 @@ export function createState() {
     coldSolderPenalty: 0,
     lastPiggyAt:       null,
     locationId:        'apartment',
+    onboarded:         false,
     // All deliveries: [{id, kitId, slotIndex, readyAt, status}]
     // status 'transit'  = en-route or arrived-but-not-picked-up
     // status 'carrying' = worker is carrying it to bench

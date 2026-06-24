@@ -22,7 +22,33 @@
 | D5 | Оформлення | ✅ Готово | 2026-06-21 |
 | D6 | Слоти + логістика | ✅ Готово | 2026-06-22 |
 | D7 | Прогрес локацій | ✅ Готово | 2026-06-23 |
-| D8 | Реклама-гачки + поліш | — | — |
+| D8 | Реклама-гачки + поліш | ✅ Готово | 2026-06-24 |
+
+---
+
+### D8 — Реклама-гачки + поліш ✅
+
+**Що зроблено:**
+- `src/monetization/ads.js` — стаб: `PLACEMENTS` (5 констант), `showRewarded()` / `showInterstitial()` повертають `Promise.resolve(false/undefined)`; `ADS_ENABLED = false` у `config.js` — весь SDK-код відключений одним прапором
+- `src/audio/sfx.js` — стаб: `playSfx(name)` клонує `<audio>` з `/audio/<name>.mp3` (graceful fail якщо файл відсутній); `setMuted()` / `isMuted()`; підключено до settingsModal (`onSoundChange`)
+- `main.js` — хаптика через `navigator.vibrate()`: `haptic('light'|'medium'|'heavy')` з таблицею ms; `hapticsEnabled` перемикається через `onHapticsChange`; SFX на замовлення, пайку, продажу, перегрів
+- Онбординг: `#onboarding` оверлей «🛒 Замов дрон → 🔧 Запаяй → 💰 Продай», зникає по тапу або при першому замовленні; `onboarded: false` у `createState()` → персистується у save
+- `piggyModal.js` — результат-екран з кнопкою ×2 за рекламу (`adsEnabled` prop); коли `ADS_ENABLED=false` — кнопка прихована, поведінка незмінна
+- `settingsModal.js` — `onSoundChange` / `onHapticsChange` callbacks
+- **SEMI/AUTO-пайка без попапу**: при `SOLDER_MODE.SEMI/AUTO` solder modal не відкривається; замість нього — прогрес-стрічка над верстаком прямо в сцені + тост з результатом після завершення
+- `scene.js` — `createBenchProgress(scene, benchActor)`: картка (лейбл, крапки прогресу, таймер-бар) позиціонована в world space над верстаком; `ex.Rectangle` для бару та крапок; анімація бару через `preupdate`; тост із fade; `refs.benchProgress` у return initScene
+- `main.js` — `sceneRefs.benchProgress.startStep/advanceDots/showResult/hide`; виправлено race condition: перший `scheduleAutoPoint()` запускається до `initScene()` (draw() на рівні модуля) → ретроактивне `startStep()` у `.then()` callback після встановлення `sceneRefs`
+- 157 тестів зелені
+
+**Ключові рішення:**
+- `ADS_ENABLED = false` у `config.js` — єдиний перемикач; UI-кнопки для ads автоматично ховаються
+- Хаптика через `navigator.vibrate()` без `@capacitor/haptics` — достатньо для Android WebView; iOS не підтримує, але не крешить
+- Прогрес-стрічка в Excalibur (не DOM оверлей) — прив'язана до world position верстака; майбутні столи отримають свою стрічку через `createBenchProgress(scene, workbench2)`
+- Виправлено root-cause проблему: `draw()` на рівні модуля стартує `autoTimer` ДО `initScene().then()`, тому `startStep()` втрачався для першого кроку
+
+**Відхилення від плану:**
+- D8.5 баланс-пас (квартира→гараж feel) відкладено — потребує живого тестування
+- SEMI/AUTO не мають можливості перегрітись (burnt-стан тільки через MANUAL mini-game) — прийнятно для demo
 
 ---
 
