@@ -5,9 +5,11 @@
 // anchors: 2D pixel offsets from the sprite's origin point.
 // solderPoints array must have length === kit.solderPointCount for that drone type.
 
+const BASE = import.meta.env.BASE_URL
+
 export const SPRITES = Object.freeze({
   mini_drone: {
-    url: '/sprites/mini_drone.png',
+    url: `${BASE}sprites/mini_drone.png`,
     anchors: {
       solderPoints: [
         { x: -20, y:  10 },
@@ -19,12 +21,12 @@ export const SPRITES = Object.freeze({
   },
 
   delivery_box: {
-    url: '/sprites/delivery_box.png',
+    url: `${BASE}sprites/delivery_box.png`,
     anchors: {},
   },
 
   workbench: {
-    url: '/sprites/workbench.png',
+    url: `${BASE}sprites/workbench.png`,
     anchors: {
       drone: { x:  0, y: -30 },
       box:   { x:  0, y:  20 },
@@ -33,42 +35,42 @@ export const SPRITES = Object.freeze({
   },
 
   soldering_iron: {
-    url: '/sprites/soldering_iron.png',
+    url: `${BASE}sprites/soldering_iron.png`,
     anchors: {},
   },
 
   worker_walk: {
-    url: '/sprites/worker_walk.png',
+    url: `${BASE}sprites/worker_walk.png`,
     anchors: {},
   },
 
   racing_drone: {
-    url: '/sprites/racing_drone.png',
+    url: `${BASE}sprites/racing_drone.png`,
     anchors: {},
   },
 
   cinematic_drone: {
-    url: '/sprites/cinematic_drone.png',
+    url: `${BASE}sprites/cinematic_drone.png`,
     anchors: {},
   },
 
   longrange_drone: {
-    url: '/sprites/longrange_drone.png',
+    url: `${BASE}sprites/longrange_drone.png`,
     anchors: {},
   },
 
   lamp: {
-    url: '/sprites/lamp.png',
+    url: `${BASE}sprites/lamp.png`,
     anchors: {},
   },
 
   mailbox: {
-    url: '/sprites/mailbox.png',
+    url: `${BASE}sprites/mailbox.png`,
     anchors: {},
   },
 
   piggy: {
-    url: '/sprites/piggy.png',
+    url: `${BASE}sprites/piggy.png`,
     anchors: {},
   },
 })
