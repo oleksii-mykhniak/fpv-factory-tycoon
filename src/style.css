@@ -410,6 +410,8 @@ body {
 
 .btn--danger { background: #7a2d2d; color: #fdd; }
 .btn--danger:hover { background: #9a3a3a; }
+.btn--cheat { background: #2d5a2d; color: #cfc; }
+.btn--cheat:hover { background: #3a7a3a; }
 
 .warn { font-size: 0.8rem; color: #e07a7a; }
 .upgrade-effect-hint { font-size: 0.75rem; color: #666; }

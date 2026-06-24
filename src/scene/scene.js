@@ -455,6 +455,7 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
   slotIndicators.forEach((ind, slotIdx) => {
     ind.on('pointerup', () => {
       if (currentPhase !== Phase.IDLE) return
+      if (_deliveries.some(d => d.status === 'carrying')) return  // worker already mid-delivery
       const d = _deliveries.find(d => d.slotIndex === slotIdx && d.status === 'transit')
       if (d && d.readyAt <= Date.now()) onSlotTapped?.(d.id)
     })
@@ -693,8 +694,10 @@ export function updateScene(refs, phase, piggyInfo = null, droneSpriteKey = null
     box.pos.y = -9999
   }
 
-  // Return worker to idle between cycles
-  if (phase === Phase.IDLE) worker?.reset()
+  // Return worker to idle between cycles — but not while actively carrying a delivery.
+  // Phase stays IDLE throughout the carry walk (only switches to ASSEMBLY on onBoxPicked),
+  // so guarding on !carryingDel prevents reset() from cancelling an in-progress delivery.
+  if (phase === Phase.IDLE && !carryingDel) worker?.reset()
 }
 
 // Apply location-specific visual theme (background colour, floor colour).

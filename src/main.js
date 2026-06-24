@@ -160,6 +160,7 @@ const settingsModal = createSettingsModal(uiRoot, {
   onClearSave:     () => { clearSave(); location.reload() },
   onSoundChange:   (on) => setMuted(!on),
   onHapticsChange: (on) => { hapticsEnabled = on },
+  onAddMoney:      (amount) => update({ ...state, money: state.money + amount }),
 })
 
 // Apply persisted sound/haptics settings immediately

@@ -26,6 +26,26 @@
 
 ---
 
+## Post-D8 — баги та дрібні покращення
+
+### 2026-06-24 — fix: воркер застигав при замовленні 2-ї коробки під час доставки 1-ї
+
+**Проблема:** `updateScene` завжди викликав `worker.reset()` коли `phase === IDLE`. Але фаза лишається IDLE весь час поки воркер несе коробку (переходить в ASSEMBLY тільки при `onBoxPicked`). Будь-який `draw()` під час доставки (timer `scheduleDeliveryCheck`, `update` від нового замовлення) скасовував walk chain і воркер "застигав", потім перезапускав доставку заново.
+
+Додатково: slot indicator дозволяв тапнути 2-у коробку поки несеться 1-а → `pickupDelivery` кидав unhandled exception.
+
+**Фікс:**
+- `scene.js updateScene`: `if (phase === Phase.IDLE && !carryingDel) worker?.reset()` — reset тільки коли немає активної доставки
+- `scene.js` slot indicator handler: guard `if (_deliveries.some(d => d.status === 'carrying')) return` — запобігає тапу на 2-у коробку поки 1-а несеться
+
+### 2026-06-24 — feat: кнопка +1000 у налаштуваннях (cheat/debug)
+
+- `settingsModal.js` — нова зелена кнопка «+1000 💸» + `onAddMoney` callback
+- `main.js` — `onAddMoney: (amount) => update({ ...state, money: state.money + amount })`
+- `style.css` — `.btn--cheat` (темно-зелений)
+
+---
+
 ### D8 — Реклама-гачки + поліш ✅
 
 **Що зроблено:**

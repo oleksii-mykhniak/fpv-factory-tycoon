@@ -10,7 +10,7 @@ function saveSettings(s) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)) } catch {}
 }
 
-export function createSettingsModal(root, { onClearSave, onSoundChange, onHapticsChange }) {
+export function createSettingsModal(root, { onClearSave, onSoundChange, onHapticsChange, onAddMoney }) {
   let settings = { sound: true, haptics: true, ...loadSettings() }
 
   const overlay = document.createElement('div')
@@ -47,6 +47,7 @@ export function createSettingsModal(root, { onClearSave, onSoundChange, onHaptic
         </a>
         <p class="settings-fpv-hint">Збери справжній дрон — ті самі деталі що в грі</p>
         <div class="settings-divider"></div>
+        <button class="btn btn--cheat" id="settings-add-money">+1000 💸</button>
         <div class="settings-version">Версія ${APP_VERSION}</div>
         <button class="btn btn--danger" id="settings-reset">Скинути збереження</button>
       </div>
@@ -66,6 +67,9 @@ export function createSettingsModal(root, { onClearSave, onSoundChange, onHaptic
     settings.haptics = e.target.checked
     saveSettings(settings)
     onHapticsChange?.(settings.haptics)
+  })
+  overlay.querySelector('#settings-add-money').addEventListener('click', () => {
+    onAddMoney?.(1000)
   })
   overlay.querySelector('#settings-reset').addEventListener('click', () => {
     if (confirm('Скинути збереження? Прогрес буде втрачено.')) {
