@@ -22,6 +22,7 @@ export function createPiggyModal(root, { onCollect, adsEnabled = false, onReward
         <div class="piggy-modal__title">Зібрано!</div>
         <div class="piggy-result-amount" id="piggy-result-amount">$0</div>
         <button class="btn btn--rewarded" id="piggy-rewarded-btn" hidden>📺 ×2 за рекламу</button>
+        <div class="piggy-hint">Тап для закриття</div>
       </div>
     </div>
   `
@@ -84,29 +85,28 @@ export function createPiggyModal(root, { onCollect, adsEnabled = false, onReward
     overlay.removeEventListener('pointerdown', handlePointerDown)
     if (rafId) { cancelAnimationFrame(rafId); rafId = null }
 
-    if (!adsEnabled) {
-      // No ads — close immediately as before.
-      overlay.setAttribute('hidden', '')
-      onCollect(taps)
-      return
-    }
-
-    // Show result screen with optional rewarded button.
     doubled = false
-    const payout = currentPayout()
-    resultAmt.textContent = `$${payout}`
-    if (!rewardedBtn.hasAttribute('hidden')) { /* already visible */ }
-    rewardedBtn.removeAttribute('hidden')
+    resultAmt.textContent = `$${currentPayout()}`
+    if (adsEnabled) {
+      rewardedBtn.removeAttribute('hidden')
+    }
     gameScreen.setAttribute('hidden', '')
     resultScreen.removeAttribute('hidden')
+    resultScreen.addEventListener('pointerdown', onResultTap)
   }
 
   function doCollect() {
+    resultScreen.removeEventListener('pointerdown', onResultTap)
     const finalTaps = doubled ? taps * 2 : taps
     overlay.setAttribute('hidden', '')
     gameScreen.removeAttribute('hidden')
     resultScreen.setAttribute('hidden', '')
     onCollect(finalTaps)
+  }
+
+  function onResultTap(e) {
+    if (e.target === rewardedBtn || rewardedBtn.contains(e.target)) return
+    doCollect()
   }
 
   rewardedBtn.addEventListener('click', async () => {
