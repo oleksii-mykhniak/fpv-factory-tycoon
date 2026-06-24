@@ -22,7 +22,6 @@ export function createPiggyModal(root, { onCollect, adsEnabled = false, onReward
         <div class="piggy-modal__title">Зібрано!</div>
         <div class="piggy-result-amount" id="piggy-result-amount">$0</div>
         <button class="btn btn--rewarded" id="piggy-rewarded-btn" hidden>📺 ×2 за рекламу</button>
-        <button class="btn btn--primary" id="piggy-collect-btn">Забрати</button>
       </div>
     </div>
   `
@@ -37,7 +36,6 @@ export function createPiggyModal(root, { onCollect, adsEnabled = false, onReward
   const coinsLayer  = overlay.querySelector('#piggy-coins-layer')
   const resultAmt   = overlay.querySelector('#piggy-result-amount')
   const rewardedBtn = overlay.querySelector('#piggy-rewarded-btn')
-  const collectBtn  = overlay.querySelector('#piggy-collect-btn')
 
   let rafId   = null
   let startTs = 0
@@ -103,6 +101,14 @@ export function createPiggyModal(root, { onCollect, adsEnabled = false, onReward
     resultScreen.removeAttribute('hidden')
   }
 
+  function doCollect() {
+    const finalTaps = doubled ? taps * 2 : taps
+    overlay.setAttribute('hidden', '')
+    gameScreen.removeAttribute('hidden')
+    resultScreen.setAttribute('hidden', '')
+    onCollect(finalTaps)
+  }
+
   rewardedBtn.addEventListener('click', async () => {
     if (doubled) return
     rewardedBtn.disabled = true
@@ -112,19 +118,8 @@ export function createPiggyModal(root, { onCollect, adsEnabled = false, onReward
       doubled = true
       const newPayout = Math.min(currentPayout() * 2, PIGGY_MAX_PAYOUT * 2)
       resultAmt.textContent = `$${newPayout}`
-      rewardedBtn.setAttribute('hidden', '')
-    } else {
-      rewardedBtn.disabled = false
-      rewardedBtn.textContent = '📺 ×2 за рекламу'
     }
-  })
-
-  collectBtn.addEventListener('click', () => {
-    const finalTaps = doubled ? taps * 2 : taps
-    overlay.setAttribute('hidden', '')
-    gameScreen.removeAttribute('hidden')
-    resultScreen.setAttribute('hidden', '')
-    onCollect(finalTaps)
+    doCollect()
   })
 
   function open() {
