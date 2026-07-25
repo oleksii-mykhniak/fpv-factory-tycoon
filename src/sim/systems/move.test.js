@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { moveSystem } from './move.js'
 import { intentSystem } from './intent.js'
-import { rect } from '../../defs/layouts/apartment.js'
+import { rect } from '../../defs/layouts/index.js'
 
 // Minimal world: one agent, a few boxes, no game state involved.
 function world({ x = 100, y = 100, vx = 0, vy = 0, obstacles = [], bounds = null } = {}) {

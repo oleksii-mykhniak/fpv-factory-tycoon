@@ -5,7 +5,7 @@ import { dispatch } from '../commands.js'
 import { SYSTEMS } from './index.js'
 import { dwellProgress } from './zone.js'
 import { EV } from '../events.js'
-import { apartment } from '../../defs/layouts/apartment.js'
+import { apartment } from '../../defs/layouts/index.js'
 import { Phase, KIT_TYPES, createState } from '../../state/gameState.js'
 import { TICK_MS, MAX_CATCHUP_STEPS, ZONE_DWELL_BENCH_MS } from '../../state/config.js'
 

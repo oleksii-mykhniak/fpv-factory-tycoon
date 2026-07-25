@@ -42,16 +42,20 @@ export const BETTER_IRON_OVERHEAT_CHANCE = 0.10  // 60% less overheat risk
 // good and how fast the bench is, never whether the player may work it.
 export const SEMIAUTO_GREEN_HALF      = 0.24
 export const SEMIAUTO_OVERHEAT_CHANCE = 0.08
-export const SEMIAUTO_QUALITY_MIN    = 0.65
-export const SEMIAUTO_QUALITY_MAX    = 0.85
-export const SEMIAUTO_POINT_DELAY_MS = 800   // ms per auto-solder point (faster than full-auto)
+export const SEMIAUTO_QUALITY_MIN    = 0.60
+export const SEMIAUTO_QUALITY_MAX    = 0.75
+export const SEMIAUTO_POINT_DELAY_MS = 1200
 
 // ── Upgrade: Auto-solder (level 3) ───────────────────────
 export const AUTO_GREEN_HALF      = 0.30
 export const AUTO_OVERHEAT_CHANCE = 0.04
-export const AUTO_QUALITY_MIN   = 0.55
-export const AUTO_QUALITY_MAX   = 0.75
-export const AUTO_POINT_DELAY_MS = 2000  // ms between auto-soldered points
+// C7 balance: level 3 used to be SLOWER and WORSE than level 2 (8.0 s @ 0.65 vs
+// 3.2 s @ 0.75). That made sense when level 2 still needed a tap per kit and
+// level 3 was the hands-off option — but C6 removed arming, so the most
+// expensive upgrade in the game was a strict downgrade. It now dominates.
+export const AUTO_QUALITY_MIN   = 0.75
+export const AUTO_QUALITY_MAX   = 0.88
+export const AUTO_POINT_DELAY_MS = 700
 
 // ── Camera (C1) ──────────────────────────────────────────
 // The world is now larger than the screen and measured in fixed world units,
@@ -86,6 +90,9 @@ export const SELLER_SPEED_BY_LEVEL  = [170, 205, 240]
 // manual player and better than nothing — hiring buys time, not perfection.
 export const TECH_POINT_MS_BY_LEVEL = [2600, 2000, 1500]
 export const TECH_QUALITY_BY_LEVEL  = [0.55, 0.65, 0.75]
+
+// How much of a closed-app absence is ever paid out (C7).
+export const OFFLINE_CAP_MS = 4 * 60 * 60 * 1000
 
 // Idle behaviour: workers with no job drift around the rest area instead of
 // standing frozen, which is what makes the shop look alive.

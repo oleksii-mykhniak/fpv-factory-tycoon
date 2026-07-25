@@ -12,7 +12,7 @@ import { Phase, DeliveryStatus, KIT_TYPES, stationsOf } from '../state/gameState
 import { getSprite } from '../scene/loader.js'
 import { INTERACTIONS, carrySpriteKey } from '../defs/interactions.js'
 import { dwellProgress } from '../sim/systems/zone.js'
-import { piggyShouldShow } from '../sim/derive.js'
+import { piggyShouldShow, nextObjective } from '../sim/derive.js'
 import { CARRY_STACK_OFFSET_Y } from '../state/config.js'
 import * as ex from 'excalibur'
 
@@ -104,6 +104,7 @@ export function syncScene(refs, world) {
     refs.playerRig?.setMoving(player.moving, player.facing > 0)
     syncCarryStack(refs.carrySlotActors, refs.player, player)
     syncDwell(refs, world, player)
+    syncArrow(refs, world, player)
   }
 
   // ── Hired workers (C5) ─────────────────────────────────
@@ -192,4 +193,29 @@ function syncDwell(refs, world, player) {
   fill.pos.y = y
   fill.z = player.y * 0.01 + 3
   fill.graphics.visible = true
+}
+
+
+// Points at the next thing worth walking to, and hides itself when the player
+// is already standing on it.
+function syncArrow(refs, world, player) {
+  const arrow = refs.arrow
+  if (!arrow) return
+
+  const target = nextObjective(world, INTERACTIONS)
+  if (!target) { arrow.graphics.visible = false; return }
+
+  const dx = target.cx - player.x
+  const dy = target.cy - player.y
+  const d  = Math.hypot(dx, dy)
+  if (d < 90) { arrow.graphics.visible = false; return }
+
+  // Ride just outside the character, in the direction of travel, bobbing so it
+  // reads as a hint rather than part of the scenery.
+  const bob = Math.sin(Date.now() / 260) * 4
+  arrow.pos.x = player.x + (dx / d) * 52
+  arrow.pos.y = player.y + (dy / d) * 52 - 46 + bob
+  arrow.rotation = Math.atan2(dy, dx) + Math.PI / 2
+  arrow.z = player.y * 0.01 + 5
+  arrow.graphics.visible = true
 }

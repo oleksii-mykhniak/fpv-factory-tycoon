@@ -15,7 +15,7 @@ import { PLAYER_SPEED, PLAYER_HALF_W, PLAYER_HALF_H } from '../state/config.js'
 import { stationDef } from '../defs/stations.js'
 import { levelData } from '../state/upgrades.js'
 import { roleLevelData } from '../defs/roles.js'
-import { rect } from '../defs/layouts/apartment.js'
+import { rect, layoutFor } from '../defs/layouts/index.js'
 import { buildGrid } from '../nav/navGrid.js'
 
 // An agent is anything that occupies space and moves under its own velocity.
@@ -185,4 +185,33 @@ export function syncWorkerAgents(world) {
 // What goes to save/storage.js — deliberately only the persisted slice.
 export function serializeWorld(world) {
   return { state: world.game, salesLog: world.salesLog }
+}
+
+// Moves the simulation into another location's floor plan (C7).
+//
+// Everything spatial is rederived: obstacles, zones, the nav grid, the route
+// cache, and where the characters are standing. A move is a change of place,
+// so nobody keeps a position from the old room.
+export function applyLayout(world, layout) {
+  world.layout = layout
+  world.bounds = { w: layout.world.w, h: layout.world.h }
+
+  const spawn = layout.spawns.player
+  for (const agent of world.agents ?? []) {
+    const home = agent.kind === 'player' ? spawn : layout.spawns.workerIdle
+    agent.x = home.x
+    agent.y = home.y
+    agent.vx = 0
+    agent.vy = 0
+    agent.path = null
+    agent.pathTarget = null
+    agent.pathFailed = false
+    agent.task = null
+  }
+
+  world.zoneState = {}
+  world.triggers  = []
+  world.jobs      = []
+  rebuildStationGeometry(world)
+  return world
 }

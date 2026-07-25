@@ -25,9 +25,20 @@ const CARRY_STACK_SLOTS = 3
 
 const BG = ex.Color.fromHex('#0e0e18')
 
-// Stored after initScene for use by applyLocationTheme.
+// Stored after initScene: the engine and scene outlive a move, everything the
+// floor plan produced does not.
 let _engine     = null
+let _scene      = null
 let _floorActor = null
+// Every actor belonging to the current layout. Moving house kills these and
+// builds the next room from scratch (C7) — a location is a different place now,
+// not a different palette.
+let _built      = []
+
+function track(actor) {
+  _built.push(actor)
+  return actor
+}
 
 // ── Helpers ───────────────────────────────────────────────
 
@@ -45,7 +56,7 @@ function colorRect(scene, { x, y, w, h, hex, z = 0 }) {
     color: ex.Color.fromHex(hex),
   })
   scene.add(a)
-  return a
+  return track(a)
 }
 
 // Pulse utility: sine-wave scale on actor while active.
@@ -111,6 +122,7 @@ function buildRoom(scene, layout) {
       color:  ex.Color.fromHex(p.color),
     })
     scene.add(actor)
+    track(actor)
     applySprite(actor, p.sprite)
     actors[name] = actor
   }
@@ -141,6 +153,7 @@ function applySprite(actor, key) {
 // space. Intentionally scene-native so future multi-bench layouts get one
 // progress card per bench automatically.
 function createBenchProgress(scene, benchActor) {
+  const add = (a) => { scene.add(track(a)); return a }
   const BW    = benchActor.width
   const BH    = benchActor.height
   const CARD_W = Math.min(BW * 0.88, 210)
@@ -168,7 +181,7 @@ function createBenchProgress(scene, benchActor) {
     z: 11, color: ex.Color.fromHex('#3a4a80'),
   })
   cardBorder.graphics.visible = false
-  scene.add(cardBorder)
+  add(cardBorder)
 
   // Card background
   const card = new ex.Actor({
@@ -176,7 +189,7 @@ function createBenchProgress(scene, benchActor) {
     z: 12, color: ex.Color.fromHex('#1c1c38'),
   })
   card.graphics.visible = false
-  scene.add(card)
+  add(card)
 
   // Step label
   const stepLbl = new ex.Label({
@@ -187,7 +200,7 @@ function createBenchProgress(scene, benchActor) {
     z: 13,
   })
   stepLbl.graphics.visible = false
-  scene.add(stepLbl)
+  add(stepLbl)
 
   // Progress dots — small square actors (more reliable than ex.Circle in WebGL)
   const DOT_SZ = DOT_R * 2
@@ -197,7 +210,7 @@ function createBenchProgress(scene, benchActor) {
       z: 13, color: ex.Color.fromHex('#6868a0'),
     })
     d.graphics.visible = false
-    scene.add(d)
+    add(d)
     return d
   })
 
@@ -207,11 +220,12 @@ function createBenchProgress(scene, benchActor) {
     z: 13, color: ex.Color.fromHex('#3a3a60'),
   })
   barBg.graphics.visible = false
-  scene.add(barBg)
+  add(barBg)
 
   // Timer bar fill — uses graphic swap for left-to-right fill
   const barFill = new ex.Actor({ pos: ex.vec(cx, barY), z: 14 })
   barFill.graphics.visible = false
+  add(barFill)
   barFill.on('preupdate', (evt) => {
     if (!running) return
     elapsed += evt.delta
@@ -220,7 +234,6 @@ function createBenchProgress(scene, benchActor) {
     barFill.graphics.use(new ex.Rectangle({ width: fillW, height: BAR_H + 2, color: ex.Color.fromHex('#7aa0ff') }))
     barFill.pos.x = LEFT_X + fillW / 2
   })
-  scene.add(barFill)
 
   // Result toast — card + label that fade out
   const TOAST_H = 28
@@ -229,7 +242,7 @@ function createBenchProgress(scene, benchActor) {
     z: 12, color: ex.Color.fromHex('#0a1e0e'),
   })
   toastCard.graphics.visible = false
-  scene.add(toastCard)
+  add(toastCard)
 
   const toastLbl = new ex.Label({
     text:  '',
@@ -239,7 +252,7 @@ function createBenchProgress(scene, benchActor) {
     z: 13,
   })
   toastLbl.graphics.visible = false
-  scene.add(toastLbl)
+  add(toastLbl)
 
   let toastAge = 0, toastDur = 0, toasting = false
   toastCard.on('preupdate', (evt) => {
@@ -343,14 +356,30 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
   await loadSprites(onLoadProgress)
   await engine.start()
 
-  const scene = engine.currentScene
+  _scene = engine.currentScene
 
   // Zoom shows a constant slice of the world instead of a constant pixel size,
   // so a phone and a tablet see the same amount of game (C1.1).
-  scene.camera.zoom = Math.max(
+  _scene.camera.zoom = Math.max(
     CAMERA_ZOOM_MIN,
     Math.min(CAMERA_ZOOM_MAX, engine.drawHeight / VIEW_HEIGHT_UNITS),
   )
+
+  return buildFloor({ getWorld, onIntent, layout, world })
+}
+
+// Tears down the current room and builds another one. Everything the floor plan
+// produced is tracked, so a move is a real change of place: different size,
+// different walls, different bench slots, its own nav grid.
+export function rebuildScene({ getWorld, onIntent, layout, world }) {
+  for (const actor of _built) actor.kill()
+  _built = []
+  return buildFloor({ getWorld, onIntent, layout, world })
+}
+
+function buildFloor({ getWorld, onIntent, layout, world }) {
+  const engine = _engine
+  const scene  = _scene
 
   const { floor, mailbox, trashbin, piggy } = buildRoom(scene, layout)
   _floorActor = floor
@@ -366,7 +395,7 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
       z: 2,
       color:  ex.Color.fromHex(placed.def.color),
     })
-    scene.add(actor)
+    scene.add(track(actor))
     applySprite(actor, placed.def.sprite)
     // Front edge, so the surface reads as a table rather than a slab.
     colorRect(scene, {
@@ -381,7 +410,7 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
       z: 3, color: ex.Color.fromHex('#e8c870'),
     })
     boxOpen.graphics.visible = false
-    scene.add(boxOpen)
+    scene.add(track(boxOpen))
 
     const drone = new ex.Actor({
       pos: ex.vec(placed.surface.x, placed.surface.y),
@@ -389,7 +418,7 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
       z: 4, color: ex.Color.fromHex('#2a2a3e'),
     })
     drone.graphics.visible = false
-    scene.add(drone)
+    scene.add(track(drone))
 
     return {
       id: placed.id,
@@ -426,7 +455,7 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
   })
   box.graphics.visible = false
   applySprite(box, 'delivery_box')
-  scene.add(box)
+  scene.add(track(box))
 
   // ── Delivery slot indicators ───────────────────────────
   // One indicator box + one countdown label per street slot. Each reads its own
@@ -442,7 +471,7 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
     })
     a.graphics.visible = false
     applySprite(a, 'delivery_box')
-    scene.add(a)
+    scene.add(track(a))
     return a
   })
 
@@ -455,7 +484,7 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
       z: 5,
     })
     lbl.graphics.visible = false
-    scene.add(lbl)
+    scene.add(track(lbl))
     return lbl
   })
 
@@ -499,7 +528,7 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
     z: 5,
   })
   piggyTimerLabel.graphics.visible = false
-  scene.add(piggyTimerLabel)
+  scene.add(track(piggyTimerLabel))
 
   piggy.on('preupdate', () => {
     if (!piggy.graphics.visible) return
@@ -524,6 +553,17 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
   // One factory for both, because a worker is now an agent exactly like the
   // player — the difference is who writes its velocity.
   function makeCharacter(spriteKey, color) {
+    // A soft ellipse under the feet: without it characters look pasted onto the
+    // floor rather than standing on it.
+    const shadow = new ex.Actor({
+      pos:    ex.vec(-9999, -9999),
+      width:  sizes.character * 0.52,
+      height: sizes.character * 0.20,
+      z: 5,
+      color:  ex.Color.fromRGB(0, 0, 0, 0.28),
+    })
+    scene.add(track(shadow))
+
     const actor = new ex.Actor({
       pos:    ex.vec(spawns.player.x, spawns.player.y),
       width:  sizes.character,
@@ -531,14 +571,28 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
       z: 6,
       color:  ex.Color.fromHex(color),
     })
-    scene.add(actor)
+    scene.add(track(actor))
     const rig = createCharacterSprite(actor, getSprite(spriteKey))
     // Y-sort: whoever stands lower on screen draws in front.
-    actor.on('preupdate', () => { actor.z = actor.pos.y * 0.01 })
-    return { actor, rig }
+    actor.on('preupdate', () => {
+      actor.z = actor.pos.y * 0.01
+      shadow.pos.x = actor.pos.x
+      shadow.pos.y = actor.pos.y + actor.height * 0.36
+      shadow.z = actor.z - 0.001
+    })
+    return { actor, rig, shadow }
   }
 
   const { actor: player, rig: playerRig } = makeCharacter('player_walk', '#1f9e92')
+
+  // ── Objective arrow (C7.3) ─────────────────────────────
+  // Bobs above the player's head, pointing at the next useful zone.
+  const arrow = new ex.Actor({
+    pos: ex.vec(-9999, -9999), width: 26, height: 26,
+    z: 30, color: ex.Color.fromHex('#ffe074'),
+  })
+  arrow.graphics.visible = false
+  scene.add(track(arrow))
 
   // Worker actors are created on demand — hiring happens mid-game.
   const workerViews = new Map()
@@ -554,7 +608,7 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
           z: 20, color: ex.Color.fromHex('#c49a3c'),
         })
         a.graphics.visible = false
-        scene.add(a)
+        scene.add(track(a))
         return a
       })
       workerViews.set(agentId, view)
@@ -575,7 +629,7 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
       color:  ex.Color.fromHex('#c49a3c'),
     })
     a.graphics.visible = false
-    scene.add(a)
+    scene.add(track(a))
     return a
   })
 
@@ -587,14 +641,17 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
     z: 21, color: ex.Color.fromHex('#20203a'),
   })
   dwellBg.graphics.visible = false
-  scene.add(dwellBg)
+  scene.add(track(dwellBg))
 
   const dwellFill = new ex.Actor({ pos: ex.vec(-9999, -9999), z: 22 })
   dwellFill.graphics.visible = false
-  scene.add(dwellFill)
+  scene.add(track(dwellFill))
 
   // Camera follows the player, clamped so it never shows past the world edge.
   scene.camera.pos = ex.vec(spawns.player.x, spawns.player.y)
+  // Strategies accumulate, so a move would otherwise stack a second follow and
+  // keep the old room's bounds.
+  scene.camera.clearAllStrategies()
   scene.camera.strategy.elasticToActor(player, CAMERA_ELASTICITY, CAMERA_FRICTION)
   scene.camera.strategy.limitCameraBounds(
     new ex.BoundingBox(0, 0, layout.world.w, layout.world.h),
@@ -612,6 +669,7 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
     stations,
     player, playerRig, workerView, workerViews,
     carrySlotActors,
+    arrow,
     dwell: { bg: dwellBg, fill: dwellFill, width: DWELL_W },
     slotSpawns,
     boxSpawn: BOX_SPAWN,
@@ -619,8 +677,8 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
   }
 }
 
-// Apply location-specific visual theme (background colour, floor colour).
-// Safe to call any time after initScene.
+// Background colour only — the floor and everything on it come from the layout
+// now (C7). Kept for the boot path and for cheap re-tints.
 export function applyLocationTheme(sceneConfig) {
   if (!sceneConfig) return
   if (sceneConfig.bgColor && _engine)

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildGrid, isWalkable, worldToCell, cellToWorld, nearestWalkable, lineOfSight } from './navGrid.js'
 import { findPath, smoothPath } from './astar.js'
-import { rect } from '../defs/layouts/apartment.js'
+import { rect } from '../defs/layouts/index.js'
 
 // A plain 480×480 room, 20×20 cells at the default size, no inflation unless a
 // test asks for it — inflation is verified separately.

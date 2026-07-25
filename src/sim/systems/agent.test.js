@@ -5,7 +5,7 @@ import { dispatch } from '../commands.js'
 import { SYSTEMS } from './index.js'
 import { deriveJobs, reconcile } from './job.js'
 import { EV } from '../events.js'
-import { apartment } from '../../defs/layouts/apartment.js'
+import { apartment } from '../../defs/layouts/index.js'
 import { Phase, createState, startAssembly } from '../../state/gameState.js'
 import { TICK_MS, MAX_CATCHUP_STEPS } from '../../state/config.js'
 

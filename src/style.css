@@ -1180,3 +1180,8 @@ body {
 }
 
 .solder-bar__warn[hidden] { display: none; }
+
+.offline-report__away {
+  color: #9fb0d8;
+  margin-bottom: 10px;
+}

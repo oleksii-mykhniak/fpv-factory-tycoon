@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   createState, Phase, DeliveryStatus, KIT_TYPES,
   orderKit, pickupDelivery, buyUpgrade,
-  syncStations, focusStation, startScrap,
+  syncStations, focusStation, startScrap, nextHireCost,
   startAssembly as _startAssembly,
   recordSolderPoint as _recordSolderPoint,
   finishAssembly as _finishAssembly,
@@ -21,6 +21,7 @@ import {
   LOGISTICS_UPGRADE_COSTS, LOGISTICS_DELIVERY_MULT,
 } from './config.js'
 import { trackMaxLevel, nextCost, levelData, UPGRADE_TRACKS } from './upgrades.js'
+import { roleLevelData } from '../defs/roles.js'
 import { LOCATIONS, LOCATION_ORDER, capFor, canMoveToLocation, currentLocation } from './locations.js'
 
 const SOLDERING_MAX_LEVEL = trackMaxLevel('soldering')
@@ -1090,5 +1091,46 @@ describe('C3: кілька станцій', () => {
     expect(focusStation(s).id).toBe('station-0')
     s = loadStation(s, 'station-1')
     expect(focusStation(s).id).toBe('station-1')
+  })
+})
+
+// ── C7 — баланс: інваріанти, які легко зламати числом у конфізі ──
+
+describe('C7: прогресія апгрейдів монотонна', () => {
+  it('кожен наступний рівень пайки не гірший за попередній', () => {
+    for (let i = 1; i < 4; i++) {
+      const prev = levelData('soldering', i - 1)
+      const cur  = levelData('soldering', i)
+      expect(cur.greenHalf, `рівень ${i}: зона`).toBeGreaterThanOrEqual(prev.greenHalf)
+      expect(cur.overheatChance, `рівень ${i}: перегрів`).toBeLessThanOrEqual(prev.overheatChance)
+    }
+  })
+
+  it('автопаяльник не повільніший і не гірший за напівавтомат', () => {
+    const semi = levelData('soldering', 2)
+    const auto = levelData('soldering', 3)
+    expect(auto.pointDelayMs).toBeLessThanOrEqual(semi.pointDelayMs)
+    expect(auto.qualityMin).toBeGreaterThanOrEqual(semi.qualityMin)
+  })
+
+  it('ідеальна ручна пайка лишається вигіднішою за будь-яку автоматику', () => {
+    const kit  = KIT_TYPES.mini_drone
+    const hand = calcPrice(kit.basePrice, 1, 1)
+    for (let i = 2; i < 4; i++) {
+      const d = levelData('soldering', i)
+      expect(calcPrice(kit.basePrice, d.qualityMax, 1)).toBeLessThan(hand)
+    }
+  })
+
+  it('кожен рівень техніка кращий за попередній', () => {
+    for (let i = 1; i < 3; i++) {
+      expect(roleLevelData('tech', i).pointMs).toBeLessThan(roleLevelData('tech', i - 1).pointMs)
+      expect(roleLevelData('tech', i).quality).toBeGreaterThan(roleLevelData('tech', i - 1).quality)
+    }
+  })
+
+  it('найм дешевшає відносно доходу лише через зростання цеху, не через баг', () => {
+    // Друга людина тієї ж ролі коштує дорожче, але перша ролі — за своєю кривою.
+    expect(nextHireCost(createState(), 'tech')).toBeGreaterThan(nextHireCost(createState(), 'courier'))
   })
 })

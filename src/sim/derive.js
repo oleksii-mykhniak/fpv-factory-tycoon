@@ -39,3 +39,31 @@ export function playerStation(world) {
   }
   return null
 }
+
+// Where the player should go next, as a zone — the game never explains itself
+// otherwise, and "walk out to the street" is not guessable from a HUD line.
+//
+// Reuses the zones' own `enabled` predicate, so the arrow can only ever point
+// at something that will actually do something when you arrive.
+export function nextObjective(world, interactions) {
+  const player = (world.agents ?? []).find(a => a.kind === 'player')
+  if (!player) return null
+
+  // Order matters: finish what is in your hands before starting something new.
+  const PRIORITY = ['mailbox', 'bench', 'delivery_slot', 'trashbin', 'piggy']
+
+  let best = null
+  let bestRank = Infinity
+  for (const zone of world.zones ?? []) {
+    const rank = PRIORITY.indexOf(zone.kind)
+    if (rank < 0 || rank > bestRank) continue
+    const def = interactions[zone.kind]
+    if (!def?.enabled(world, zone, player)) continue
+
+    if (rank < bestRank) { bestRank = rank; best = zone; continue }
+    // Same kind: take the nearer one.
+    if (Math.hypot(zone.cx - player.x, zone.cy - player.y) <
+        Math.hypot(best.cx - player.x, best.cy - player.y)) best = zone
+  }
+  return best
+}

@@ -23,7 +23,8 @@ import {
   COLD_SOLDER_THRESHOLD, COLD_SOLDER_QUALITY_PENALTY, SALVAGE_RATE,
 } from '../state/config.js'
 import { EV, emit } from './events.js'
-import { rebuildStationGeometry, stationCountFor, syncWorkerAgents } from './world.js'
+import { rebuildStationGeometry, stationCountFor, syncWorkerAgents, applyLayout } from './world.js'
+import { layoutFor } from '../defs/layouts/index.js'
 
 // Commands that come from a UI button rather than a zone have no station in
 // hand; they act on the one the player is most likely looking at.
@@ -135,6 +136,10 @@ const HANDLERS = {
 
   moveToLocation(world, { locationId }, events) {
     world.game = moveToLocationState(world.game, locationId)
+    // The new location has more bench slots; build the ones already paid for.
+    applyLayout(world, layoutFor(locationId))
+    world.game = syncStations(world.game, stationCountFor(world.game, world.layout))
+    rebuildStationGeometry(world)
     emit(events, EV.LOCATION_CHANGED, { locationId })
   },
 

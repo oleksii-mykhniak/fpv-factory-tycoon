@@ -25,7 +25,7 @@ export function loadGame() {
     if (!raw) return null
     const payload = JSON.parse(raw)
     if (payload.version !== SAVE_VERSION) return null
-    return { state: payload.state, salesLog: payload.salesLog ?? [] }
+    return { state: payload.state, salesLog: payload.salesLog ?? [], savedAt: payload.savedAt ?? null }
   } catch {
     return null
   }

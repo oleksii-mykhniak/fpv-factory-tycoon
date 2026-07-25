@@ -10,7 +10,7 @@ import { currentLocation } from './state/locations.js'
 import { setMuted } from './audio/sfx.js'
 import { showRewarded, PLACEMENTS } from './monetization/ads.js'
 
-import { apartment } from './defs/layouts/apartment.js'
+import { layoutFor } from './defs/layouts/index.js'
 import { createJoystick } from './input/joystick.js'
 import { createKeyboard } from './input/keyboard.js'
 import { mergeInput } from './input/inputVector.js'
@@ -18,6 +18,7 @@ import { mergeInput } from './input/inputVector.js'
 import { createWorld, serializeWorld } from './sim/world.js'
 import { advance } from './sim/loop.js'
 import { dispatch, piggyAvailable } from './sim/commands.js'
+import { settleOffline } from './sim/offline.js'
 import { playerStation } from './sim/derive.js'
 import { SYSTEMS } from './sim/systems/index.js'
 
@@ -31,7 +32,7 @@ import { createSolderBar } from './ui/solderBar.js'
 import { createPiggyModal } from './ui/piggyModal.js'
 import { createTrashModal } from './ui/trashModal.js'
 
-import { initScene, applyLocationTheme } from './scene/scene.js'
+import { initScene, rebuildScene, applyLocationTheme } from './scene/scene.js'
 import { syncScene } from './view/sceneSync.js'
 import { createEffects } from './view/effects.js'
 
@@ -101,14 +102,25 @@ function initState() {
     upgrades:   { ...defaults.upgrades, ...saved.state.upgrades },
     locationId: saved.state.locationId ?? defaults.locationId,
   }
-  return { state: migrateState(state), salesLog: saved.salesLog }
+  return { state: migrateState(state), salesLog: saved.salesLog, savedAt: saved.savedAt }
 }
 
 // The world is the single source of truth. Nothing outside sim/ writes to it —
 // UI and scene go through send() below.
 // The layout supplies world size, obstacles and spawn points (C1).
 // C7 will pick it per location; for now the apartment is the only floor plan.
-const world = createWorld(initState(), { now: Date.now(), layout: apartment })
+const _boot = initState()
+
+// What the shop finished while the app was closed (C7). Settled analytically
+// rather than by fast-forwarding the tick loop — see sim/offline.js.
+const _offline = _boot.savedAt
+  ? settleOffline(_boot.state, Date.now() - _boot.savedAt)
+  : null
+if (_offline && _offline.state !== _boot.state) _boot.state = _offline.state
+const world = createWorld(_boot, {
+  now: Date.now(),
+  layout: layoutFor(_boot.state.locationId),
+})
 
 // Dev-only inspection hook: lets the browser smoke test read the sim without
 // the view having to expose it. Stripped from production builds.
@@ -205,7 +217,13 @@ const upgradeModal = createUpgradeModal(uiRoot, {
   onHire:           (role) => send('hireWorker', { role }),
   onMoveToLocation: (id) => {
     send('moveToLocation', { locationId: id })
-    applyLocationTheme(currentLocation(world.game).sceneConfig)
+    // A move is a different room, not a re-tint: tear the scene down and build
+    // the new floor plan (C7).
+    sceneRefs = rebuildScene({ getWorld: () => world, onIntent, layout: world.layout, world })
+    applyLocationTheme(world.layout.theme)
+    upgradeModal.close?.()
+    uiDirty = true
+    present()
   },
 })
 
@@ -330,6 +348,32 @@ function dismissOnboarding() {
 onboardingEl.addEventListener('click', dismissOnboarding, { once: true })
 uiRoot.appendChild(onboardingEl)
 
+// ── While you were away ───────────────────────────────────
+
+if (_offline && (_offline.assembled || _offline.sold)) {
+  const mins = Math.round(_offline.elapsedMs / 60000)
+  const away = mins >= 60 ? `${Math.floor(mins / 60)} год ${mins % 60} хв` : `${mins} хв`
+  const box = document.createElement('div')
+  box.id = 'offline-report'
+  box.className = 'modal-overlay'
+  box.innerHTML = `
+    <div class="modal">
+      <div class="modal__header"><span class="modal__title">Поки вас не було</span></div>
+      <div class="modal__body">
+        <p class="offline-report__away">Минуло ${away}</p>
+        <p>🔧 Зібрано дронів: <b>${_offline.assembled}</b></p>
+        ${_offline.sold ? `<p>📮 Продано: <b>${_offline.sold}</b> — <b>$${_offline.earned.toFixed(2)}</b></p>` : ''}
+        ${!_offline.sold && _offline.assembled
+          ? '<p class="upgrade-effect-hint">Готові дрони чекають на верстаку — найміть продавця, щоб їх відносили</p>'
+          : ''}
+        <button class="btn btn--upgrade" id="offline-ok">Продовжити</button>
+      </div>
+    </div>
+  `
+  uiRoot.appendChild(box)
+  box.querySelector('#offline-ok').addEventListener('click', () => box.remove())
+}
+
 // ── Loading overlay ───────────────────────────────────────
 
 const loadOverlay = document.getElementById('load-overlay')
@@ -402,7 +446,7 @@ function openMinigame(game, agentId) {
 initScene(canvas, {
   getWorld: () => world,
   onIntent,
-  layout: apartment,
+  layout: world.layout,
   world,
   onLoadProgress: (loaded, total) => {
     if (loadBar) loadBar.style.width = `${Math.round((loaded / total) * 100)}%`
@@ -410,7 +454,7 @@ initScene(canvas, {
 }).then(refs => {
   sceneRefs = refs
   if (import.meta.env.DEV || import.meta.env.MODE === 'debug') globalThis.__refs = refs
-  applyLocationTheme(currentLocation(world.game).sceneConfig)
+  applyLocationTheme(world.layout.theme)
   hideOverlay()
 
   // The single drive point: one fixed-step sim advance per rendered frame.

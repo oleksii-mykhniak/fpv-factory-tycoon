@@ -81,7 +81,7 @@ const seedState = (upgrades, extra = {}) => ({
   version: 1,
   savedAt: Date.now(),
   state: {
-    money: 1000, lastPiggyAt: null, locationId: 'workshop', onboarded: true,
+    money: 1000, lastPiggyAt: null, locationId: 'apartment', onboarded: true,
     scrapAvailable: false, deliveries: [],
     stations: [{ id: 'station-0', defId: 'workbench', phase: 'IDLE', kitId: null,
                  solderPoints: [], quality: null, coldPenalty: 0 }],
@@ -142,7 +142,7 @@ const bTrash = await log('trash zone with salvage ordered')
 
 // ── D. Two stations at once (C3) ──────────────────────────
 console.log('\n### D. Two benches in parallel')
-await boot(seedState({ solderingLevel: 3, benchLevel: 1, storageLevel: 1 }))
+await boot(seedState({ solderingLevel: 3, benchLevel: 1, storageLevel: 1 }, { locationId: 'garage' }))
 const dCount = await page.evaluate(() => globalThis.__world.game.stations.length)
 const dZones = await page.evaluate(() =>
   globalThis.__world.zones.filter(z => z.kind === 'bench').map(z => z.id))
@@ -170,7 +170,7 @@ const dDone = await log('both benches worked')
 
 // ── E. Navigation (C4) ────────────────────────────────────
 console.log('\n### E. A* navigation')
-await boot(seedState({ benchLevel: 1 }))
+await boot(seedState({ benchLevel: 1 }, { locationId: 'garage' }))
 const eGrid = await page.evaluate(() => {
   const g = globalThis.__world.navGrid
   const blocked = g.data.reduce((n, v) => n + v, 0)
@@ -183,13 +183,13 @@ console.log(`  grid ${eGrid.cols}×${eGrid.rows} @${eGrid.cell}px, ${eGrid.block
 await page.evaluate(() => {
   const w = globalThis.__world
   const a = w.agents.find(x => x.kind === 'player')
-  a.x = 500; a.y = 150            // above the top bench
-  a.pathTarget = { x: 170, y: 1300 }
+  a.x = 660; a.y = 150            // above the benches
+  a.pathTarget = { x: 230, y: 1450 }   // garage mailbox
 })
 const eStart = Date.now()
 await page.waitForFunction(() => {
   const a = globalThis.__world.agents.find(x => x.kind === 'player')
-  return Math.hypot(a.x - 170, a.y - 1300) < 45
+  return Math.hypot(a.x - 230, a.y - 1450) < 45
 }, null, { timeout: 40000 }).catch(() => {})
 const eArrived = await page.evaluate(() => {
   const w = globalThis.__world
@@ -276,6 +276,32 @@ await goAway()
 await page.waitForTimeout(14000)
 const gUnattended = await log('level-3 bench, player walked off')
 
+// ── H. Moving house rebuilds the shop (C7) ────────────────
+console.log('\n### H. A move is a different room')
+await boot(seedState({ solderingLevel: 2 }, { money: 5000 }))
+const hBefore = await page.evaluate(() => ({
+  loc: globalThis.__world.game.locationId,
+  world: globalThis.__world.bounds.w,
+  slots: globalThis.__world.layout.stationSlots.length,
+  grid: globalThis.__world.navGrid.cols,
+}))
+await page.click('#ab-upgrade'); await page.waitForTimeout(500)
+await page.click('#move-btn').catch(() => {})
+await page.waitForTimeout(1500)
+const hAfter = await page.evaluate(() => {
+  const w = globalThis.__world
+  const p = w.agents.find(a => a.kind === 'player')
+  return {
+    loc: w.game.locationId,
+    world: w.bounds.w,
+    slots: w.layout.stationSlots.length,
+    grid: w.navGrid.cols,
+    playerInside: p.x < w.bounds.w && p.y < w.bounds.h,
+  }
+})
+console.log(`  ${hBefore.loc} (${hBefore.world}w, ${hBefore.slots} slots, grid ${hBefore.grid})` +
+            ` → ${hAfter.loc} (${hAfter.world}w, ${hAfter.slots} slots, grid ${hAfter.grid})`)
+
 // ── C. Movement, collisions, camera (C1 regression) ───────
 console.log('\n### C. Movement (WASD)')
 await boot(seedState({}))
@@ -293,10 +319,11 @@ await page.evaluate(() => {
 })
 await hold('KeyW', 4000); const cBench = await player()
 
-// Camera follow, measured well away from the world's clamped edges.
+// Camera follow, measured away from the clamped edges AND clear of the bench —
+// x=500 is inside it, which pinned the character and read as a camera bug.
 await page.evaluate(() => {
   const a = globalThis.__world.agents.find(x => x.kind === 'player')
-  a.x = 500; a.y = 300
+  a.x = 800; a.y = 300
 })
 await page.waitForTimeout(700)
 const camBefore = await page.evaluate(() => globalThis.__refs.scene.camera.pos.y)
@@ -335,16 +362,19 @@ const checks = [
   ['C: moves right on D',                 cRight.x > c0.x + 100],
   ['C: moves back left on A',             cBack.x < cRight.x - 100],
   ['C: stopped by the left wall',         cWall.x >= 24 && cWall.x <= 60],
-  ['C: stopped by a workbench',           cBench.y > 260 && cBench.y < 300],
+  ['C: stopped by a workbench',           cBench.y > 340 && cBench.y < 380],
   ['C: camera follows the player',        camAfter > camBefore + 150],
   ['C: walked out and grabbed the box',   cWalked.y > 1050 && cWalked.carrying.includes('kit_box')],
   ['D: two stations were built',          dCount === 2],
   ['D: each station got its own zone',    dZones.length === 2],
   ['D: box picked up from a street slot',  dCarry.carrying.includes('kit_box')],
-  ['D: both stations busy at once',       dBoth.stations === 'ASSEMBLY/ASSEMBLY'],
+  // After the C7 balance pass a level-3 bench finishes in ~3 s, so the first
+  // station is often already done by the time the second box arrives. What
+  // matters is that each was loaded and worked independently.
+  ['D: both stations were loaded',        dBoth.stations.split('/').every(p => p !== 'IDLE')],
   ['D: both finished independently',      dDone.stations === 'READY/READY'],
   ['E: nav grid rasterised the world',    eGrid.blocked > 0 && eGrid.cols > 30],
-  ['E: pathed across the flat and out',   Math.hypot(eArrived.x - 170, eArrived.y - 1300) < 60],
+  ['E: pathed across the flat and out',   Math.hypot(eArrived.x - 230, eArrived.y - 1450) < 60],
   ['E: never ended inside geometry',      eArrived.stuck === false],
   ['E: routes were cached',               eArrived.cached > 0],
   ['F: hired three workers via the UI',   fHired.roster.length === 3 && fHired.agents === 3],
@@ -355,6 +385,11 @@ const checks = [
   ['G: strip closes on walking away',      gStripGone === false],
   ['G: leaving costs nothing, bench waits', gPhaseAway === 'ASSEMBLY'],
   ['G: an upgraded bench finishes alone',  gUnattended.phase === 'READY'],
+  ['H: the move actually happened',       hAfter.loc === 'garage'],
+  ['H: the room is a different size',     hAfter.world > hBefore.world],
+  ['H: more bench slots than before',     hAfter.slots > hBefore.slots],
+  ['H: nav grid rebuilt for the new room', hAfter.grid > hBefore.grid],
+  ['H: the player is inside the new room', hAfter.playerInside === true],
   ['no console errors',                   errors.length === 0],
 ]
 console.log('\n=== checks ===')
