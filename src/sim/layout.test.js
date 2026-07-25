@@ -47,7 +47,7 @@ describe('C7 — locations are floor plans, not palettes', () => {
   })
 
   it('a move puts everyone in the new room, not at old coordinates', () => {
-    const w = boot('apartment')
+    const w = boot('garage')   // hiring starts at the second location
     dispatch(w, 'hireWorker', { role: 'courier' })
     applyLayout(w, LAYOUTS.workshop)
 

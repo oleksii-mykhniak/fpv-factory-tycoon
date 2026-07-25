@@ -8,6 +8,7 @@ import {
   Phase, DeliveryStatus, KIT_TYPES, createState, startAssembly,
 } from '../state/gameState.js'
 import { TICK_MS, MAX_CATCHUP_STEPS } from '../state/config.js'
+import { apartment } from '../defs/layouts/index.js'
 
 // Deterministic rng: cycles through a fixed sequence so quality outcomes and
 // overheat rolls are reproducible.
@@ -126,14 +127,40 @@ describe('sim/deliverySystem', () => {
 describe('sim/stationSystem', () => {
   const autoUpgrades = { ...createState().upgrades, solderingLevel: 3 }
 
-  function benchWithKit(kitId = 'mini_drone', upgrades = autoUpgrades) {
-    const w = world({ upgrades })
+  // A bench only works while somebody is at it, so these need a real room with
+  // zones and a character standing in front of the station.
+  function benchWithKit(kitId = 'mini_drone', upgrades = autoUpgrades, { attended = true } = {}) {
+    const base = createState()
+    const state = {
+      ...base, money: 5000, upgrades,
+      stations: base.stations,
+    }
+    const w = createWorld({ state, salesLog: [] }, { now: T0, rng: seq([0.5]), layout: apartment })
     dispatch(w, 'order', { kitId })
     run(w, KIT_TYPES[kitId].deliveryMs + 500)
     dispatch(w, 'pickup', { deliveryId: w.game.deliveries[0].id })
     putOnBench(w)
+
+    const zone = w.zones.find(z => z.kind === 'bench')
+    const p = w.agents.find(a => a.kind === 'player')
+    if (attended) { p.x = zone.cx; p.y = zone.cy } else { p.x = 900; p.y = 950 }
     return w
   }
+
+  it('an empty bench builds nothing, however good the iron', () => {
+    const w = benchWithKit('mini_drone', autoUpgrades, { attended: false })
+    expect(types(run(w, 30_000))).not.toContain(EV.STAGE_STARTED)
+    expect(bench(w).phase).toBe(Phase.ASSEMBLY)
+  })
+
+  it('it picks up again when someone comes back', () => {
+    const w = benchWithKit('mini_drone', autoUpgrades, { attended: false })
+    run(w, 10_000)
+    const zone = w.zones.find(z => z.kind === 'bench')
+    const p = w.agents.find(a => a.kind === 'player')
+    p.x = zone.cx; p.y = zone.cy
+    expect(types(run(w, 30_000))).toContain(EV.ASSEMBLY_DONE)
+  })
 
   it('AUTO arms itself and solders every point', () => {
     const w = benchWithKit()
@@ -154,13 +181,13 @@ describe('sim/stationSystem', () => {
     expect(first.done).toBe(0)
   })
 
-  it('C6: a level-2 bench runs on its own — no arming, no tap', () => {
+  it('a level-2 iron does the work for the player standing at the bench', () => {
     const semi = { ...createState().upgrades, solderingLevel: 2 }
     const w = benchWithKit('mini_drone', semi)
     expect(types(run(w, 10_000))).toContain(EV.ASSEMBLY_DONE)
   })
 
-  it('C6: a hand iron cannot run unattended — someone has to be there', () => {
+  it('a hand iron never solders by itself, even with the player standing there', () => {
     const manual = { ...createState().upgrades, solderingLevel: 0 }
     const w = benchWithKit('mini_drone', manual)
     expect(types(run(w, 30_000))).not.toContain(EV.STAGE_STARTED)
@@ -242,17 +269,24 @@ describe('sim/commands', () => {
 
 describe('sim — full cycle, headless', () => {
   it('order → deliver → assemble → sell turns a profit with a full-auto shop', () => {
-    const w = world({
-      money: 500,
-      upgrades: { ...createState().upgrades, solderingLevel: 3 },
-    })
+    const base = createState()
+    const w = createWorld({
+      state: { ...base, money: 500, upgrades: { ...base.upgrades, solderingLevel: 3 } },
+      salesLog: [],
+    }, { now: T0, rng: seq([0.5]), layout: apartment })
     const startMoney = w.game.money
 
     dispatch(w, 'order', { kitId: 'mini_drone' })
     run(w, KIT_TYPES.mini_drone.deliveryMs + 500)   // courier arrives
     dispatch(w, 'pickup', { deliveryId: w.game.deliveries[0].id })
     putOnBench(w)                                     // carried to the bench
-    const events = run(w, 60_000)                    // bench solders every point
+
+    // Someone has to be at the bench for it to run (see stationSystem).
+    const zone = w.zones.find(z => z.kind === 'bench')
+    const p = w.agents.find(a => a.kind === 'player')
+    p.x = zone.cx; p.y = zone.cy
+
+    const events = run(w, 60_000)
 
     expect(types(events)).toContain(EV.ASSEMBLY_DONE)
     expect(bench(w).phase).toBe(Phase.READY)

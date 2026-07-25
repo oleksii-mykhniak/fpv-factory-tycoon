@@ -7,6 +7,8 @@
 // mini-game never appeared).
 
 import { KIT_TYPES, busyStations, Phase, stationsOf } from '../state/gameState.js'
+import { GUIDANCE_ORDERS, GUIDANCE_SCRAP_RUNS } from '../state/config.js'
+import { levelData } from '../state/upgrades.js'
 
 // Cheapest kit the player could actually buy. Free kits (scrap) are not
 // purchases and must not count.
@@ -26,6 +28,12 @@ export function piggyShouldShow(game) {
 // Shared by the view (to show the soldering strip) and by anything else that
 // cares about presence, so what you see and what the sim believes cannot
 // disagree — the same mistake the piggy bank made for a month.
+// Does this iron do the soldering on its own once someone is at the bench?
+// Levels 2–3 do; 0–1 need the mini-game. Used to decide whether to offer it.
+export function ironIsHandsOff(game) {
+  return levelData('soldering', game.upgrades.solderingLevel).qualityMin !== undefined
+}
+
 export function playerStation(world) {
   const player = (world.agents ?? []).find(a => a.kind === 'player')
   if (!player) return null
@@ -45,9 +53,25 @@ export function playerStation(world) {
 //
 // Reuses the zones' own `enabled` predicate, so the arrow can only ever point
 // at something that will actually do something when you arrive.
+// Training wheels come off once the loop is familiar — but per topic, not all
+// at once. A player can get through five clean orders without ever burning a
+// kit, and would then have no idea where the salvage bin is; scrap runs get
+// their own short allowance.
+export function guidanceActive(game) {
+  return (game.ordersPlaced ?? 0) <= GUIDANCE_ORDERS
+}
+
+export function scrapGuidanceActive(game) {
+  return (game.scrapRuns ?? 0) <= GUIDANCE_SCRAP_RUNS
+}
+
 export function nextObjective(world, interactions) {
   const player = (world.agents ?? []).find(a => a.kind === 'player')
   if (!player) return null
+
+  const general = guidanceActive(world.game)
+  const scrap   = scrapGuidanceActive(world.game)
+  if (!general && !scrap) return null
 
   // Order matters: finish what is in your hands before starting something new.
   const PRIORITY = ['mailbox', 'bench', 'delivery_slot', 'trashbin', 'piggy']
@@ -55,6 +79,8 @@ export function nextObjective(world, interactions) {
   let best = null
   let bestRank = Infinity
   for (const zone of world.zones ?? []) {
+    // The bin keeps its arrow after the general hints have stopped.
+    if (zone.kind === 'trashbin' ? !scrap : !general) continue
     const rank = PRIORITY.indexOf(zone.kind)
     if (rank < 0 || rank > bestRank) continue
     const def = interactions[zone.kind]

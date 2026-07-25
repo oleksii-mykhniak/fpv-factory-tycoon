@@ -1130,9 +1130,11 @@ body {
 /* Not a modal: it sits above the action bar and never blocks movement. */
 
 #solder-bar {
+  /* Near the top: at the bottom it sat under the thumb that taps it, and the
+     green zone was hidden by the player's own hand. */
   position: fixed;
   left: 50%;
-  bottom: calc(var(--ab-h) + 10px);
+  top: calc(env(safe-area-inset-top, 0px) + 78px);
   transform: translateX(-50%);
   width: min(92vw, 460px);
   padding: 10px 14px 12px;

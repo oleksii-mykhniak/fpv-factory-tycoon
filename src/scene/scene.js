@@ -588,9 +588,10 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
   // ── Objective arrow (C7.3) ─────────────────────────────
   // Bobs above the player's head, pointing at the next useful zone.
   const arrow = new ex.Actor({
-    pos: ex.vec(-9999, -9999), width: 26, height: 26,
-    z: 30, color: ex.Color.fromHex('#ffe074'),
+    pos: ex.vec(-9999, -9999), width: 34, height: 42,
+    z: 30, color: ex.Color.fromHex('#ffc83c'),
   })
+  applySprite(arrow, 'arrow')
   arrow.graphics.visible = false
   scene.add(track(arrow))
 

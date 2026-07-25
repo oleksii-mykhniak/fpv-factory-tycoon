@@ -522,6 +522,31 @@ function drawWalkCycle(pixels, w, h, pal) {
   }
 }
 
+// Objective arrow — points down by default; the scene rotates it. Drawn as a
+// chevron rather than a solid block, which read as an item held over the head.
+function drawArrow(pixels, w, h) {
+  const cx = w / 2
+  for (let y = 0; y < h; y++) {
+    // Triangular head over the top 60%, tail below it.
+    const t = y / h
+    let halfW
+    if (t < 0.62) halfW = (t / 0.62) * (w / 2 - 2)
+    else          halfW = w * 0.16
+    for (let x = Math.round(cx - halfW); x <= Math.round(cx + halfW); x++) {
+      if (x < 0 || x >= w) continue
+      const edge = Math.abs(x - cx) > halfW - 2.2
+      if (edge) setPixel(pixels, w, x, y, 0xff, 0xf2, 0xb0)
+      else      setPixel(pixels, w, x, y, 0xff, 0xc8, 0x3c)
+    }
+  }
+  // Dark outline along the head's slopes so it reads on a light floor too.
+  for (let y = 0; y < h * 0.62; y++) {
+    const halfW = (y / (h * 0.62)) * (w / 2 - 2)
+    setPixel(pixels, w, Math.round(cx - halfW), y, 0x6a, 0x4a, 0x00)
+    setPixel(pixels, w, Math.round(cx + halfW), y, 0x6a, 0x4a, 0x00)
+  }
+}
+
 const drawWorkerWalk = (pixels, w, h) => drawWalkCycle(pixels, w, h, WORKER_PALETTE)
 const drawPlayerWalk = (pixels, w, h) => drawWalkCycle(pixels, w, h, PLAYER_PALETTE)
 
@@ -548,6 +573,8 @@ const sprites = [
   { name: 'mailbox',          w:  64, h:  52, draw: drawMailbox         },
   // Piggy bank — 64×64
   { name: 'piggy',            w:  64, h:  64, draw: drawPiggy           },
+  // Objective arrow — 32×40, points down; the scene rotates it toward the goal
+  { name: 'arrow',            w:  32, h:  40, draw: drawArrow           },
 ]
 
 for (const { name, w, h, draw } of sprites) {

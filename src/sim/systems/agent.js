@@ -59,6 +59,7 @@ function release(world, agent, reason, events) {
   if (job && job.claimedBy === agent.id) job.claimedBy = null
   if (agent.task) emit(events, EV.JOB_RELEASED, { agentId: agent.id, jobId: agent.task.jobId, reason })
   agent.task = null
+  agent.holdZone = null
   stopPath(agent)
 }
 
@@ -94,6 +95,11 @@ function runStep(world, agent, dt, events) {
       if (agent.pathFailed) { release(world, agent, 'unreachable', events); return }
       if (agent.arrived) {
         stopPath(agent)
+        // Remember where the work is. A character that has arrived must hold
+        // its ground: soft separation from a passing colleague was quietly
+        // shoving technicians out of the bench zone, and since C7 a bench with
+        // nobody at it stops producing — the drone simply never finished.
+        agent.holdZone = zone.id
         agent.task.stepIndex++
         agent.task.waited = 0
       }
@@ -102,6 +108,21 @@ function runStep(world, agent, dt, events) {
 
     case 'waitFor': {
       agent.task.waited = (agent.task.waited ?? 0) + dt
+
+      // Drifted off the spot anyway (a crowd, a re-plan)? Walk back rather than
+      // stand outside the zone waiting for something that cannot happen.
+      const hold = zoneById(world, agent.holdZone)
+      if (hold && !agent.pathTarget &&
+          (Math.abs(agent.x - hold.cx) > hold.w / 2 || Math.abs(agent.y - hold.cy) > hold.h / 2)) {
+        agent.pathTarget = { x: hold.cx, y: hold.cy }
+        agent.arrived = false
+        return
+      }
+      if (agent.pathTarget) {
+        if (agent.arrived || agent.pathFailed) stopPath(agent)
+        return
+      }
+
       const cond = CONDITIONS[step.cond]
       if (cond?.(world, agent, job)) {
         agent.task.stepIndex++

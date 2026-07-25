@@ -220,6 +220,61 @@ describe('sim/agentSystem — hired workers', () => {
     const w = world({ money: 5 })
     expect(() => dispatch(w, 'hireWorker', { role: 'courier' })).toThrow('недостатньо грошей')
   })
+
+  it('hiring is refused in the apartment — that shop is a one-person job', () => {
+    const base = createState()
+    const w = createWorld(
+      { state: { ...base, money: 9999, locationId: 'apartment' }, salesLog: [] },
+      { now: T0, rng: () => 0.5, layout: apartment },
+    )
+    expect(() => dispatch(w, 'hireWorker', { role: 'courier' })).toThrow('немає де тримати')
+  })
 })
 
 const KIT_COST = 72
+
+// ── Регресії з валідації на пристрої (2026-07-25) ──
+
+describe('фікси після тесту на телефоні', () => {
+  it('технік тримає позицію біля верстака, коли колега проходить повз', () => {
+    // Раніше м'яка сепарація поволі виштовхувала техніка із зони; після того,
+    // як верстак почав вимагати присутності, дрон просто ніколи не добудовувався.
+    // Великий кіт: інакше технік устигає закінчити й піти відпочивати ще до
+    // того, як тест на нього подивиться.
+    const w = world({ hire: ['courier', 'tech'] })
+    dispatch(w, 'order', { kitId: 'cinematic_drone' })
+    run(w, 25_000)
+
+    const tech = workers(w).find(a => a.role === 'tech')
+    const zone = w.zones.find(z => z.kind === 'bench')
+    expect(station(w).phase).toBe(Phase.ASSEMBLY)   // ще працює
+    expect(Math.abs(tech.x - zone.cx)).toBeLessThanOrEqual(zone.w / 2)
+    expect(Math.abs(tech.y - zone.cy)).toBeLessThanOrEqual(zone.h / 2)
+  })
+
+  it('робітник, якого зсунуло із робочого місця, повертається на нього', () => {
+    const w = world({ hire: ['courier', 'tech'] })
+    dispatch(w, 'order', { kitId: 'cinematic_drone' })
+    run(w, 22_000)
+
+    const tech = workers(w).find(a => a.role === 'tech')
+    expect(tech.holdZone).toBeTruthy()
+    tech.x = 200; tech.y = 700          // штовхаємо його геть
+    run(w, 15_000)
+
+    const zone = w.zones.find(z => z.id === tech.holdZone)
+    expect(Math.hypot(tech.x - zone.cx, tech.y - zone.cy)).toBeLessThan(zone.w)
+  })
+
+  it('порожній верстак не працює, навіть з найкращим паяльником', () => {
+    const w = world({ upgrades: { solderingLevel: 3 } })
+    dispatch(w, 'order', { kitId: 'mini_drone' })
+    run(w, 8000)
+    dispatch(w, 'pickup', { deliveryId: w.game.deliveries[0].id })
+    w.game = startAssembly(w.game, 'station-0')
+
+    run(w, 40_000)
+    expect(station(w).solderPoints).toHaveLength(0)
+    expect(station(w).phase).toBe(Phase.ASSEMBLY)
+  })
+})

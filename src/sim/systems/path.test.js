@@ -31,6 +31,10 @@ function run(w, ms) {
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y)
 
+// Landmarks come from the floor plan, never from literals — the apartment has
+// been resized once already and every hardcoded coordinate went stale with it.
+const MAILBOX = { x: apartment.props.mailbox.cx, y: apartment.props.mailbox.cy }
+
 // Does the agent's body overlap any solid geometry right now?
 function insideObstacle(w, agent) {
   return (w.obstacles ?? []).some(box =>
@@ -49,7 +53,7 @@ describe('sim/pathSystem — routes in the real apartment', () => {
   it('walks from the spawn to the mailbox, out through the door', () => {
     const w = world()
     const p = player(w)
-    const goal = { x: 170, y: 1300 }
+    const goal = MAILBOX
 
     p.pathTarget = goal
     run(w, 30_000)
@@ -75,8 +79,9 @@ describe('sim/pathSystem — routes in the real apartment', () => {
   it('goes around a station rather than through it', () => {
     const w = world({ benchLevel: 1 })
     const p = player(w)
-    p.x = 500; p.y = 950        // below the benches
-    p.pathTarget = { x: 500, y: 120 }   // above them
+    const bench = apartment.stationSlots[0]
+    p.x = bench.x; p.y = bench.y + 400        // below the bench
+    p.pathTarget = { x: bench.x, y: bench.y - 140 }   // above it
 
     const touched = []
     for (let i = 0; i < 600; i++) {
@@ -84,7 +89,7 @@ describe('sim/pathSystem — routes in the real apartment', () => {
       touched.push(insideObstacle(w, p))
     }
 
-    expect(dist(p, { x: 500, y: 120 })).toBeLessThan(60)
+    expect(dist(p, { x: bench.x, y: bench.y - 140 })).toBeLessThan(60)
     expect(touched.some(Boolean)).toBe(false)
   })
 
@@ -99,7 +104,7 @@ describe('sim/pathSystem — routes in the real apartment', () => {
   it('snaps a target buried in a wall to the nearest spot beside it', () => {
     const w = world()
     const p = player(w)
-    p.pathTarget = { x: 500, y: 2 }   // dead centre of the top wall
+    p.pathTarget = { x: apartment.world.w / 2, y: 2 }   // dead centre of the top wall
     run(w, 30_000)
 
     expect(insideObstacle(w, p)).toBe(false)
@@ -110,8 +115,8 @@ describe('sim/pathSystem — routes in the real apartment', () => {
     const w = world()
     const p = player(w)
     // Wall the agent in completely: every cell blocked.
-    w.navGrid = buildGrid(w.bounds, [rect(500, 750, 1000, 1500)])
-    p.pathTarget = { x: 170, y: 1300 }
+    w.navGrid = buildGrid(w.bounds, [rect(w.bounds.w / 2, w.bounds.h / 2, w.bounds.w, w.bounds.h)])
+    p.pathTarget = MAILBOX
 
     expect(planPath(w, p)).toBe(false)
     expect(p.pathFailed).toBe(true)
@@ -125,20 +130,20 @@ describe('sim/pathSystem — routes in the real apartment', () => {
   it('caches repeated journeys instead of re-searching', () => {
     const w = world()
     const p = player(w)
-    p.pathTarget = { x: 170, y: 1300 }
+    p.pathTarget = MAILBOX
     planPath(w, p)
     const size = w.pathCache.size
     expect(size).toBeGreaterThan(0)
 
     stopPath(p)
-    p.pathTarget = { x: 170, y: 1300 }
+    p.pathTarget = MAILBOX
     planPath(w, p)
     expect(w.pathCache.size).toBe(size)   // served from cache
   })
 
   it('throws the cache away when a station is added', () => {
     const w = world()
-    player(w).pathTarget = { x: 170, y: 1300 }
+    player(w).pathTarget = MAILBOX
     planPath(w, player(w))
     expect(w.pathCache.size).toBeGreaterThan(0)
 
@@ -151,7 +156,8 @@ describe('sim/pathSystem — routes in the real apartment', () => {
 describe('sim/moveSystem — crowds', () => {
   function crowd(w, n) {
     for (let i = 0; i < n; i++) {
-      w.agents.push(createAgent({ id: `w${i}`, kind: 'worker', x: 700 + i * 6, y: 900 }))
+      const home = apartment.spawns.workerIdle
+      w.agents.push(createAgent({ id: `w${i}`, kind: 'worker', x: home.x + i * 6, y: home.y }))
     }
     return w.agents.filter(a => a.kind === 'worker')
   }
@@ -159,7 +165,7 @@ describe('sim/moveSystem — crowds', () => {
   it('five agents heading to the same spot do not end up on top of each other', () => {
     const w = world()
     const workers = crowd(w, 5)
-    const goal = { x: 170, y: 1300 }
+    const goal = MAILBOX
     for (const a of workers) a.pathTarget = goal
 
     run(w, 40_000)
@@ -176,8 +182,9 @@ describe('sim/moveSystem — crowds', () => {
 
   it('agents spawned in the same spot push apart instead of overlapping', () => {
     const w = world()
-    const a = createAgent({ id: 'a', kind: 'worker', x: 700, y: 900 })
-    const b = createAgent({ id: 'b', kind: 'worker', x: 700, y: 900.1 })
+    const home = apartment.spawns.workerIdle
+    const a = createAgent({ id: 'a', kind: 'worker', x: home.x, y: home.y })
+    const b = createAgent({ id: 'b', kind: 'worker', x: home.x, y: home.y + 0.1 })
     w.agents.push(a, b)
 
     run(w, 2000)
@@ -187,10 +194,10 @@ describe('sim/moveSystem — crowds', () => {
   it('a crowd squeezing through the doorway all gets out', () => {
     const w = world()
     const workers = crowd(w, 4)
-    const goal = { x: 420, y: 1300 }   // through the door gap, into the street
+    const goal = { x: apartment.door.x, y: apartment.world.h - 120 }   // out into the street
     for (const a of workers) a.pathTarget = goal
 
     run(w, 60_000)
-    for (const a of workers) expect(a.y).toBeGreaterThan(1050)
+    for (const a of workers) expect(a.y).toBeGreaterThan(apartment.room.h)
   })
 })

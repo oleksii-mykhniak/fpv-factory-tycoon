@@ -5,28 +5,37 @@
 // the same tick. The stage logic below did not change when that happened —
 // which was the point of the split.
 //
-// C6 removed the notion of a "mode" gating the bench. A station runs unattended
-// whenever SOMETHING can run it — a hired technician, or a soldering upgrade
-// good enough to work on its own. The player's mini-game is never required and
-// never suppresses that: standing at a bench only ever adds points on top, so
-// walking over can help and can never hurt.
+// A bench only produces while SOMEBODY IS AT IT. An upgrade alone is not
+// enough: the semi-auto iron makes the work effortless, not unmanned.
+//
+//   technician present → works at the better of the tech's and the iron's rate
+//   player present + semi/auto iron → the same, and no mini-game is offered
+//   player present + hand iron → nothing automatic; the mini-game is the work
+//   nobody present → the bench waits, keeping its progress
+//
+// This replaced "any upgrade runs the bench on its own", which meant a drone
+// assembled itself in an empty room and made hiring a technician pointless.
 
 import { Phase, KIT_TYPES, recordSolderPoint, finishAssembly, calcPrice, stationsOf } from '../../state/gameState.js'
 import { levelData } from '../../state/upgrades.js'
 import { roleLevelData } from '../../defs/roles.js'
 import { EV, emit } from '../events.js'
 
-// A technician physically standing at this station (C5). Presence is the whole
-// contract — the same rule the trigger zones use for the player.
-function technicianAt(world, stationId) {
+// Whoever is physically standing at this station. Presence is the whole
+// contract — the same rule the trigger zones use.
+function agentAt(world, stationId, match) {
   const zone = (world.zones ?? []).find(z => z.meta?.stationId === stationId)
   if (!zone) return null
   return (world.agents ?? []).find(a =>
-    a.kind === 'worker' && a.role === 'tech' &&
+    match(a) &&
     Math.abs(a.x - zone.cx) <= zone.w / 2 &&
     Math.abs(a.y - zone.cy) <= zone.h / 2
   ) ?? null
 }
+
+const technicianAt = (world, id) =>
+  agentAt(world, id, a => a.kind === 'worker' && a.role === 'tech')
+const playerAt = (world, id) => agentAt(world, id, a => a.kind === 'player')
 
 // What the station runs on this tick: the soldering upgrade, a hired
 // technician, or neither. A tech works a hand-iron bench too — otherwise hiring
@@ -34,24 +43,25 @@ function technicianAt(world, stationId) {
 // Upgrades still matter: whichever source is better wins on each axis.
 export function workSource(world, station, data) {
   const tech = technicianAt(world, station.id)
-  // Levels 2–3 supply an unattended rate; levels 0–1 only sharpen the
-  // player's own mini-game (greenHalf), so they cannot run on their own.
-  const auto = data.qualityMin !== undefined
+  const here = tech ?? playerAt(world, station.id)
+  if (!here) return null            // an empty bench builds nothing
 
-  if (!tech) {
-    return auto
-      ? { pointDelayMs: data.pointDelayMs, qualityMin: data.qualityMin, qualityMax: data.qualityMax }
-      : null
-  }
+  // Levels 2–3 supply a hands-off rate; levels 0–1 only sharpen the player's
+  // own mini-game (greenHalf), so they cannot run themselves at all.
+  const iron = data.qualityMin !== undefined
+    ? { pointDelayMs: data.pointDelayMs, qualityMin: data.qualityMin, qualityMax: data.qualityMax }
+    : null
+
+  if (!tech) return iron            // the player: only a good iron works alone
 
   const t = roleLevelData('tech', tech.level ?? 0)
-  if (!auto) {
-    return { pointDelayMs: t.pointMs, qualityMin: t.quality - 0.05, qualityMax: t.quality + 0.05 }
-  }
+  const hands = { pointDelayMs: t.pointMs, qualityMin: t.quality - 0.05, qualityMax: t.quality + 0.05 }
+  if (!iron) return hands
+  // Best of both on each axis.
   return {
-    pointDelayMs: Math.min(t.pointMs, data.pointDelayMs),
-    qualityMin:   Math.max(t.quality - 0.05, data.qualityMin),
-    qualityMax:   Math.max(t.quality + 0.05, data.qualityMax),
+    pointDelayMs: Math.min(hands.pointDelayMs, iron.pointDelayMs),
+    qualityMin:   Math.max(hands.qualityMin, iron.qualityMin),
+    qualityMax:   Math.max(hands.qualityMax, iron.qualityMax),
   }
 }
 

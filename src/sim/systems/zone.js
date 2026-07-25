@@ -69,17 +69,18 @@ export function zoneSystem(world, dt, events) {
 
       if (state.dwell[key] < def.dwellMs) continue
 
-      // Re-arming rule:
-      //   dwellMs > 0 — standing there keeps working. Progress resets and the
-      //     next full dwell fires again, so dropping a box and then soldering is
-      //     one continuous stay rather than "step out, step back in".
-      //   dwellMs === 0 — instant zones fire once per entry, otherwise they
-      //     would retrigger every single tick.
-      if (def.dwellMs === 0) {
+      // Re-arming rule (see defs/interactions.js `repeat`):
+      //   repeat — standing there keeps working: progress resets and the next
+      //     full dwell fires again, so dropping a box and then soldering is one
+      //     continuous stay rather than "step out, step back in".
+      //   otherwise — once per entry. Anything that opens a mini-game must be
+      //     in this group: a repeating trash bin restarted the salvage game
+      //     every 900 ms and its counter never moved.
+      if (def.repeat && def.dwellMs > 0) {
+        state.dwell[key] = 0
+      } else {
         if (state.ready[key]) continue
         state.ready[key] = true
-      } else {
-        state.dwell[key] = 0
       }
 
       world.triggers.push({ zoneId: zone.id, agentId: key, kind: zone.kind })

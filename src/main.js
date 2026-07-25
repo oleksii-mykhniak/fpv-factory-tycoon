@@ -19,7 +19,7 @@ import { createWorld, serializeWorld } from './sim/world.js'
 import { advance } from './sim/loop.js'
 import { dispatch, piggyAvailable } from './sim/commands.js'
 import { settleOffline } from './sim/offline.js'
-import { playerStation } from './sim/derive.js'
+import { playerStation, guidanceActive, ironIsHandsOff } from './sim/derive.js'
 import { SYSTEMS } from './sim/systems/index.js'
 
 import { createHUD } from './ui/hud.js'
@@ -303,14 +303,18 @@ function renderUI() {
   uiDirty = false
 
   const player = (world.agents ?? []).find(a => a.kind === 'player')
-  hud.update(world.game, (player?.carrying ?? []).map(i => i.type))
+  hud.update(world.game, (player?.carrying ?? []).map(i => i.type), guidanceActive(world.game))
   actionBar.update(world.game)
   shopModal.update(world.game)
   upgradeModal.update(world.game)
   solderModal.update(world.game, coldWarning ? 'cold' : null)
 
-  // The soldering strip follows the player's feet, not a button (C6).
-  solderBar.update(world.game, playerStation(world), coldWarning)
+  // The soldering strip follows the player's feet, not a button (C6) — and is
+  // only offered when the iron needs a pair of hands. With a semi-auto or
+  // better, standing there is enough and the mini-game would be a second,
+  // pointless way to do the same job.
+  const handStation = ironIsHandsOff(world.game) ? null : playerStation(world)
+  solderBar.update(world.game, handStation, coldWarning)
   coldWarning = null
 
   // Progress cards belong to the sim's assembly stages; hide the ones whose

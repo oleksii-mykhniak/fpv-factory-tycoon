@@ -14,9 +14,11 @@ export function createHUD(root) {
 
   // carrying: item types in the player's hands, so the hint can name the next
   // physical step rather than a tap target (C2).
-  function update(state, carrying = []) {
+  // guidance: the running "what to do next" line is training wheels and stops
+  // after the first few orders (C7), leaving just the money on screen.
+  function update(state, carrying = [], guidance = true) {
     el.querySelector('#hud-money').textContent = `$${state.money.toFixed(2)}`
-    el.querySelector('#hud-hint').textContent  = hint(state, carrying)
+    el.querySelector('#hud-hint').textContent  = guidance ? hint(state, carrying) : ''
   }
 
   return { update }
@@ -39,7 +41,9 @@ function hint(state, carrying) {
       const arrived = deliveries.some(d => d.status === DeliveryStatus.TRANSIT && d.readyAt <= Date.now())
       if (arrived) return 'Коробка прибула — забери її з вулиці'
       if (deliveries.length) return "Кур'єр їде до вас…"
-      return ''
+      // Nothing in flight: the very first thing the game must say is where the
+      // loop starts, or a new player has no idea what to do at all.
+      return 'Відкрий 🛒 Магазин і замов дрон'
     }
     case Phase.ASSEMBLY: {
       const kit   = KIT_TYPES[station.kitId]

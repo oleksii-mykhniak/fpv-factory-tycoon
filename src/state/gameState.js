@@ -7,7 +7,7 @@ import {
 
 import { UPGRADE_TRACKS } from './upgrades.js'
 import { KIT_TYPES } from './kits.js'
-import { capFor, canMoveToLocation, LOCATIONS } from './locations.js'
+import { capFor, canMoveToLocation, LOCATIONS, hiringAllowed, maxWorkersHere } from './locations.js'
 import { hireCost, roleDef } from '../defs/roles.js'
 
 // Re-export so existing consumers keep importing kit data from gameState.js.
@@ -86,6 +86,10 @@ export function createState() {
     stations:          [createStation('station-0')],
     // Hired workers (C5): [{ id, role, level, hiredAt }]
     workers:           [],
+    // How many kits ordered / salvage runs started ever — drive the guidance
+    // arrow, each on its own allowance (C7).
+    ordersPlaced:      0,
+    scrapRuns:         0,
     lastPiggyAt:       null,
     locationId:        'apartment',
     onboarded:         false,
@@ -162,6 +166,7 @@ export function orderKit(state, kitTypeId, now = Date.now(), makeId = null) {
   return {
     ...state,
     money:     state.money - kit.cost,
+    ordersPlaced: (state.ordersPlaced ?? 0) + 1,
     deliveries: [
       ...(state.deliveries ?? []),
       { id, kitId: kitTypeId, slotIndex, readyAt: now + deliveryMs, status: DeliveryStatus.TRANSIT },
@@ -293,6 +298,11 @@ export function nextHireCost(state, roleId) {
 
 export function hireWorker(state, roleId, now = Date.now(), makeId = null) {
   roleDef(roleId)   // throws on an unknown role
+  if (!hiringAllowed(state))
+    throw new Error('hireWorker: у цій локації немає де тримати робітників')
+  const room = maxWorkersHere(state)
+  if (workersOf(state).length >= room)
+    throw new Error(`hireWorker: у цій локації більше ${room} робітників не поміститься`)
   const cost = nextHireCost(state, roleId)
   if (state.money < cost)
     throw new Error(`hireWorker: недостатньо грошей (є ${Math.floor(state.money)}, потрібно ${cost})`)
@@ -312,7 +322,7 @@ export function startScrap(state) {
     throw new Error('startScrap: немає вільної станції')
   if (state.scrapAvailable)
     throw new Error('startScrap: вже активовано')
-  return { ...state, scrapAvailable: true }
+  return { ...state, scrapAvailable: true, scrapRuns: (state.scrapRuns ?? 0) + 1 }
 }
 
 // Salvaged parts are put down on a station: a free drone starts assembling.

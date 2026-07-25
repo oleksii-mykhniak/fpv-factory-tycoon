@@ -6,29 +6,31 @@
 
 import { buildLayout } from './buildLayout.js'
 
-// ── Квартира — cramped, one bench, everything within a few steps ──
+// ── Квартира — one bench, everything within a few steps.
+// Deliberately small: with a single station and no staff, a big room is just
+// walking. The garage is where space starts to matter.
 export const apartment = buildLayout({
   id:    'apartment',
-  world: { w: 1000, h: 1500 },
-  roomH: 1050,
-  door:  { x: 420, w: 170 },
+  world: { w: 820, h: 1250 },
+  roomH: 880,
+  door:  { x: 360, w: 170 },
   stationSlots: [
-    { def: 'workbench', x: 500, y: 300 },
+    { def: 'workbench', x: 420, y: 250 },
   ],
   props: {
-    lamp:     { x: 500, y: 130, w: 40, h: 40, sprite: 'lamp',     color: '#d4c060', z: 2 },
-    piggy:    { x: 150, y: 880, w: 46, h: 46, sprite: 'piggy',    color: '#d4607a' },
-    mailbox:  { x: 170, y: 1300, w: 42, h: 34, sprite: 'mailbox',  color: '#3a5db8' },
-    trashbin: { x: 860, y: 1300, w: 42, h: 46, sprite: 'trashbin', color: '#4a6a3a' },
+    lamp:     { x: 420, y: 110, w: 40, h: 40, sprite: 'lamp',     color: '#d4c060', z: 2 },
+    piggy:    { x: 130, y: 700, w: 46, h: 46, sprite: 'piggy',    color: '#d4607a' },
+    mailbox:  { x: 150, y: 1090, w: 42, h: 34, sprite: 'mailbox',  color: '#3a5db8' },
+    trashbin: { x: 690, y: 1090, w: 42, h: 46, sprite: 'trashbin', color: '#4a6a3a' },
   },
   deliverySlots: [
-    { x: 420, y: 1180 },
-    { x: 640, y: 1180 },
-    { x: 830, y: 1180 },
+    { x: 360, y: 1000 },
+    { x: 530, y: 1000 },
+    { x: 680, y: 1000 },
   ],
   spawns: {
-    player:     { x: 720, y: 900 },
-    workerIdle: { x: 760, y: 900 },
+    player:     { x: 600, y: 700 },
+    workerIdle: { x: 640, y: 730 },
   },
   theme: { bgColor: '#0e0e18', floorColor: '#1a1a26' },
 })

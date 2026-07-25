@@ -79,6 +79,12 @@ export const SPRITES = Object.freeze({
     url: `${BASE}sprites/piggy.png`,
     anchors: {},
   },
+
+  // Objective arrow (C7) — points down; the scene rotates it toward the target.
+  arrow: {
+    url: `${BASE}sprites/arrow.png`,
+    anchors: {},
+  },
 })
 
 // ── Helpers ───────────────────────────────────────────────

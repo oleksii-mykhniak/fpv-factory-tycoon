@@ -7,13 +7,19 @@
 //
 // This module may read the world and drive actors. It must never write to the
 // world — player intent goes through sim/commands.js dispatch().
+//
+// Positions are INTERPOLATED. The simulation advances in fixed 50 ms steps but
+// the screen redraws about every 16 ms, so copying sim coordinates straight
+// onto actors showed the same position for three frames and then jumped — read
+// as the character juddering while running. Actors now ease toward the sim
+// position instead, which is the standard fixed-step/variable-render fix.
 
 import { Phase, DeliveryStatus, KIT_TYPES, stationsOf } from '../state/gameState.js'
 import { getSprite } from '../scene/loader.js'
 import { INTERACTIONS, carrySpriteKey } from '../defs/interactions.js'
 import { dwellProgress } from '../sim/systems/zone.js'
 import { piggyShouldShow, nextObjective } from '../sim/derive.js'
-import { CARRY_STACK_OFFSET_Y } from '../state/config.js'
+import { CARRY_STACK_OFFSET_Y, VIEW_SMOOTHING } from '../state/config.js'
 import * as ex from 'excalibur'
 
 // Purely presentational memo: which sprite is on the drone actor right now, and
@@ -33,6 +39,16 @@ function applySprite(actor, key) {
 export function resetSceneSync() {
   _lastDroneSpriteKey = null
   _prevCarryingId     = null
+}
+
+// Eases an actor toward where the sim says it is. Snaps when the gap is large
+// (a teleport, a move to another location) so nothing glides across the room.
+function follow(actor, x, y) {
+  const dx = x - actor.pos.x
+  const dy = y - actor.pos.y
+  if (Math.hypot(dx, dy) > 200) { actor.pos.x = x; actor.pos.y = y; return }
+  actor.pos.x += dx * VIEW_SMOOTHING
+  actor.pos.y += dy * VIEW_SMOOTHING
 }
 
 export function syncScene(refs, world) {
@@ -99,8 +115,7 @@ export function syncScene(refs, world) {
   // ── Player character (C1) ──────────────────────────────
   // The sim owns the position; the actor is told where it ended up.
   if (player && refs.player) {
-    refs.player.pos.x = player.x
-    refs.player.pos.y = player.y
+    follow(refs.player, player.x, player.y)
     refs.playerRig?.setMoving(player.moving, player.facing > 0)
     syncCarryStack(refs.carrySlotActors, refs.player, player)
     syncDwell(refs, world, player)
@@ -120,8 +135,7 @@ function syncWorkers(refs, world) {
     if (agent.kind !== 'worker') continue
     seen.add(agent.id)
     const view = refs.workerView(agent.id)
-    view.actor.pos.x = agent.x
-    view.actor.pos.y = agent.y
+    follow(view.actor, agent.x, agent.y)
     view.actor.graphics.visible = true
     view.rig?.setMoving(agent.moving, agent.facing > 0)
     syncCarryStack(view.carrySlots, view.actor, agent)
@@ -162,9 +176,9 @@ function syncCarryStack(slots, bodyActor, agent) {
       applySprite(actor, key)
       actor._carryKey = key
     }
-    actor.pos.x = agent.x
-    actor.pos.y = agent.y - bodyActor.height * 0.55 - i * CARRY_STACK_OFFSET_Y
-    actor.z = agent.y * 0.01 + 1 + i * 0.01
+    actor.pos.x = bodyActor.pos.x
+    actor.pos.y = bodyActor.pos.y - bodyActor.height * 0.55 - i * CARRY_STACK_OFFSET_Y
+    actor.z = bodyActor.pos.y * 0.01 + 1 + i * 0.01
     actor.graphics.visible = true
   })
 }
@@ -181,15 +195,15 @@ function syncDwell(refs, world, player) {
     return
   }
 
-  const y = player.y + refs.player.height * 0.5
-  bg.pos.x = player.x
+  const y = refs.player.pos.y + refs.player.height * 0.5
+  bg.pos.x = refs.player.pos.x
   bg.pos.y = y
   bg.z = player.y * 0.01 + 2
   bg.graphics.visible = true
 
   const w = Math.max(width * p, 2)
   fill.graphics.use(new ex.Rectangle({ width: w, height: 6, color: ex.Color.fromHex('#7de07d') }))
-  fill.pos.x = player.x - width / 2 + w / 2
+  fill.pos.x = refs.player.pos.x - width / 2 + w / 2
   fill.pos.y = y
   fill.z = player.y * 0.01 + 3
   fill.graphics.visible = true
@@ -213,8 +227,8 @@ function syncArrow(refs, world, player) {
   // Ride just outside the character, in the direction of travel, bobbing so it
   // reads as a hint rather than part of the scenery.
   const bob = Math.sin(Date.now() / 260) * 4
-  arrow.pos.x = player.x + (dx / d) * 52
-  arrow.pos.y = player.y + (dy / d) * 52 - 46 + bob
+  arrow.pos.x = refs.player.pos.x + (dx / d) * 76
+  arrow.pos.y = refs.player.pos.y + (dy / d) * 76 - 30 + bob
   arrow.rotation = Math.atan2(dy, dx) + Math.PI / 2
   arrow.z = player.y * 0.01 + 5
   arrow.graphics.visible = true

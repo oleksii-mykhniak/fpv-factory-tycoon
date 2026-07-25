@@ -69,6 +69,11 @@ function followPath(agent) {
 // the doorway would both wait forever. A nudge costs nothing and always
 // resolves, at the price of slightly imperfect paths.
 function separate(agent, agents) {
+  // Someone working a spot is an anchor: they still push others aside, but do
+  // not get pushed themselves. Without this a technician is slowly shunted out
+  // of the bench zone by passing colleagues and the station stops (C7).
+  if (agent.holdZone) return
+
   let sx = 0, sy = 0
   for (const other of agents) {
     if (other === agent) continue

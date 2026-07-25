@@ -1,4 +1,5 @@
 import { Phase, busyStations, workersInRole, nextHireCost } from '../state/gameState.js'
+import { hiringAllowed, maxWorkersHere } from '../state/locations.js'
 import { ROLES, ROLE_ORDER } from '../defs/roles.js'
 import { UPGRADE_TRACKS } from '../state/upgrades.js'
 import { currentLocation, LOCATIONS, LOCATION_ORDER, capFor, canMoveToLocation } from '../state/locations.js'
@@ -118,14 +119,30 @@ export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation, onHir
 
     // ── Hiring (C5) ───────────────────────────────────────
     // Each role is one card: who you already have, what the next one costs.
+    const canHire  = hiringAllowed(state)
+    const room     = maxWorkersHere(state)
+    const onStaff  = (state.workers ?? []).length
+    const full     = onStaff >= room
     const hireHTML = `
       <div class="shop-section">
-        <div class="shop-section__title">Робітники</div>
-        ${ROLE_ORDER.map(id => {
+        <div class="shop-section__title">
+          Робітники${canHire ? ` — ${onStaff}/${room}` : ''}
+        </div>
+        ${canHire && full ? `
+          <div class="shop-upgrade">
+            <p class="upgrade-effect-hint">Більше людей сюди не поміститься — переїдьте далі.</p>
+          </div>` : ''}
+        ${!canHire ? `
+          <div class="shop-upgrade">
+            <p class="upgrade-effect-hint">
+              У квартирі ви працюєте самі. Переїдьте до гаража, щоб наймати людей.
+            </p>
+          </div>` : ''}
+        ${!canHire ? '' : ROLE_ORDER.map(id => {
           const role  = ROLES[id]
           const count = workersInRole(state, id).length
           const cost  = nextHireCost(state, id)
-          const can   = state.money >= cost
+          const can   = state.money >= cost && !full
           return `
             <div class="shop-upgrade">
               <span class="shop-upgrade__current">

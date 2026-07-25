@@ -6,7 +6,10 @@
 //
 // Each entry:
 //   dwellMs   — time inside before it fires (0 = instant)
-//   repeatMs  — >0 keeps firing while occupied (item streams); 0 = once per entry
+//   repeat    — may it fire again while the character keeps standing there?
+//               True for work (a bench keeps producing); false for anything
+//               that opens a mini-game, or standing at the bin would restart
+//               the salvage game every 900 ms and its counter would never move.
 //   accepts   — 'player' | 'worker' | 'any'
 //   enabled   — is there anything to do right now? A disabled zone shows no
 //               progress ring and never fires, so the player is never asked to
@@ -52,8 +55,8 @@ const someoneCarrying = (world) =>
 export const INTERACTIONS = {
   // Street slot: grab an arrived box.
   delivery_slot: {
-    dwellMs:  ZONE_DWELL_INSTANT_MS,
-    repeatMs: 0,
+    dwellMs: ZONE_DWELL_INSTANT_MS,
+    repeat:  false,
     accepts:  'any',
     enabled(world, zone, agent) {
       if (carryFull(agent) || someoneCarrying(world)) return false
@@ -72,8 +75,8 @@ export const INTERACTIONS = {
   // Workbench: drop a box to start assembly, collect a finished drone, or —
   // while it is being assembled — work at it (the mini-game).
   bench: {
-    dwellMs:  ZONE_DWELL_BENCH_MS,
-    repeatMs: 0,
+    dwellMs: ZONE_DWELL_BENCH_MS,
+    repeat:  true,
     accepts:  'any',
     enabled(world, zone, agent) {
       const station = stationOf(world, zone)
@@ -116,8 +119,8 @@ export const INTERACTIONS = {
 
   // Mailbox: hand over a finished drone.
   mailbox: {
-    dwellMs:  ZONE_DWELL_MAILBOX_MS,
-    repeatMs: 0,
+    dwellMs: ZONE_DWELL_MAILBOX_MS,
+    repeat:  false,
     accepts:  'any',
     enabled: (_world, _zone, agent) => !!carriedType(agent, 'drone'),
     run(world, _zone, agent, events) {
@@ -148,8 +151,8 @@ export const INTERACTIONS = {
 
   // Trash bin: salvage parts, or throw away a burnt kit.
   trashbin: {
-    dwellMs:  ZONE_DWELL_TRASH_MS,
-    repeatMs: 0,
+    dwellMs: ZONE_DWELL_TRASH_MS,
+    repeat:  false,
     accepts:  'any',
     enabled: (world, _zone, agent) => world.game.scrapAvailable && carryEmpty(agent),
     run: (_world, _zone, agent, events) =>
@@ -158,8 +161,8 @@ export const INTERACTIONS = {
 
   // Piggy bank: the rescue mini-game.
   piggy: {
-    dwellMs:  ZONE_DWELL_INSTANT_MS,
-    repeatMs: 0,
+    dwellMs: ZONE_DWELL_INSTANT_MS,
+    repeat:  false,
     accepts:  'player',   // a hired worker has no use for the player's piggy bank
     enabled: (world) => piggyShouldShow(world.game),
     run: (_world, _zone, agent, events) =>

@@ -123,6 +123,21 @@ export const AGENT_SEPARATION_W = 0.55
 // No progress for this long while following a path = re-plan.
 export const STUCK_TIMEOUT_MS = 700
 
+// ── Onboarding (C7) ──────────────────────────────────────
+// The objective arrow and the running hint line are training wheels: they run
+// for the first few orders and then get out of the way.
+export const GUIDANCE_ORDERS = 5
+// The salvage bin has its own allowance: five clean orders can go by without a
+// burnt kit, and then the bin would never have been pointed out.
+export const GUIDANCE_SCRAP_RUNS = 2
+
+// ── Presentation ─────────────────────────────────────────
+// How far an actor closes the gap to its simulated position each rendered
+// frame. The sim steps at 20 Hz and the screen redraws at ~60, so copying
+// positions directly makes the character judder. 0.35 is smooth without
+// feeling like the character lags behind the stick.
+export const VIEW_SMOOTHING = 0.35
+
 // ── Trigger zones (C2) ───────────────────────────────────
 // How long a character must stand in a zone before it fires. 0 = instant.
 // Longer dwell = the action reads as "work"; instant = "pick up".
