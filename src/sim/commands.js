@@ -163,6 +163,15 @@ const HANDLERS = {
     if (consolation > 0) emit(events, EV.MONEY_GAINED, { amount: consolation, reason: 'scrap' })
   },
 
+  // The salvage mini-game succeeded: the parts go into that agent's hands, and
+  // they still have to be carried to the bench (the bench zone does the rest).
+  scrapCollected(world, { agentId }, events) {
+    const agent = (world.agents ?? []).find(a => a.id === agentId)
+    if (!agent) return
+    agent.carrying = [...(agent.carrying ?? []), { type: 'scrap' }]
+    emit(events, EV.ITEM_PICKED, { agentId, item: 'scrap' })
+  },
+
   addMoney(world, { amount }, events) {
     world.game = { ...world.game, money: world.game.money + amount }
     emit(events, EV.MONEY_GAINED, { amount, reason: 'cheat' })

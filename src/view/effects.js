@@ -9,7 +9,10 @@
 import { EV } from '../sim/events.js'
 import { playSfx } from '../audio/sfx.js'
 
-export function createEffects({ getRefs, haptic, onStateDirty, onColdSolder }) {
+export function createEffects({
+  getRefs, haptic, onStateDirty, onColdSolder,
+  onWorkRequested, onSellRequested, onMinigame,
+}) {
   const HANDLERS = {
     [EV.DELIVERY_ORDERED]: () => { playSfx('order'); haptic('medium') },
 
@@ -44,6 +47,15 @@ export function createEffects({ getRefs, haptic, onStateDirty, onColdSolder }) {
     },
 
     [EV.PIGGY_COLLECTED]: () => haptic('light'),
+
+    // ── Trigger zones (C2) ───────────────────────────────
+    [EV.ITEM_PICKED]:  () => haptic('light'),
+    [EV.ITEM_DROPPED]: () => haptic('light'),
+    [EV.ZONE_FIRED]:   () => onStateDirty(),
+
+    [EV.WORK_REQUESTED]:     () => onWorkRequested?.(),
+    [EV.SELL_REQUESTED]:     () => onSellRequested?.(),
+    [EV.MINIGAME_REQUESTED]: (e) => onMinigame?.(e),
 
     [EV.STATE_DIRTY]: () => onStateDirty(),
   }

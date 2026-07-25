@@ -26,6 +26,7 @@ export function createAgent({ id, kind, x, y, speed = PLAYER_SPEED }) {
     speed,
     facing: 1,      // 1 = right, -1 = left
     moving: false,
+    carrying: [],   // [{ type: 'kit_box' | 'drone' | 'burnt' | 'scrap', kitId?, deliveryId? }]
   }
 }
 
@@ -42,6 +43,12 @@ export function createWorld({ state, salesLog = [] } = {}, { now = Date.now(), r
     bounds:    layout ? { w: layout.world.w, h: layout.world.h } : null,
     obstacles: layout?.obstacles ?? [],
     agents:    layout ? [createAgent({ id: 'player', kind: 'player', ...layout.spawns.player })] : [],
+
+    // Trigger zones (C2): definitions from the layout, per-zone dwell state
+    // here. `triggers` is the hand-off from zoneSystem to interactionSystem.
+    zones:     layout?.zones ?? [],
+    zoneState: {},
+    triggers:  [],
 
     // Movement vector published by the view each frame (already deadzoned).
     input: { x: 0, y: 0 },

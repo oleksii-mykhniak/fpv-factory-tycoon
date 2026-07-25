@@ -118,9 +118,11 @@ export function orderKit(state, kitTypeId, now = Date.now(), makeId = null) {
   }
 }
 
-// Worker picks up an arrived delivery: TRANSIT → CARRYING.
+// Someone picks up an arrived delivery: TRANSIT → CARRYING.
 // Bench must be IDLE and no other delivery currently being carried.
-export function pickupDelivery(state, deliveryId, now = Date.now()) {
+// carriedBy identifies the agent (C2): the player and the worker puppet both
+// haul boxes, and each must ignore the one the other has in hand.
+export function pickupDelivery(state, deliveryId, now = Date.now(), carriedBy = 'worker') {
   if (state.phase !== Phase.IDLE)
     throw new Error(`pickupDelivery: недозволено у фазі ${state.phase}`)
   if ((state.deliveries ?? []).some(d => d.status === DeliveryStatus.CARRYING))
@@ -133,7 +135,7 @@ export function pickupDelivery(state, deliveryId, now = Date.now()) {
   return {
     ...state,
     deliveries: (state.deliveries ?? []).map(d2 =>
-      d2.id === deliveryId ? { ...d2, status: DeliveryStatus.CARRYING } : d2
+      d2.id === deliveryId ? { ...d2, status: DeliveryStatus.CARRYING, carriedBy } : d2
     ),
   }
 }

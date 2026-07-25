@@ -87,6 +87,20 @@ export const apartment = {
     ],
   },
 
+  // Trigger zones (C2). `kind` selects behaviour from defs/interactions.js;
+  // geometry lives here because it is part of the floor plan. Zones are drawn
+  // generously — a character should not have to be pixel-accurate to interact.
+  zones: [
+    { id: 'slot0',    kind: 'delivery_slot', ...rect(DOOR_X, 1180, 150, 140), meta: { slotIndex: 0 } },
+    { id: 'slot1',    kind: 'delivery_slot', ...rect(640,   1180, 150, 140), meta: { slotIndex: 1 } },
+    { id: 'slot2',    kind: 'delivery_slot', ...rect(830,   1180, 150, 140), meta: { slotIndex: 2 } },
+    // In front of the bench, not on it — the bench itself is solid.
+    { id: 'bench',    kind: 'bench',    ...rect(workbench.cx, workbench.cy + 100, 330, 120) },
+    { id: 'mailbox',  kind: 'mailbox',  ...rect(170, 1300, 150, 150) },
+    { id: 'trashbin', kind: 'trashbin', ...rect(860, 1300, 150, 150) },
+    { id: 'piggy',    kind: 'piggy',    ...rect(150, 700,  140, 140) },
+  ],
+
   // Sizes of the entities that live in this world (world units, not fractions).
   sizes: {
     character: 74,

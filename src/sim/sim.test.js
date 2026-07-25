@@ -25,9 +25,10 @@ function world(overrides = {}, opts = {}) {
 function run(w, ms) {
   const events = []
   const target = w.now + ms
-  // Advance in MAX_CATCHUP_STEPS-sized chunks so long runs are not capped —
-  // this is what the engine does frame by frame.
-  while (w.now < target) {
+  // Chunked so long runs are not capped, and stopping with less than a tick to
+  // go: advance() deliberately banks a sub-tick remainder instead of consuming
+  // it, so `while (now < target)` would spin forever.
+  while (target - w.now >= TICK_MS) {
     const next = Math.min(target, w.now + TICK_MS * MAX_CATCHUP_STEPS)
     events.push(...advance(w, next, SYSTEMS))
   }
@@ -131,11 +132,27 @@ describe('sim/workerSystem', () => {
     expect(w.worker.desired).toBe('solder')
   })
 
-  it('sends the worker to the trash when scrap is requested', () => {
-    const w = world()
+  it('sends an automated worker to the trash when scrap is requested', () => {
+    const w = world({ upgrades: { ...createState().upgrades, workerLevel: 1 } })
     dispatch(w, 'startScrap')
     run(w, TICK_MS)
     expect(w.worker.desired).toBe('scrap')
+  })
+
+  it('leaves the scrap run to the player at MANUAL (C2 — the bin is a zone)', () => {
+    const w = world()   // workerLevel 0
+    dispatch(w, 'startScrap')
+    run(w, TICK_MS)
+    expect(w.worker.desired).toBeNull()
+  })
+
+  it('keeps out of a delivery the player picked up', () => {
+    const w = world({ upgrades: { ...createState().upgrades, workerLevel: 2 } })
+    dispatch(w, 'order', { kitId: 'mini_drone' })
+    run(w, KIT_TYPES.mini_drone.deliveryMs + 500)
+    w.game.deliveries[0].carriedBy = 'player'
+    run(w, TICK_MS)
+    expect(w.worker.desired).toBeNull()
   })
 })
 

@@ -10,6 +10,10 @@ import { loadSprites, getSprite } from './loader.js'
 import { createWorker } from './worker.js'
 import { createCharacterSprite } from './character.js'
 
+// How many carried items the stack can show at once. The gameplay limit is
+// CARRY_CAPACITY in config; this is only how many actors exist to draw.
+const CARRY_STACK_SLOTS = 3
+
 // The scene is a *projection* of the simulation (C0): it never owns gameplay
 // state. Two hooks connect it to the sim:
 //   getWorld()            — read-only access, called from preupdate closures
@@ -416,18 +420,8 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
   slotIndicators.forEach((ind, slotIdx) => {
     const lbl = slotLabels[slotIdx]
 
-    // Tap: pick up an arrived box by hand (MANUAL worker mode).
-    ind.on('pointerup', () => {
-      const { game, now } = getWorld()
-      if (game.phase !== Phase.IDLE) return
-      if ((game.deliveries ?? []).some(d => d.status === DeliveryStatus.CARRYING)) return
-      const d = (game.deliveries ?? []).find(
-        d => d.slotIndex === slotIdx && d.status === DeliveryStatus.TRANSIT
-      )
-      if (d && d.readyAt <= now) onIntent('slot.tap', { deliveryId: d.id })
-    })
-
     // Projection: countdown while in transit, box sprite once it has arrived.
+    // Walking into the slot's trigger zone is what picks it up (C2).
     ind.on('preupdate', () => {
       const { game, now } = getWorld()
       const d = (game.deliveries ?? []).find(d => d.slotIndex === slotIdx)
@@ -505,10 +499,6 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
     }
   })
 
-  piggy.on('pointerup', () => {
-    if (piggy.graphics.visible) onIntent('piggy.tap')
-  })
-
   // ── Worker ─────────────────────────────────────────────
   // The puppet reports animation milestones back as intents; the sim decides
   // what they mean. C1 replaces this actor with a vel-driven agent.
@@ -547,19 +537,43 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
   // Y-sort: whoever stands lower on screen draws in front.
   player.on('preupdate', () => { player.z = player.pos.y * 0.01 })
 
+  // ── Carried items ──────────────────────────────────────
+  // A small stack of actors floating above the head. Kept as scene-level actors
+  // rather than children: addChild removes an actor from the scene's render
+  // list in Excalibur 0.32, which cost us a whole evening back in D4.
+  const carrySlotActors = Array.from({ length: CARRY_STACK_SLOTS }, () => {
+    const a = new ex.Actor({
+      pos:    ex.vec(-9999, -9999),
+      width:  sizes.box.w * 0.8,
+      height: sizes.box.h * 0.8,
+      z: 20,
+      color:  ex.Color.fromHex('#c49a3c'),
+    })
+    a.graphics.visible = false
+    scene.add(a)
+    return a
+  })
+
+  // ── Dwell progress ─────────────────────────────────────
+  // Fills while standing in a zone that has something to offer.
+  const DWELL_W = sizes.character * 0.9
+  const dwellBg = new ex.Actor({
+    pos: ex.vec(-9999, -9999), width: DWELL_W + 4, height: 10,
+    z: 21, color: ex.Color.fromHex('#20203a'),
+  })
+  dwellBg.graphics.visible = false
+  scene.add(dwellBg)
+
+  const dwellFill = new ex.Actor({ pos: ex.vec(-9999, -9999), z: 22 })
+  dwellFill.graphics.visible = false
+  scene.add(dwellFill)
+
   // Camera follows the player, clamped so it never shows past the world edge.
   scene.camera.pos = ex.vec(spawns.player.x, spawns.player.y)
   scene.camera.strategy.elasticToActor(player, CAMERA_ELASTICITY, CAMERA_FRICTION)
   scene.camera.strategy.limitCameraBounds(
     new ex.BoundingBox(0, 0, layout.world.w, layout.world.h),
   )
-
-  // ── Pointer intents ────────────────────────────────────
-
-  trashbin.on('pointerup', () => onIntent('trash.tap'))
-  box.on('pointerup',      () => onIntent('box.tap'))
-  workbench.on('pointerup', () => onIntent('bench.tap'))
-  mailbox.on('pointerup',   () => onIntent('mailbox.tap'))
 
   // ── Pulse controllers ──────────────────────────────────
   const boxPulse      = addPulse(box)
@@ -573,8 +587,10 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
   return {
     engine: { getFps: () => engine.clock.fpsSampler.fps, _ex: engine },
     scene,
-    box, boxOpen, drone, worker, piggy, mailbox, trashbin,
+    box, boxOpen, drone, worker, piggy, mailbox, trashbin, workbench,
     player, playerRig,
+    carrySlotActors,
+    dwell: { bg: dwellBg, fill: dwellFill, width: DWELL_W },
     benchProgress,
     slotSpawns,
     boxSpawn: BOX_SPAWN,

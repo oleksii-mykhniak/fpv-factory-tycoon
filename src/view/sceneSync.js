@@ -10,6 +10,11 @@
 
 import { Phase, DeliveryStatus, KIT_TYPES } from '../state/gameState.js'
 import { getSprite } from '../scene/loader.js'
+import { INTERACTIONS, carrySpriteKey } from '../defs/interactions.js'
+import { dwellProgress } from '../sim/systems/zone.js'
+import { piggyShouldShow } from '../sim/derive.js'
+import { CARRY_STACK_OFFSET_Y } from '../state/config.js'
+import * as ex from 'excalibur'
 
 // Purely presentational memo: which sprite is on the drone actor right now, and
 // which delivery the carry box was last positioned for. Neither is game state.
@@ -49,11 +54,9 @@ export function syncScene(refs, world) {
   _prevCarryingId = carrying?.id ?? null
 
   // ── Piggy bank ─────────────────────────────────────────
-  if (piggy) {
-    const minCost   = Math.min(...Object.values(KIT_TYPES).filter(k => k.cost > 0).map(k => k.cost))
-    const busy      = (game.deliveries ?? []).length > 0 || game.phase !== Phase.IDLE
-    piggy.graphics.visible = game.money < minCost && !busy
-  }
+  // Same predicate the piggy trigger zone uses, so what you see is what you can
+  // walk into (sim/derive.js).
+  if (piggy) piggy.graphics.visible = piggyShouldShow(game)
 
   // ── Drone sprite ───────────────────────────────────────
   const droneSpriteKey = game.activeKit ? (KIT_TYPES[game.activeKit]?.spriteKey ?? null) : null
@@ -63,25 +66,33 @@ export function syncScene(refs, world) {
   }
 
   // ── Visibility ─────────────────────────────────────────
+  const player     = (world.agents ?? []).find(a => a.kind === 'player')
+  const inHand     = player?.carrying ?? []
   const assembling = game.phase === Phase.ASSEMBLY || game.phase === Phase.READY
-  box.graphics.visible     = !!carrying
+
+  box.graphics.visible     = !!carrying && carrying.carriedBy === 'worker'
   boxOpen.graphics.visible = assembling
-  drone.graphics.visible   = assembling || game.phase === Phase.BURNT
+  // A drone in the player's hands must not also be lying on the bench.
+  drone.graphics.visible   = (assembling || game.phase === Phase.BURNT) &&
+                             !inHand.some(i => i.type === 'drone')
 
   // ── Attention pulses ───────────────────────────────────
-  if (_pulses) {
+  // Driven by the zones themselves now: whatever the character could act on if
+  // they walked over pulses. One source of truth, so a pulsing object can never
+  // turn out to be a dead end.
+  if (_pulses && player) {
     _pulses.box.stop()
     _pulses.bench.stop()
     _pulses.mailbox.stop()
     _pulses.trashbin?.stop()
 
-    if (carrying)                    _pulses.box.start()
-    if (game.phase === Phase.ASSEMBLY) _pulses.bench.start()
-    if (game.phase === Phase.READY) {
-      _pulses.bench.start()
-      _pulses.mailbox.start()
+    if (carrying && carrying.carriedBy === 'worker') _pulses.box.start()
+
+    for (const zone of world.zones ?? []) {
+      const pulse = _pulses[ZONE_PULSE[zone.id]]
+      if (!pulse) continue
+      if (INTERACTIONS[zone.kind]?.enabled(world, zone, player)) pulse.start()
     }
-    if (game.scrapAvailable && game.phase === Phase.IDLE) _pulses.trashbin?.start()
   }
 
   // Park the carry box off-screen when idle so an invisible actor cannot
@@ -94,11 +105,12 @@ export function syncScene(refs, world) {
 
   // ── Player character (C1) ──────────────────────────────
   // The sim owns the position; the actor is told where it ended up.
-  const player = (world.agents ?? []).find(a => a.kind === 'player')
   if (player && refs.player) {
     refs.player.pos.x = player.x
     refs.player.pos.y = player.y
     refs.playerRig?.setMoving(player.moving, player.facing > 0)
+    syncCarryStack(refs, player)
+    syncDwell(refs, world, player)
   }
 
   // ── Worker intent ──────────────────────────────────────
@@ -128,4 +140,63 @@ function applyWorkerIntent(refs, world) {
       if (!worker.isDoingScrap()) worker.commandScrapPickup()
       break
   }
+}
+
+
+// Which pulse controller belongs to which zone.
+const ZONE_PULSE = {
+  bench:    'bench',
+  mailbox:  'mailbox',
+  trashbin: 'trashbin',
+}
+
+// Items float above the head, stacked upward in pickup order.
+function syncCarryStack(refs, player) {
+  const slots = refs.carrySlotActors ?? []
+  const items = player.carrying ?? []
+
+  slots.forEach((actor, i) => {
+    const item = items[i]
+    if (!item) {
+      actor.graphics.visible = false
+      actor.pos.x = -9999
+      actor.pos.y = -9999
+      return
+    }
+    const key = carrySpriteKey(item)
+    if (actor._carryKey !== key) {
+      applySprite(actor, key)
+      actor._carryKey = key
+    }
+    actor.pos.x = player.x
+    actor.pos.y = player.y - refs.player.height * 0.55 - i * CARRY_STACK_OFFSET_Y
+    actor.z = player.y * 0.01 + 1 + i * 0.01
+    actor.graphics.visible = true
+  })
+}
+
+// A bar above the head that fills while a zone is being worked.
+function syncDwell(refs, world, player) {
+  const { bg, fill, width } = refs.dwell ?? {}
+  if (!bg || !fill) return
+
+  const p = dwellProgress(world, player.id)
+  if (p <= 0.02) {
+    bg.graphics.visible = false
+    fill.graphics.visible = false
+    return
+  }
+
+  const y = player.y + refs.player.height * 0.5
+  bg.pos.x = player.x
+  bg.pos.y = y
+  bg.z = player.y * 0.01 + 2
+  bg.graphics.visible = true
+
+  const w = Math.max(width * p, 2)
+  fill.graphics.use(new ex.Rectangle({ width: w, height: 6, color: ex.Color.fromHex('#7de07d') }))
+  fill.pos.x = player.x - width / 2 + w / 2
+  fill.pos.y = y
+  fill.z = player.y * 0.01 + 3
+  fill.graphics.visible = true
 }

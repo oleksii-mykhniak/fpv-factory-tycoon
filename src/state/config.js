@@ -69,6 +69,25 @@ export const PLAYER_HALF_H = 14
 // thinnest obstacle (walls are 24) or a fast agent tunnels straight through it.
 export const MOVE_MAX_STEP = 8
 
+// ── Trigger zones (C2) ───────────────────────────────────
+// How long a character must stand in a zone before it fires. 0 = instant.
+// Longer dwell = the action reads as "work"; instant = "pick up".
+export const ZONE_DWELL_INSTANT_MS = 0
+export const ZONE_DWELL_BENCH_MS   = 1100
+export const ZONE_DWELL_MAILBOX_MS = 700
+export const ZONE_DWELL_TRASH_MS   = 900
+// Progress drains this many times faster than it fills when you step out, so
+// leaving is forgiving but not free.
+export const DWELL_DECAY_MULT = 2.5
+// Repeating zones fire again every N ms while occupied (item streams).
+export const ZONE_REPEAT_MS = 260
+
+// ── Carrying (C2) ────────────────────────────────────────
+// Items a character can hold at once. An upgrade track raises this in C5.
+export const CARRY_CAPACITY = 1
+// Vertical gap between stacked items floating above a character's head.
+export const CARRY_STACK_OFFSET_Y = 26
+
 // ── Input (C1) ───────────────────────────────────────────
 export const INPUT_DEADZONE = 0.18   // below this magnitude the stick reads as centred
 

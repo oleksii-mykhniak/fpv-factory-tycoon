@@ -1,5 +1,5 @@
 import { Phase, DeliveryStatus, KIT_TYPES, calcPrice } from '../state/gameState.js'
-import { levelData, WORKER_MODE, SOLDER_MODE } from '../state/upgrades.js'
+import { levelData, SOLDER_MODE } from '../state/upgrades.js'
 
 export function createHUD(root) {
   const el = document.createElement('div')
@@ -12,42 +12,46 @@ export function createHUD(root) {
   `
   root.appendChild(el)
 
-  function update(state) {
+  // carrying: item types in the player's hands, so the hint can name the next
+  // physical step rather than a tap target (C2).
+  function update(state, carrying = []) {
     el.querySelector('#hud-money').textContent = `$${state.money.toFixed(2)}`
-    el.querySelector('#hud-hint').textContent  = hint(state)
+    el.querySelector('#hud-hint').textContent  = hint(state, carrying)
   }
 
   return { update }
 }
 
-function hint(state) {
+function hint(state, carrying) {
+  const holding = (type) => carrying.includes(type)
+
+  if (holding('kit_box')) return 'Неси коробку до верстака'
+  if (holding('drone'))   return 'Неси дрон до поштової скриньки'
+  if (holding('scrap'))   return 'Неси деталі до верстака'
+
   switch (state.phase) {
     case Phase.IDLE: {
-      const carrying = (state.deliveries ?? []).find(d => d.status === DeliveryStatus.CARRYING)
-      if (carrying) {
-        const wMode = levelData('worker', state.upgrades.workerLevel ?? 0).mode
-        return (wMode === WORKER_MODE.SEMI || wMode === WORKER_MODE.AUTO)
-          ? 'Несемо на стіл…'
-          : 'Тапни коробку!'
-      }
-      const hasTransit = (state.deliveries ?? []).some(d => d.status === DeliveryStatus.TRANSIT)
-      return hasTransit ? "Кур'єр їде до вас…" : ''
+      if (state.scrapAvailable) return 'Іди до смітника — там є деталі'
+      const deliveries = state.deliveries ?? []
+      if (deliveries.some(d => d.status === DeliveryStatus.CARRYING)) return 'Несемо на стіл…'
+      const arrived = deliveries.some(d => d.status === DeliveryStatus.TRANSIT && d.readyAt <= Date.now())
+      if (arrived) return 'Коробка прибула — забери її з вулиці'
+      if (deliveries.length) return "Кур'єр їде до вас…"
+      return ''
     }
     case Phase.ASSEMBLY: {
-      const kit    = KIT_TYPES[state.activeKit]
-      const done   = state.solderPoints.length
-      const total  = kit?.solderPointCount ?? 0
-      const sMode  = levelData('soldering', state.upgrades.solderingLevel ?? 0).mode
-      if (sMode === SOLDER_MODE.AUTO || (sMode === SOLDER_MODE.SEMI && done > 0)) {
-        return `Паяємо… (${done}/${total})`
-      }
-      if (sMode === SOLDER_MODE.SEMI) return `Тапни стіл → запустити пайку`
-      return `Тапни стіл → паяти (${done}/${total})`
+      const kit   = KIT_TYPES[state.activeKit]
+      const done  = state.solderPoints.length
+      const total = kit?.solderPointCount ?? 0
+      const mode  = levelData('soldering', state.upgrades.solderingLevel ?? 0).mode
+      return mode === SOLDER_MODE.MANUAL
+        ? `Стань біля верстака — паяти (${done}/${total})`
+        : `Паяємо… (${done}/${total})`
     }
     case Phase.READY: {
       const kit   = KIT_TYPES[state.activeKit]
       const price = calcPrice(kit.basePrice, state.assemblyQuality, state.upgrades.priceMultiplier)
-      return `Тапни стіл → продати $${price.toFixed(2)}`
+      return `Готово! Забери з верстака → $${price.toFixed(2)}`
     }
     case Phase.BURNT: return 'Деталь перегріта!'
     default: return ''

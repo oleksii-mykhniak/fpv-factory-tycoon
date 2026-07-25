@@ -135,6 +135,10 @@ const effects = createEffects({
   haptic,
   onStateDirty: () => { saveQueued = true },
   onColdSolder: (missMsg) => { coldWarning = missMsg ?? 'cold'; uiDirty = true },
+  // Trigger zones ask; the view decides how to answer (C2).
+  onWorkRequested: () => workAtBench(),
+  onSellRequested: () => sellDrone(),
+  onMinigame:      ({ game, agentId }) => openMinigame(game, agentId),
 })
 
 // Applies a player command and pushes the result through the presentation layer.
@@ -212,10 +216,16 @@ const piggyModal = createPiggyModal(uiRoot, {
 })
 
 const trashModal = createTrashModal(uiRoot, {
-  onSuccess: () => { haptic('light'); sceneRefs?.worker?.resumeScrapSuccess() },
-  onFail:    () => {
+  onSuccess: () => {
+    haptic('light')
+    // The player carries the parts back themselves; the puppet walks them.
+    if (scrapAgent) send('scrapCollected', { agentId: scrapAgent })
+    else sceneRefs?.worker?.resumeScrapSuccess()
+  },
+  onFail: () => {
     haptic('medium')
-    sceneRefs?.worker?.resumeScrapFail()
+    if (!scrapAgent) sceneRefs?.worker?.resumeScrapFail()
+    scrapAgent = null
     send('scrapFailed', { consolation: SCRAP_CONSOLATION })
   },
 })
@@ -227,15 +237,21 @@ const actionBar = createActionBar(uiRoot, {
 })
 
 let _lastRendered = null
+let _lastCarrySig = ''
 
 function renderUI() {
   // Every state transition returns a fresh object, so identity is a reliable
-  // dirty check — it keeps the DOM work off the 20 Hz tick.
-  if (world.game === _lastRendered && !uiDirty) return
+  // dirty check — it keeps the DOM work off the 20 Hz tick. Carried items are
+  // mutated in place though, so they need their own signature.
+  const carrySig = (world.agents ?? [])
+    .map(a => `${a.id}:${(a.carrying ?? []).map(i => i.type).join('+')}`).join('|')
+  if (world.game === _lastRendered && carrySig === _lastCarrySig && !uiDirty) return
   _lastRendered = world.game
+  _lastCarrySig = carrySig
   uiDirty = false
 
-  hud.update(world.game)
+  const player = (world.agents ?? []).find(a => a.kind === 'player')
+  hud.update(world.game, (player?.carrying ?? []).map(i => i.type))
   actionBar.update(world.game)
   shopModal.update(world.game)
   upgradeModal.update(world.game)
@@ -309,42 +325,17 @@ if (import.meta.env.MODE === 'debug') {
 // says what happened; the sim decides what it means.
 
 const INTENTS = {
-  'slot.tap':  ({ deliveryId }) => send('pickup', { deliveryId }),
-  'piggy.tap': () => { if (piggyAvailable(world)) piggyModal.open() },
-
-  'bench.tap': () => {
-    if (world.game.phase === Phase.ASSEMBLY) sceneRefs?.worker?.commandSolder()
-    if (world.game.phase === Phase.READY)    sceneRefs?.worker?.commandSell()
-  },
-  'mailbox.tap': () => {
-    if (world.game.phase === Phase.READY) sceneRefs?.worker?.commandSell()
-  },
-  'trash.tap': () => {
-    if (world.game.scrapAvailable && world.game.phase === Phase.IDLE)
-      sceneRefs?.worker?.commandScrapPickup()
-  },
-  // The carry box is driven by world.worker.desired; a tap on it is redundant.
-  'box.tap': () => {},
-
-  // ── Puppet milestones ────────────────────────────────────
+  // ── Puppet milestones ──────────────────────────────────
+  // The automated worker still walks its own routes; these are the points where
+  // its animation and the simulation have to agree. C5 replaces the puppet.
   'worker.atBench': () => send('benchArrived'),
 
-  'worker.readyToSolder': () => {
-    const { mode } = levelData('soldering', world.game.upgrades.solderingLevel)
-    if (mode === SOLDER_MODE.MANUAL) solderModal.open(world.game)
-    else send('armSolder')
-  },
+  'worker.readyToSolder': () => workAtBench(),
 
-  'worker.atMailbox': async () => {
-    if (world.game.phase !== Phase.READY) return
-    // D8.2: rewarded ×2 sale hook (hidden while ADS_ENABLED is false).
-    let priceMultBonus = 1
-    if (ADS_ENABLED && await showRewarded(PLACEMENTS.REWARD_DOUBLE_SALE)) priceMultBonus = 2
-    send('sell', { priceMultBonus })
-  },
+  'worker.atMailbox': () => sellDrone(),
 
   'worker.droppedBurnt':   () => send('abandon'),
-  'worker.atScrapBin':     () => trashModal.open(),
+  'worker.atScrapBin':     () => { scrapAgent = null; trashModal.open() },
   'worker.scrapDelivered': () => send('scrapDelivered'),
 }
 
@@ -352,6 +343,38 @@ function onIntent(type, payload = {}) {
   const handler = INTENTS[type]
   if (!handler) throw new Error(`onIntent: невідомий намір "${type}"`)
   handler(payload)
+}
+
+// ── Shared actions ────────────────────────────────────────
+//
+// A zone and the worker puppet can both ask for these, so neither owns them.
+
+// Which agent asked for the salvage mini-game; null = the puppet did.
+let scrapAgent = null
+
+function workAtBench() {
+  const { mode } = levelData('soldering', world.game.upgrades.solderingLevel)
+  if (mode === SOLDER_MODE.MANUAL) solderModal.open(world.game)
+  else send('armSolder')
+}
+
+async function sellDrone() {
+  if (world.game.phase !== Phase.READY) return
+  // D8.2: rewarded ×2 sale hook (hidden while ADS_ENABLED is false).
+  let priceMultBonus = 1
+  if (ADS_ENABLED && await showRewarded(PLACEMENTS.REWARD_DOUBLE_SALE)) priceMultBonus = 2
+  send('sell', { priceMultBonus })
+}
+
+function openMinigame(game, agentId) {
+  if (game === 'piggy') {
+    if (piggyAvailable(world)) piggyModal.open()
+    return
+  }
+  if (game === 'scrap') {
+    scrapAgent = agentId
+    trashModal.open()
+  }
 }
 
 // ── Boot ──────────────────────────────────────────────────

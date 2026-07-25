@@ -19,9 +19,11 @@ export function workerSystem(world, _dt, events) {
 
   world.worker.desired = null
 
-  // Something already in hand always wins — never interrupt a carry.
+  // Something already in hand always wins — never interrupt a carry. But if the
+  // player picked the box up themselves (C2), the puppet stays out of it.
   const carrying = deliveries.find(d => d.status === DeliveryStatus.CARRYING)
   if (carrying) {
+    if (carrying.carriedBy && carrying.carriedBy !== 'worker') return
     world.worker.targetSlotIndex = carrying.slotIndex
     world.worker.desired = 'haul'
     return
@@ -32,7 +34,7 @@ export function workerSystem(world, _dt, events) {
       d => d.status === DeliveryStatus.TRANSIT && d.readyAt <= world.now
     )
     if (arrived) {
-      world.game = pickupDelivery(world.game, arrived.id, world.now)
+      world.game = pickupDelivery(world.game, arrived.id, world.now, 'worker')
       world.worker.targetSlotIndex = arrived.slotIndex
       world.worker.desired = 'haul'
       emit(events, EV.DELIVERY_PICKED, { id: arrived.id, kitId: arrived.kitId, slotIndex: arrived.slotIndex })
@@ -46,7 +48,9 @@ export function workerSystem(world, _dt, events) {
     return
   }
 
-  if (game.phase === Phase.IDLE && game.scrapAvailable) {
+  // Scrap runs are automation too: at MANUAL the player walks to the bin
+  // themselves and the trigger zone opens the mini-game.
+  if (game.phase === Phase.IDLE && game.scrapAvailable && mode !== WORKER_MODE.MANUAL) {
     world.worker.desired = 'scrap'
   }
 }

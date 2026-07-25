@@ -11,28 +11,26 @@ const errors = []
 page.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
 page.on('pageerror', e => errors.push(`PAGEERROR: ${e.message}\n${e.stack}`))
 
-// World units → screen pixels, through the live camera (it follows the player,
-// so a fixed screen coordinate is no longer good enough).
-async function tapWorld(wx, wy) {
-  const p = await page.evaluate(({ wx, wy }) => {
-    const cam = globalThis.__refs.scene.camera
-    const r = document.getElementById('game-canvas').getBoundingClientRect()
-    return {
-      x: r.left + (wx - cam.pos.x) * cam.zoom + r.width / 2,
-      y: r.top + (wy - cam.pos.y) * cam.zoom + r.height / 2,
-    }
-  }, { wx, wy })
-  await page.mouse.click(p.x, p.y)
-}
+// ── Helpers ───────────────────────────────────────────────
 
-// Straight from defs/layouts/apartment.js
-const SLOT0   = [420, 1180]
-const BENCH   = [500, 380]
-const MAILBOX = [170, 1300]
+// Trigger zones are the only interaction now (C2), so the test drives the
+// character instead of clicking. Teleport for loop tests, real keys for the
+// movement tests — otherwise a pathing mistake would look like a zone bug.
+const goTo = (zoneId) => page.evaluate((id) => {
+  const w = globalThis.__world
+  const z = w.zones.find(x => x.id === id)
+  const a = w.agents.find(x => x.kind === 'player')
+  a.x = z.cx; a.y = z.cy
+}, zoneId)
+
+const goAway = () => page.evaluate(() => {
+  const a = globalThis.__world.agents.find(x => x.kind === 'player')
+  a.x = 800; a.y = 700
+})
 
 const player = () => page.evaluate(() => {
   const a = globalThis.__world?.agents?.find(x => x.kind === 'player')
-  return a ? { x: Math.round(a.x), y: Math.round(a.y), moving: a.moving } : null
+  return a ? { x: Math.round(a.x), y: Math.round(a.y), carrying: a.carrying.map(i => i.type) } : null
 })
 
 async function hold(key, ms) {
@@ -44,24 +42,17 @@ async function hold(key, ms) {
 
 const status = async () => ({
   money: (await page.textContent('#hud-money').catch(() => '?')).trim(),
-  hint:  (await page.textContent('#hud-hint').catch(() => '?')).trim(),
-  solderOpen: await page.locator('#solder-modal').isVisible().catch(() => false),
   phase: await page.evaluate(() => globalThis.__world?.game?.phase ?? '?'),
-  sim: await page.evaluate(() => {
-    const w = globalThis.__world
-    if (!w) return '?'
-    const d = (w.game.deliveries ?? []).map(x => `${x.slotIndex}:${x.status}`).join(',')
-    const r = globalThis.__refs
-    const a = r?.worker?.actor
-    const pos = a ? `(${a.pos.x.toFixed(0)},${a.pos.y.toFixed(0)})` : '?'
-    const p = w.agents?.find(x => x.kind === 'player')
-    const pp = p ? `(${p.x.toFixed(0)},${p.y.toFixed(0)})` : '?'
-    return `player=${pp} desired=${w.worker.desired} fsm=${r?.worker?.getState?.()} workerPos=${pos} deliveries=[${d}]`
-  }),
+  solderOpen: await page.locator('#solder-modal').isVisible().catch(() => false),
+  trashOpen:  await page.locator('.tinder-overlay').isVisible().catch(() => false),
+  piggyOpen:  await page.locator('.piggy-overlay').isVisible().catch(() => false),
+  carrying: (await player())?.carrying ?? [],
 })
+
 const log = async (label) => {
   const s = await status()
-  console.log(`— ${label.padEnd(26)} money=${s.money.padEnd(9)} phase=${String(s.phase).padEnd(8)} solder=${s.solderOpen} hint="${s.hint}"\n    ${s.sim}`)
+  console.log(`— ${label.padEnd(30)} money=${s.money.padEnd(9)} phase=${String(s.phase).padEnd(8)} ` +
+              `carry=[${s.carrying}] solder=${s.solderOpen} trash=${s.trashOpen} piggy=${s.piggyOpen}`)
   return s
 }
 
@@ -84,97 +75,118 @@ async function orderFirstKit() {
   await page.waitForTimeout(600)
 }
 
-// ── Scenario A — MANUAL: tap the arrived box, expect the mini-game ─────
-console.log('\n### A. MANUAL cycle (tap-driven)')
-await boot(null)
-await log('boot')
-await orderFirstKit()
-await log('ordered')
-await page.waitForTimeout(5000)
-await log('courier arrived')
-await tapWorld(...SLOT0)
-await page.waitForTimeout(600)
-await log('tapped street slot')
-await page.waitForTimeout(9000)
-const a = await log('worker reached bench')
-await tapWorld(...BENCH)
-await page.waitForTimeout(800)
-const aSolder = await log('tapped bench → mini-game')
-
-// ── Scenario B — full AUTO: nothing but ordering and selling ───────────
-console.log('\n### B. AUTO cycle (sim-driven, no taps during assembly)')
-const seed = {
+const seedState = (upgrades, extra = {}) => ({
   version: 1,
   savedAt: Date.now(),
   state: {
     money: 1000, phase: 'IDLE', activeKit: null, solderPoints: [], assemblyQuality: null,
     coldSolderPenalty: 0, lastPiggyAt: null, locationId: 'workshop', onboarded: true,
     scrapAvailable: false, deliveries: [],
-    upgrades: { priceMultiplier: 1, solderingLevel: 3, workerLevel: 2, consumablesLevel: 0, storageLevel: 0, logisticsLevel: 0 },
+    upgrades: {
+      priceMultiplier: 1, solderingLevel: 0, workerLevel: 0,
+      consumablesLevel: 0, storageLevel: 0, logisticsLevel: 0, ...upgrades,
+    },
+    ...extra,
   },
   salesLog: [],
-}
-await boot(seed)
-const b0 = await log('boot (auto shop)')
+})
+
+// ── A. The whole loop on foot, zero taps ──────────────────
+console.log('\n### A. Full cycle through trigger zones (no taps at all)')
+await boot(seedState({ solderingLevel: 3 }))   // bench solders itself; player hauls
+await log('boot')
 await orderFirstKit()
 await log('ordered')
-for (let i = 0; i < 6; i++) {
-  await page.waitForTimeout(4000)
-  await log(`  +${(i + 1) * 4}s`)
-}
-const bReady = await log('after assembly window')
-await tapWorld(...BENCH)
-await page.waitForTimeout(9000)
-const bSold = await log('tapped bench → sell')
+await page.waitForTimeout(5000)
+await log('courier arrived')
 
-// ── Scenario C — C1: character movement, camera, collisions ───────────
+await goTo('slot0')
+await page.waitForTimeout(700)
+const aPick = await log('stood in the street slot')
+
+await goTo('bench')
+await page.waitForTimeout(2000)
+const aDrop = await log('stood at the bench')
+
+await page.waitForTimeout(12000)
+const aReady = await log('bench finished on its own')
+
+await goAway(); await page.waitForTimeout(600)
+await goTo('bench')
+await page.waitForTimeout(2000)
+const aTake = await log('collected the drone')
+
+await goTo('mailbox')
+await page.waitForTimeout(2500)
+const aSold = await log('stood at the mailbox')
+
+// ── B. Zones open the mini-games ──────────────────────────
+console.log('\n### B. Zones open the mini-games')
+await boot(seedState({}))          // manual iron
+await orderFirstKit()
+await page.waitForTimeout(5000)
+await goTo('slot0'); await page.waitForTimeout(600)
+await goTo('bench'); await page.waitForTimeout(3500)
+const bSolder = await log('bench zone, manual iron')
+
+await boot(seedState({}, { money: 5 }))
+await goTo('piggy'); await page.waitForTimeout(900)
+const bPiggy = await log('piggy zone while broke')
+
+await boot(seedState({}, { scrapAvailable: true }))
+await goTo('trashbin'); await page.waitForTimeout(2000)
+const bTrash = await log('trash zone with salvage ordered')
+
+// ── C. Movement, collisions, camera (C1 regression) ───────
 console.log('\n### C. Movement (WASD)')
-await boot(seed)
+await boot(seedState({}))
 const c0 = await player()
-console.log(`  spawn: ${JSON.stringify(c0)}`)
+await hold('KeyD', 900); const cRight = await player()
+await hold('KeyA', 900); const cBack  = await player()
+await hold('KeyA', 4000); const cWall = await player()
+console.log(`  spawn ${c0.x} → right ${cRight.x} → back ${cBack.x} → wall ${cWall.x}`)
 
-await hold('KeyD', 900)
-const cRight = await player()
-console.log(`  after D 900ms: ${JSON.stringify(cRight)}`)
-
-await hold('KeyA', 900)
-const cBack = await player()
-console.log(`  after A 900ms: ${JSON.stringify(cBack)}`)
-
-// Walk hard into the left wall (x=24 thick) — must stop, never pass through.
-await hold('KeyA', 4000)
-const cWall = await player()
-console.log(`  after A 4s (into wall): ${JSON.stringify(cWall)}`)
-
-// Walk up into the workbench (bench spans y 340..420, x 350..650).
-await boot(seed)
-await hold('KeyW', 4000)
-const cBench = await player()
-console.log(`  after W 4s (into bench): ${JSON.stringify(cBench)}`)
-
-// Camera must have followed rather than stayed put.
-await boot(seed)
+await boot(seedState({}))
+await hold('KeyW', 4000); const cBench = await player()
 const camBefore = await page.evaluate(() => globalThis.__refs.scene.camera.pos.y)
 await hold('KeyS', 1200)
 const camAfter = await page.evaluate(() => globalThis.__refs.scene.camera.pos.y)
-console.log(`  camera y: ${camBefore.toFixed(0)} → ${camAfter.toFixed(0)}`)
+console.log(`  bench stop y=${cBench.y}; camera ${camBefore.toFixed(0)} → ${camAfter.toFixed(0)}`)
+
+// The real route: line up with the doorway, walk out, pick the box up on foot.
+await boot(seedState({}))
+await orderFirstKit()
+await page.waitForTimeout(5000)
+await page.evaluate(() => {
+  const a = globalThis.__world.agents.find(x => x.kind === 'player')
+  a.x = 420; a.y = 900
+})
+await hold('KeyS', 2000)
+const cWalked = await player()
+console.log(`  walked out of the door: ${JSON.stringify(cWalked)}`)
 
 await page.screenshot({ path: '.smoke.png' })
 
 console.log('\n=== console errors ===')
 console.log(errors.length ? errors.join('\n---\n') : '(none)')
 
+const money = (s) => parseFloat(s.money.replace('$', ''))
 const checks = [
-  ['A: manual pickup started assembly', a.phase === 'ASSEMBLY'],
-  ['A: bench tap opened the mini-game', aSolder.solderOpen === true],
-  ['B: assembly completed on its own',  bReady.phase === 'READY'],
-  ['B: sale paid out',                  parseFloat(bSold.money.replace('$', '')) > parseFloat(b0.money.replace('$', '')) - 72],
-  ['C: moves right on D',               cRight.x > c0.x + 100],
-  ['C: moves back left on A',           cBack.x < cRight.x - 100],
-  ['C: stopped by the left wall',       cWall.x >= 24 && cWall.x <= 60],
-  ['C: stopped by the workbench',       cBench.y > 420 && cBench.y < 500],
-  ['C: camera follows the player',      camAfter > camBefore + 100],
-  ['no console errors',                 errors.length === 0],
+  ['A: slot zone put the box in hand',    aPick.carrying.includes('kit_box')],
+  ['A: bench zone started assembly',      aDrop.phase === 'ASSEMBLY' && aDrop.carrying.length === 0],
+  ['A: bench finished by itself',         aReady.phase === 'READY'],
+  ['A: bench zone handed over the drone', aTake.carrying.includes('drone')],
+  ['A: mailbox zone sold it',             aSold.phase === 'IDLE' && money(aSold) > money(aReady)],
+  ['B: bench zone opened the mini-game',  bSolder.solderOpen === true],
+  ['B: piggy zone opened the piggy game', bPiggy.piggyOpen === true],
+  ['B: trash zone opened the swipe game', bTrash.trashOpen === true],
+  ['C: moves right on D',                 cRight.x > c0.x + 100],
+  ['C: moves back left on A',             cBack.x < cRight.x - 100],
+  ['C: stopped by the left wall',         cWall.x >= 24 && cWall.x <= 60],
+  ['C: stopped by the workbench',         cBench.y > 420 && cBench.y < 500],
+  ['C: camera follows the player',        camAfter > camBefore + 100],
+  ['C: walked out and grabbed the box',   cWalked.y > 1050 && cWalked.carrying.includes('kit_box')],
+  ['no console errors',                   errors.length === 0],
 ]
 console.log('\n=== checks ===')
 for (const [name, ok] of checks) console.log(`${ok ? '✅' : '❌'} ${name}`)

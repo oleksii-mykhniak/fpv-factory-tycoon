@@ -27,6 +27,18 @@ export const EV = Object.freeze({
   MONEY_SPENT:  'money.spent',            // { amount, reason }
   SALE_MADE:    'sale.made',              // { kitId, quality, price }
 
+  // Zones & carrying (C2)
+  ZONE_ENTER:   'zone.enter',           // { zoneId, agentId }
+  ZONE_EXIT:    'zone.exit',            // { zoneId, agentId }
+  ZONE_FIRED:   'zone.fired',           // { zoneId, agentId, kind }
+  ITEM_PICKED:  'item.picked',          // { agentId, item }
+  ITEM_DROPPED: 'item.dropped',         // { agentId, item }
+
+  // Requests an interaction raises for the view/commands to complete
+  WORK_REQUESTED:     'work.requested',     // { agentId, station }
+  SELL_REQUESTED:     'sell.requested',     // { agentId }
+  MINIGAME_REQUESTED: 'minigame.requested', // { agentId, game }
+
   // Side activities
   PIGGY_COLLECTED: 'piggy.collected',     // { amount }
   SCRAP_REQUESTED: 'scrap.requested',     // {}
