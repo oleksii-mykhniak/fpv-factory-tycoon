@@ -338,6 +338,13 @@ export function hireWorker(state, roleId, now = Date.now(), makeId = null) {
   }
 }
 
+// Free delivery slots right now — how many more kits may be in flight.
+export function freeSlots(state) {
+  const storageLevel = state.upgrades.storageLevel ?? 0
+  const maxSlots     = 1 + (STORAGE_SLOTS_BY_LEVEL[storageLevel] ?? 0)
+  return Math.max(0, maxSlots - (state.deliveries ?? []).length)
+}
+
 // ── Scrap (Tinder mini-game → free drone assembly) ───────
 
 export function startScrap(state) {

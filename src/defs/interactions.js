@@ -19,16 +19,17 @@
 import {
   Phase, DeliveryStatus, KIT_TYPES,
   pickupDelivery, startAssembly, startScrapAssembly, getStation,
-  sell as sellStation, calcPrice, takeOutput,
+  sell as sellStation, calcPrice, takeOutput, orderKit,
 } from '../state/gameState.js'
 import {
   ZONE_DWELL_INSTANT_MS, ZONE_DWELL_BENCH_MS, ZONE_DWELL_OUTPUT_MS,
   ZONE_DWELL_MAILBOX_MS, ZONE_DWELL_TRASH_MS, ZONE_DWELL_PANEL_MS,
-  CARRY_CAPACITY,
+  CARRY_CAPACITY, MANAGER_COOLDOWN_MS,
 } from '../state/config.js'
 import { EV, emit } from '../sim/events.js'
 import {
   piggyShouldShow, shopNeedsAttention, upgradeNeedsAttention, hireNeedsAttention,
+  managerKitChoice,
 } from '../sim/derive.js'
 import { hiringAllowed } from '../state/locations.js'
 
@@ -193,18 +194,40 @@ export const INTERACTIONS = {
 
   // Desk with a laptop: order kits.
   //
-  // `enabled` and `attention` differ here for the first time. You may always
-  // walk up and look at the shop — a panel that refuses to open because you are
-  // broke would just look broken. What the desk must NOT do is glow and drag
-  // the guidance arrow over when there is nothing worth buying.
+  // Two sources of intent at one object, exactly as at the bench (C2): the
+  // player standing here opens the shop, a procurement manager standing here
+  // places the order themselves (S3). Neither knows about the other.
+  //
+  // `enabled` and `attention` differ here for the first time. The player may
+  // always walk up and look at the shop — a panel that refuses to open because
+  // you are broke would just look broken. What the desk must NOT do is glow and
+  // drag the guidance arrow over when there is nothing worth buying.
   desk: {
     dwellMs: ZONE_DWELL_PANEL_MS,
     repeat:  false,
-    accepts: 'player',
-    enabled: () => true,
-    attention: (world) => shopNeedsAttention(world.game),
-    run: (_world, _zone, agent, events) =>
-      emit(events, EV.PANEL_REQUESTED, { agentId: agent.id, panel: 'shop' }),
+    accepts: 'any',
+    enabled(world, _zone, agent) {
+      if (agent.kind === 'player') return true
+      if (agent.role !== 'manager') return false
+      if (world.now < (world.managerNextOrderAt ?? 0)) return false
+      return !!managerKitChoice(world.game, agent.level ?? 0)
+    },
+    attention: (world, _zone, agent) =>
+      agent?.kind === 'player' ? shopNeedsAttention(world.game) : true,
+    run(world, _zone, agent, events) {
+      if (agent.kind === 'player') {
+        emit(events, EV.PANEL_REQUESTED, { agentId: agent.id, panel: 'shop' })
+        return
+      }
+      const kit = managerKitChoice(world.game, agent.level ?? 0)
+      if (!kit) return
+      world.game = orderKit(world.game, kit.id, world.now, () => `kit-${world.seq++}`)
+      // A short cooldown so a rich manager does not fill every slot in one walk.
+      world.managerNextOrderAt = world.now + MANAGER_COOLDOWN_MS
+      emit(events, EV.DELIVERY_ORDERED, { kitId: kit.id, byAgent: agent.id })
+      emit(events, EV.MONEY_SPENT, { amount: kit.cost, reason: 'order' })
+      emit(events, EV.STATE_DIRTY)
+    },
   },
 
   // Upgrade rack: the workshop's own kit.

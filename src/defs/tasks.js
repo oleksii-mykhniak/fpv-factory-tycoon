@@ -41,6 +41,20 @@ export const TASKS = Object.freeze({
     ],
   },
 
+  // Stand at the laptop until the order is placed (S3). Nothing here says
+  // "buy a kit": the desk zone does that, exactly as the street slot is what
+  // picks a box up. The task is only the walk and the wait.
+  order_kit: {
+    id:       'order_kit',
+    role:     'manager',
+    priority: 12,
+    steps: [
+      { op: 'goto',    zone: 'job.atZone' },
+      { op: 'waitFor', cond: 'orderPlaced', timeoutMs: 8000 },
+      { op: 'done' },
+    ],
+  },
+
   // Finished drone → mailbox.
   sell_drone: {
     id:       'sell_drone',

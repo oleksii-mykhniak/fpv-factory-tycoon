@@ -46,6 +46,10 @@ const CONDITIONS = {
   carrying:    (world, agent) => (agent.carrying ?? []).length > 0,
   notCarrying: (world, agent) => (agent.carrying ?? []).length === 0,
 
+  // The manager's errand is done the moment there is one more kit in flight
+  // than when they set off.
+  orderPlaced: (world, agent) => (world.game.deliveries ?? []).length > (agent.task?.deliveriesAtStart ?? 0),
+
   // The bench is finished (or was cleared by someone else) — either way the
   // technician's shift there is over.
   stationIdleOrDone: (world, agent, job) => {
@@ -218,7 +222,11 @@ export function agentSystem(world, dt, events) {
       if (!job) { idleWander(world, agent, dt); continue }
 
       job.claimedBy = agent.id
-      agent.task = { jobId: job.id, stepIndex: 0, waited: 0 }
+      agent.task = {
+        jobId: job.id, stepIndex: 0, waited: 0,
+        // Snapshot for the `orderPlaced` condition: "one more than when I left".
+        deliveriesAtStart: (world.game.deliveries ?? []).length,
+      }
       agent.idleMs = 0
       stopPath(agent)
       emit(events, EV.JOB_CLAIMED, { agentId: agent.id, jobId: job.id, type: job.type })

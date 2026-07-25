@@ -237,6 +237,54 @@ const KIT_COST = 72
 
 // ── Регресії з валідації на пристрої (2026-07-25) ──
 
+// ── S3: procurement manager ───────────────────────────────
+
+describe('sim/agentSystem — менеджер закупівель', () => {
+  it('sends the manager to the laptop and a kit gets ordered', () => {
+    const w = world({ hire: ['manager'], money: 3000 })
+    expect(w.game.deliveries).toHaveLength(0)
+
+    run(w, 20_000)
+
+    expect(w.game.deliveries.length).toBeGreaterThan(0)
+    expect(w.game.ordersPlaced).toBeGreaterThan(0)
+  })
+
+  it('keeps a reserve rather than spending the shop dry', () => {
+    const w = world({ hire: ['manager'], money: 3000 })
+    // Enough for the kit itself but not for the reserve on top. Set after
+    // hiring: the hire has to be affordable, the purchase must not be.
+    w.game = { ...w.game, money: KIT_COST * 1.2 }
+    const before = w.game.money
+    run(w, 20_000)
+    expect(w.game.deliveries).toHaveLength(0)
+    expect(w.game.money).toBe(before)
+  })
+
+  it('does not order while every bench is busy', () => {
+    const w = world({ hire: ['manager'], money: 3000 })
+    run(w, 20_000)
+    const afterFirst = w.game.deliveries.length
+    // Put the kit on the bench by hand: with the bench working and the slot
+    // still free, a second order would just pile up boxes nobody can use.
+    w.game = { ...w.game, deliveries: [], stations: [{ ...station(w), phase: Phase.ASSEMBLY, kitId: 'mini_drone' }] }
+    run(w, 20_000)
+    expect(afterFirst).toBeGreaterThan(0)
+    expect(w.game.deliveries).toHaveLength(0)
+  })
+
+  it('the whole shop runs with nobody touching it', () => {
+    const w = world({ hire: ['manager', 'courier', 'tech', 'seller'], money: 4000 })
+    const p = w.agents.find(a => a.kind === 'player')
+    const parked = { x: p.x, y: p.y }
+
+    run(w, 240_000)
+
+    expect(w.salesLog.length).toBeGreaterThanOrEqual(2)
+    expect(Math.hypot(p.x - parked.x, p.y - parked.y)).toBeLessThan(1)
+  })
+})
+
 describe('фікси після тесту на телефоні', () => {
   it('технік тримає позицію біля верстака, коли колега проходить повз', () => {
     // Раніше м'яка сепарація поволі виштовхувала техніка із зони; після того,

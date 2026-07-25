@@ -8,6 +8,7 @@
 
 import { Phase, DeliveryStatus, stationsOf } from '../../state/gameState.js'
 import { taskDef } from '../../defs/tasks.js'
+import { managerKitChoice } from '../derive.js'
 
 // The zone a station's work happens in.
 const stationZone = (world, stationId) =>
@@ -76,6 +77,13 @@ export function deriveJobs(world) {
       fromZone,
       toZone,
     })
+  }
+
+  // 0. Somebody should go and order a kit (S3). One job at a time: two managers
+  // walking to the same laptop for the same purchase would each place one.
+  const deskZone = (world.zones ?? []).find(z => z.kind === 'desk')?.id
+  if (deskZone && world.now >= (world.managerNextOrderAt ?? 0) && managerKitChoice(game, 0)) {
+    jobs.push({ id: 'order_kit:desk', type: 'order_kit', atZone: deskZone })
   }
 
   for (const station of stationsOf(game)) {

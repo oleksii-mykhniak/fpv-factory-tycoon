@@ -81,7 +81,7 @@ export const MOVE_MAX_STEP = 8
 
 // ── Hired workers (C5) ───────────────────────────────────
 // Hiring the n-th worker of a role costs base × growth^n.
-export const HIRE_COST_BASE   = { courier: 260, tech: 420, seller: 320 }
+export const HIRE_COST_BASE   = { courier: 260, tech: 420, seller: 320, manager: 640 }
 export const HIRE_COST_GROWTH = 1.85
 
 export const COURIER_SPEED_BY_LEVEL = [170, 205, 240]
@@ -90,6 +90,23 @@ export const SELLER_SPEED_BY_LEVEL  = [170, 205, 240]
 // manual player and better than nothing — hiring buys time, not perfection.
 export const TECH_POINT_MS_BY_LEVEL = [2600, 2000, 1500]
 export const TECH_QUALITY_BY_LEVEL  = [0.55, 0.65, 0.75]
+
+// ── Procurement manager (S3) ─────────────────────────────
+// The manager sits at the laptop and orders kits so the player does not have
+// to. Deliberately the most expensive hire: it is the one that closes the loop
+// and lets the shop run with nobody touching it.
+export const MANAGER_SPEED_BY_LEVEL = [170, 205, 240]
+// How much more than the kit's price must be in the bank before the manager
+// spends it. Without a reserve they empty the account on the first tick and the
+// player can never buy an upgrade — the shop optimises itself into a corner.
+export const MANAGER_RESERVE = 1.8
+// How far up the price list this manager is allowed to shop, as an index into
+// the location's kit list sorted by cost. Level 0 buys the cheapest thing that
+// works; a trained one buys what actually pays.
+export const MANAGER_TIER_BY_LEVEL = [0, 1, 99]
+// Pause between two orders, so a manager with money never machine-guns the
+// delivery slots the moment they free up.
+export const MANAGER_COOLDOWN_MS = 4000
 
 // How much of a closed-app absence is ever paid out (C7).
 export const OFFLINE_CAP_MS = 4 * 60 * 60 * 1000

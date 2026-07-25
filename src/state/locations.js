@@ -28,6 +28,8 @@ export const LOCATIONS = Object.freeze({
     upgradeCaps: { soldering: 3, storage: 1, logistics: 1, consumables: 2, benches: 1 },
     hiring: true,
     // Two benches fit here, so two pairs of hands are all there is work for.
+    // Four roles for two slots is the point: the garage is where you have to
+    // choose what to automate first (S3).
     maxWorkers: 2,
     unlockCost: 800,
     unlockReq: { minUpgrades: { soldering: 2 } },
@@ -40,7 +42,9 @@ export const LOCATIONS = Object.freeze({
     kitIds: ['mini_drone', 'racing_drone', 'cinematic_drone', 'longrange_drone'],
     upgradeCaps: { soldering: 3, storage: 2, logistics: 2, consumables: 2, benches: 2 },
     hiring: true,
-    maxWorkers: 4,
+    // Enough for one of each role plus a spare pair of hands: the workshop is
+    // where the shop can finally run itself (S3).
+    maxWorkers: 5,
     unlockCost: 2500,
     unlockReq: { minUpgrades: { soldering: 3, consumables: 2 } },
     sceneConfig: { bgColor: '#180d18', floorColor: '#261a26' },

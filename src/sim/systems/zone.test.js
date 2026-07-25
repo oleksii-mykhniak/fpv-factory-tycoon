@@ -255,6 +255,21 @@ describe('sim/interactions — the full loop without a single tap', () => {
     expect(events.filter(e => e.t === EV.PANEL_REQUESTED)).toHaveLength(0)
   })
 
+  it('S3: the same desk serves the player a panel and the manager an order', () => {
+    const w = world()
+    const z = zone('desk')
+    w.game = { ...w.game, money: 3000 }
+    w.agents.push({
+      id: 'm1', kind: 'worker', role: 'manager', x: z.cx, y: z.cy, level: 0,
+      vx: 0, vy: 0, halfW: 20, halfH: 14, speed: 0, carrying: [],
+    })
+    standAt(w, { cx: 800, cy: 700 })
+
+    const events = run(w, 2000)
+    expect(events.filter(e => e.t === EV.PANEL_REQUESTED)).toHaveLength(0)
+    expect(w.game.deliveries.length).toBe(1)
+  })
+
   it('S2: a worker walking past the desk never opens the shop', () => {
     const w = world()
     const z = zone('desk')

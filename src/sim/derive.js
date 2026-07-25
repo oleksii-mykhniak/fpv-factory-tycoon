@@ -7,15 +7,15 @@
 // mini-game never appeared).
 
 import {
-  KIT_TYPES, busyStations, idleStations, Phase, stationsOf, nextHireCost,
+  KIT_TYPES, busyStations, idleStations, Phase, stationsOf, nextHireCost, freeSlots,
 } from '../state/gameState.js'
-import { GUIDANCE_ORDERS, GUIDANCE_SCRAP_RUNS } from '../state/config.js'
+import { GUIDANCE_ORDERS, GUIDANCE_SCRAP_RUNS, MANAGER_RESERVE } from '../state/config.js'
 import { levelData, UPGRADE_TRACKS } from '../state/upgrades.js'
 import {
   kitsForLocation, hiringAllowed, maxWorkersHere, capFor,
   canMoveToLocation, LOCATION_ORDER,
 } from '../state/locations.js'
-import { ROLE_ORDER } from '../defs/roles.js'
+import { ROLE_ORDER, roleLevelData } from '../defs/roles.js'
 
 // Cheapest kit the player could actually buy. Free kits (scrap) are not
 // purchases and must not count.
@@ -69,6 +69,27 @@ export function hireNeedsAttention(game) {
   if (!hiringAllowed(game)) return false
   if ((game.workers ?? []).length >= maxWorkersHere(game)) return false
   return ROLE_ORDER.some(id => game.money >= nextHireCost(game, id))
+}
+
+// ── Procurement (S3) ──────────────────────────────────────
+//
+// Which kit a manager of this level should buy right now, or null when they
+// should keep their hands in their pockets. The rule is deliberately plain:
+// the best kit they are trained for, that there is room for, and that leaves
+// the reserve intact — a manager who spends down to zero would quietly stop
+// the player ever affording an upgrade.
+export function managerKitChoice(game, level = 0) {
+  if (!freeSlots(game)) return null
+  if (!idleStations(game).length) return null
+
+  const tier = roleLevelData('manager', level).tier ?? 0
+  const affordable = kitsForLocation(game)
+    .map(id => KIT_TYPES[id])
+    .filter(k => k && k.cost > 0)
+    .sort((a, b) => a.cost - b.cost)
+    .filter((k, i) => i <= tier && game.money >= k.cost * MANAGER_RESERVE)
+
+  return affordable.length ? affordable[affordable.length - 1] : null
 }
 
 // The station the player is standing at, if it has a kit on it (C6).

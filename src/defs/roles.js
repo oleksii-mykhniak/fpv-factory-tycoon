@@ -7,7 +7,7 @@
 import {
   HIRE_COST_BASE, HIRE_COST_GROWTH,
   COURIER_SPEED_BY_LEVEL, TECH_POINT_MS_BY_LEVEL, TECH_QUALITY_BY_LEVEL,
-  SELLER_SPEED_BY_LEVEL,
+  SELLER_SPEED_BY_LEVEL, MANAGER_SPEED_BY_LEVEL, MANAGER_TIER_BY_LEVEL,
 } from '../state/config.js'
 
 export const ROLES = Object.freeze({
@@ -56,9 +56,25 @@ export const ROLES = Object.freeze({
     hire: { base: HIRE_COST_BASE.seller, growth: HIRE_COST_GROWTH },
     levels: SELLER_SPEED_BY_LEVEL.map(speed => ({ speed })),
   },
+
+  // Procurement (S3): works the laptop, so the player stops being the one who
+  // has to remember to order. With this role hired alongside the other three
+  // the loop closes — order, haul, solder, sell — and the player becomes the
+  // one who speeds things up rather than the one it stops without.
+  manager: {
+    id: 'manager',
+    name: 'Менеджер',
+    emoji: '🧑‍💼',
+    hint: 'Сам замовляє комплекти за ноутбуком',
+    color: '#a06ad8',
+    badge: '🧾',
+    accepts: ['order_kit'],
+    hire: { base: HIRE_COST_BASE.manager, growth: HIRE_COST_GROWTH },
+    levels: MANAGER_SPEED_BY_LEVEL.map((speed, i) => ({ speed, tier: MANAGER_TIER_BY_LEVEL[i] })),
+  },
 })
 
-export const ROLE_ORDER = Object.freeze(['courier', 'tech', 'seller'])
+export const ROLE_ORDER = Object.freeze(['courier', 'tech', 'seller', 'manager'])
 
 export function roleDef(roleId) {
   const role = ROLES[roleId]
