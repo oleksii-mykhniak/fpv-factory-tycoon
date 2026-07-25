@@ -5,7 +5,7 @@ import {
   createStation, stationsOf,
 } from './state/gameState.js'
 import { ADS_ENABLED, SCRAP_CONSOLATION, INPUT_DEADZONE } from './state/config.js'
-import { levelData, SOLDER_MODE } from './state/upgrades.js'
+import { levelData } from './state/upgrades.js'
 import { currentLocation } from './state/locations.js'
 import { setMuted } from './audio/sfx.js'
 import { showRewarded, PLACEMENTS } from './monetization/ads.js'
@@ -18,6 +18,7 @@ import { mergeInput } from './input/inputVector.js'
 import { createWorld, serializeWorld } from './sim/world.js'
 import { advance } from './sim/loop.js'
 import { dispatch, piggyAvailable } from './sim/commands.js'
+import { playerStation } from './sim/derive.js'
 import { SYSTEMS } from './sim/systems/index.js'
 
 import { createHUD } from './ui/hud.js'
@@ -26,6 +27,7 @@ import { createShopModal } from './ui/shopModal.js'
 import { createUpgradeModal } from './ui/upgradeModal.js'
 import { createSettingsModal } from './ui/settingsModal.js'
 import { createSolderModal } from './ui/solderModal.js'
+import { createSolderBar } from './ui/solderBar.js'
 import { createPiggyModal } from './ui/piggyModal.js'
 import { createTrashModal } from './ui/trashModal.js'
 
@@ -138,6 +140,8 @@ function haptic(style = 'light') {
 
 // Movement must not fire while a modal has the player's attention, and a
 // pointer that starts on UI chrome belongs to that chrome (see joystick.js).
+// The soldering strip deliberately does NOT block movement: it is not a modal,
+// and walking away from a bench mid-solder is a legitimate move.
 function inputBlocked() {
   if (document.querySelector('.modal-overlay:not([hidden])')) return true
   const onboarding = document.getElementById('onboarding')
@@ -155,7 +159,6 @@ const effects = createEffects({
   onStateDirty: () => { saveQueued = true },
   onColdSolder: (missMsg) => { coldWarning = missMsg ?? 'cold'; uiDirty = true },
   // Trigger zones ask; the view decides how to answer (C2).
-  onWorkRequested: (e) => workAtBench(e?.stationId),
   onSaleMade:      () => offerSaleBonus(),
   onMinigame:      ({ game, agentId }) => openMinigame(game, agentId),
 })
@@ -219,6 +222,12 @@ const settingsModal = createSettingsModal(uiRoot, {
   hapticsEnabled = s.haptics
 }
 
+// The soldering strip: shown while the player stands at a bench (C6).
+const solderBar = createSolderBar(uiRoot, {
+  onSolderResult: (quality, stationId) => send('solderResult', { quality, stationId }),
+})
+
+// The modal survives for one job only: deciding what to do with a burnt kit.
 const solderModal = createSolderModal(uiRoot, {
   onSolderResult: (quality, stationId) => send('solderResult', { quality, stationId }),
   // The burnt drone is carried out first; the state change lands when the
@@ -257,6 +266,7 @@ const actionBar = createActionBar(uiRoot, {
 
 let _lastRendered = null
 let _lastCarrySig = ''
+let _lastStation  = ''
 
 function renderUI() {
   // Every state transition returns a fresh object, so identity is a reliable
@@ -264,7 +274,12 @@ function renderUI() {
   // mutated in place though, so they need their own signature.
   const carrySig = (world.agents ?? [])
     .map(a => `${a.id}:${(a.carrying ?? []).map(i => i.type).join('+')}`).join('|')
-  if (world.game === _lastRendered && carrySig === _lastCarrySig && !uiDirty) return
+  // Standing at a bench is not part of game state, so it needs its own signal —
+  // without it the strip would not appear until something else changed.
+  const atStation = playerStation(world)?.id ?? ''
+  if (world.game === _lastRendered && carrySig === _lastCarrySig &&
+      atStation === _lastStation && !uiDirty) return
+  _lastStation = atStation
   _lastRendered = world.game
   _lastCarrySig = carrySig
   uiDirty = false
@@ -275,16 +290,15 @@ function renderUI() {
   shopModal.update(world.game)
   upgradeModal.update(world.game)
   solderModal.update(world.game, coldWarning ? 'cold' : null)
+
+  // The soldering strip follows the player's feet, not a button (C6).
+  solderBar.update(world.game, playerStation(world), coldWarning)
   coldWarning = null
 
   // Progress cards belong to the sim's assembly stages; hide the ones whose
-  // station is not running one.
-  const mode = levelData('soldering', world.game.upgrades.solderingLevel).mode
+  // station is not running one right now.
   for (const view of sceneRefs?.stations ?? []) {
-    const station = stationsOf(world.game).find(s => s.id === view.id)
-    if (!station || station.phase !== Phase.ASSEMBLY || mode === SOLDER_MODE.MANUAL) {
-      view.progress.hide()
-    }
+    if (!world.stationRuntime?.[view.id]?.running) view.progress.hide()
   }
 }
 
@@ -363,12 +377,6 @@ function onIntent(type, payload = {}) {
 
 // Which agent asked for the salvage mini-game; null = the puppet did.
 let scrapAgent = null
-
-function workAtBench(stationId) {
-  const { mode } = levelData('soldering', world.game.upgrades.solderingLevel)
-  if (mode === SOLDER_MODE.MANUAL) solderModal.open(world.game, stationId)
-  else send('armSolder', { stationId })
-}
 
 // D8.2: rewarded ×2 sale hook. The sale itself already completed at the
 // mailbox — this only offers to double it, and is a no-op while ADS_ENABLED is

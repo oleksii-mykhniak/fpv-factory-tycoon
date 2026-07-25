@@ -12,7 +12,7 @@ export const LOCATIONS = Object.freeze({
     kitIds: ['mini_drone', 'racing_drone', 'cinematic_drone'],
     // Max level achievable at this location per upgrade track.
     // 0 = fully locked (can't buy any level); Infinity = no cap.
-    upgradeCaps: { soldering: 2, worker: 1, storage: 0, logistics: 0, consumables: 2, benches: 0 },
+    upgradeCaps: { soldering: 2, storage: 0, logistics: 0, consumables: 2, benches: 0 },
     unlockCost: 0,
     unlockReq: null,
     sceneConfig: { bgColor: '#0e0e18', floorColor: '#1a1a26' },
@@ -22,7 +22,7 @@ export const LOCATIONS = Object.freeze({
     name: 'Гараж',
     emoji: '🔧',
     kitIds: ['mini_drone', 'racing_drone', 'cinematic_drone', 'longrange_drone'],
-    upgradeCaps: { soldering: 3, worker: 2, storage: 1, logistics: 1, consumables: 2, benches: 1 },
+    upgradeCaps: { soldering: 3, storage: 1, logistics: 1, consumables: 2, benches: 1 },
     unlockCost: 800,
     unlockReq: { minUpgrades: { soldering: 2 } },
     sceneConfig: { bgColor: '#0d1810', floorColor: '#1a2618' },
@@ -32,9 +32,9 @@ export const LOCATIONS = Object.freeze({
     name: 'Майстерня',
     emoji: '🏭',
     kitIds: ['mini_drone', 'racing_drone', 'cinematic_drone', 'longrange_drone'],
-    upgradeCaps: { soldering: 3, worker: 2, storage: 2, logistics: 2, consumables: 2, benches: 2 },
+    upgradeCaps: { soldering: 3, storage: 2, logistics: 2, consumables: 2, benches: 2 },
     unlockCost: 2500,
-    unlockReq: { minUpgrades: { soldering: 3, worker: 2 } },
+    unlockReq: { minUpgrades: { soldering: 3, consumables: 2 } },
     sceneConfig: { bgColor: '#180d18', floorColor: '#261a26' },
   },
 })

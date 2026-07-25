@@ -38,11 +38,17 @@ export const BETTER_IRON_GREEN_HALF     = 0.22  // wider zone
 export const BETTER_IRON_OVERHEAT_CHANCE = 0.10  // 60% less overheat risk
 
 // ── Upgrade: Semi-auto / template (level 2) ──────────────
+// C6: every level keeps hand-soldering parameters too — the track changes how
+// good and how fast the bench is, never whether the player may work it.
+export const SEMIAUTO_GREEN_HALF      = 0.24
+export const SEMIAUTO_OVERHEAT_CHANCE = 0.08
 export const SEMIAUTO_QUALITY_MIN    = 0.65
 export const SEMIAUTO_QUALITY_MAX    = 0.85
 export const SEMIAUTO_POINT_DELAY_MS = 800   // ms per auto-solder point (faster than full-auto)
 
 // ── Upgrade: Auto-solder (level 3) ───────────────────────
+export const AUTO_GREEN_HALF      = 0.30
+export const AUTO_OVERHEAT_CHANCE = 0.04
 export const AUTO_QUALITY_MIN   = 0.55
 export const AUTO_QUALITY_MAX   = 0.75
 export const AUTO_POINT_DELAY_MS = 2000  // ms between auto-soldered points
@@ -228,7 +234,6 @@ export const DEFAULT_HAPTICS = true
 // Index = current level; value = cost to reach next level.
 // Max level is derived from this array's length (see upgrades.js trackMaxLevel).
 export const SOLDERING_UPGRADE_COSTS    = [150, 300, 600]
-export const WORKER_UPGRADE_COSTS       = [250, 500]
 export const CONSUMABLES_UPGRADE_COSTS  = [120, 280]
 
 // ── Upgrade: Consumables (flux & solder) ─────────────────

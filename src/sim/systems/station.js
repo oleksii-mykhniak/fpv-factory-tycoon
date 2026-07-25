@@ -5,13 +5,14 @@
 // the same tick. The stage logic below did not change when that happened —
 // which was the point of the split.
 //
-// Modes:
-//   MANUAL — the mini-game drives progress; this system stays out of the way.
-//   SEMI   — armed by whoever works the station, then runs on its own.
-//   AUTO   — arms itself as soon as a kit is on it.
+// C6 removed the notion of a "mode" gating the bench. A station runs unattended
+// whenever SOMETHING can run it — a hired technician, or a soldering upgrade
+// good enough to work on its own. The player's mini-game is never required and
+// never suppresses that: standing at a bench only ever adds points on top, so
+// walking over can help and can never hurt.
 
 import { Phase, KIT_TYPES, recordSolderPoint, finishAssembly, calcPrice, stationsOf } from '../../state/gameState.js'
-import { levelData, SOLDER_MODE } from '../../state/upgrades.js'
+import { levelData } from '../../state/upgrades.js'
 import { roleLevelData } from '../../defs/roles.js'
 import { EV, emit } from '../events.js'
 
@@ -28,12 +29,14 @@ function technicianAt(world, stationId) {
 }
 
 // What the station runs on this tick: the soldering upgrade, a hired
-// technician, or neither. A tech works a MANUAL bench too — otherwise hiring
+// technician, or neither. A tech works a hand-iron bench too — otherwise hiring
 // one at soldering level 0 would do nothing, exactly when help is most wanted.
 // Upgrades still matter: whichever source is better wins on each axis.
-function workSource(world, station, data) {
+export function workSource(world, station, data) {
   const tech = technicianAt(world, station.id)
-  const auto = data.mode === SOLDER_MODE.AUTO || data.mode === SOLDER_MODE.SEMI
+  // Levels 2–3 supply an unattended rate; levels 0–1 only sharpen the
+  // player's own mini-game (greenHalf), so they cannot run on their own.
+  const auto = data.qualityMin !== undefined
 
   if (!tech) {
     return auto
@@ -57,12 +60,11 @@ function workSource(world, station, data) {
 // that only holds game state.
 export function stationRuntime(world, stationId) {
   return (world.stationRuntime ??= {})[stationId] ??= {
-    armed: false, running: false, elapsedMs: 0, durationMs: 0,
+    running: false, elapsedMs: 0, durationMs: 0,
   }
 }
 
 function idle(rt) {
-  rt.armed = false
   rt.running = false
   rt.elapsedMs = 0
   rt.durationMs = 0
@@ -101,11 +103,6 @@ export function stationSystem(world, dt, events) {
 
     const kit = KIT_TYPES[station.kitId]
     if (!kit) { idle(rt); continue }
-
-    // AUTO and a present technician both need no prompting; SEMI waits to be
-    // armed by whoever is working the bench.
-    if (data.mode === SOLDER_MODE.AUTO || technicianAt(world, station.id)) rt.armed = true
-    if (!rt.armed) continue
 
     if (!rt.running) {
       startStage(world, station, rt, kit, source, events)

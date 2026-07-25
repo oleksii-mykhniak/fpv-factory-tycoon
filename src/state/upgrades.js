@@ -7,28 +7,26 @@
 import {
   SOLDER_GREEN_HALF, OVERHEAT_CHANCE,
   BETTER_IRON_GREEN_HALF, BETTER_IRON_OVERHEAT_CHANCE,
+  SEMIAUTO_GREEN_HALF, SEMIAUTO_OVERHEAT_CHANCE,
   SEMIAUTO_QUALITY_MIN, SEMIAUTO_QUALITY_MAX, SEMIAUTO_POINT_DELAY_MS,
+  AUTO_GREEN_HALF, AUTO_OVERHEAT_CHANCE,
   AUTO_QUALITY_MIN, AUTO_QUALITY_MAX, AUTO_POINT_DELAY_MS,
-  SOLDERING_UPGRADE_COSTS, WORKER_UPGRADE_COSTS,
+  SOLDERING_UPGRADE_COSTS,
   CONSUMABLES_UPGRADE_COSTS, FLUX_OVERHEAT_MULT, FLUX_QUALITY_BONUS,
   STORAGE_UPGRADE_COSTS, STORAGE_SLOTS_BY_LEVEL,
   BENCH_UPGRADE_COSTS,
   LOGISTICS_UPGRADE_COSTS, LOGISTICS_DELIVERY_MULT,
 } from './config.js'
 
-// Assembly behaviour a soldering level drives. main.js branches on this instead of
-// hardcoded level numbers, so adding a level is purely data.
-export const SOLDER_MODE = Object.freeze({
-  MANUAL: 'manual',  // reaction mini-game (player solders each point)
-  SEMI:   'semi',    // one tap solders the whole kit
-  AUTO:   'auto',    // background timer solders each point on its own
-})
+// C6 removed SOLDER_MODE. A level no longer decides *how* a bench is operated —
+// presence does. What a level supplies is:
+//   greenHalf / overheatChance — how forgiving the player's own mini-game is
+//   qualityMin / qualityMax / pointDelayMs — an unattended rate, if it has one
+// Levels 0–1 have no unattended rate at all, which is what makes hiring a
+// technician (or standing there yourself) the only way to finish a drone early.
 
-export const WORKER_MODE = Object.freeze({
-  MANUAL: 'manual',  // player taps box and workbench
-  SEMI:   'semi',    // worker auto-fetches box on delivery arrival
-  AUTO:   'auto',    // worker auto-fetches and auto-starts soldering
-})
+// The `worker` track lived here until C5. Automation is no longer an upgrade
+// level — it is people you hire (defs/roles.js), each walking the shop floor.
 
 export const UPGRADE_TRACKS = Object.freeze({
   soldering: {
@@ -37,31 +35,18 @@ export const UPGRADE_TRACKS = Object.freeze({
     stateKey: 'solderingLevel',         // field in state.upgrades holding this track's level
     costs:    SOLDERING_UPGRADE_COSTS,  // costs[i] = price to go from level i → i+1
     levels: [
-      { name: 'Ручний паяльник', effect: 'Базова механіка',
-        mode: SOLDER_MODE.MANUAL, greenHalf: SOLDER_GREEN_HALF, overheatChance: OVERHEAT_CHANCE },
+      { name: 'Ручний паяльник', effect: 'Паяєте руками, стоячи біля верстака',
+        greenHalf: SOLDER_GREEN_HALF, overheatChance: OVERHEAT_CHANCE },
       { name: 'Кращий паяльник', effect: 'Ширша зона +47%, перегрів −60%',
-        mode: SOLDER_MODE.MANUAL, greenHalf: BETTER_IRON_GREEN_HALF, overheatChance: BETTER_IRON_OVERHEAT_CHANCE },
-      { name: 'Напівавтомат', effect: '1 тап — вся збірка, якість 65–85%',
-        mode: SOLDER_MODE.SEMI, qualityMin: SEMIAUTO_QUALITY_MIN, qualityMax: SEMIAUTO_QUALITY_MAX, pointDelayMs: SEMIAUTO_POINT_DELAY_MS },
-      { name: 'Автопаяльник', effect: 'Паяє сам, якість 55–75%, без участі',
-        mode: SOLDER_MODE.AUTO, qualityMin: AUTO_QUALITY_MIN, qualityMax: AUTO_QUALITY_MAX, pointDelayMs: AUTO_POINT_DELAY_MS },
+        greenHalf: BETTER_IRON_GREEN_HALF, overheatChance: BETTER_IRON_OVERHEAT_CHANCE },
+      { name: 'Напівавтомат', effect: 'Верстак паяє сам 65–85%; руками — точніше',
+        greenHalf: SEMIAUTO_GREEN_HALF, overheatChance: SEMIAUTO_OVERHEAT_CHANCE,
+        qualityMin: SEMIAUTO_QUALITY_MIN, qualityMax: SEMIAUTO_QUALITY_MAX, pointDelayMs: SEMIAUTO_POINT_DELAY_MS },
+      { name: 'Автопаяльник', effect: 'Паяє сам без участі; руками — ще краще',
+        greenHalf: AUTO_GREEN_HALF, overheatChance: AUTO_OVERHEAT_CHANCE,
+        qualityMin: AUTO_QUALITY_MIN, qualityMax: AUTO_QUALITY_MAX, pointDelayMs: AUTO_POINT_DELAY_MS },
     ],
   },
-  worker: {
-    id:       'worker',
-    name:     'Робітник',
-    stateKey: 'workerLevel',
-    costs:    WORKER_UPGRADE_COSTS,
-    levels: [
-      { name: 'Ручний режим', effect: 'Тап по коробці → доставка; тап по столу → пайка',
-        mode: WORKER_MODE.MANUAL },
-      { name: 'Авто-доставка', effect: 'Робітник сам забирає коробку при прибутті',
-        mode: WORKER_MODE.SEMI },
-      { name: 'Повний авто', effect: 'Робітник доставляє і готується до пайки без тапів',
-        mode: WORKER_MODE.AUTO },
-    ],
-  },
-
   consumables: {
     id:       'consumables',
     name:     'Флюс і припій',

@@ -24,7 +24,6 @@ import {
 } from '../state/config.js'
 import { EV, emit } from './events.js'
 import { rebuildStationGeometry, stationCountFor, syncWorkerAgents } from './world.js'
-import { stationRuntime } from './systems/station.js'
 
 // Commands that come from a UI button rather than a zone have no station in
 // hand; they act on the one the player is most likely looking at.
@@ -54,15 +53,6 @@ const HANDLERS = {
     emit(events, EV.DELIVERY_PICKED, { id: d.id, kitId: d.kitId, slotIndex: d.slotIndex })
   },
 
-  // Someone asked a station to start (SEMI mode). AUTO arms itself in the
-  // system; MANUAL opens the mini-game in the view and never reaches here.
-  armSolder(world, { stationId } = {}) {
-    const id = targetStation(world, stationId)
-    if (!id) return
-    if (getStation(world.game, id).phase !== Phase.ASSEMBLY) return
-    stationRuntime(world, id).armed = true
-  },
-
   // Result of one point of the manual soldering mini-game.
   solderResult(world, { quality, stationId }, events) {
     const id = targetStation(world, stationId)
@@ -85,6 +75,10 @@ const HANDLERS = {
       }
       return
     }
+
+    // A technician may have landed the last point in this very tick.
+    const before = getStation(world.game, id)
+    if (before.solderPoints.length >= KIT_TYPES[before.kitId].solderPointCount) return
 
     world.game = recordSolderPoint(world.game, id, boosted)
     const station = getStation(world.game, id)

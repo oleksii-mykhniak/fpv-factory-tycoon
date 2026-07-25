@@ -97,7 +97,6 @@ export function createState() {
     upgrades: {
       priceMultiplier:  1,
       solderingLevel:   0,
-      workerLevel:      0,
       consumablesLevel: 0,
       storageLevel:     0,
       logisticsLevel:   0,

@@ -40,7 +40,6 @@ export const EV = Object.freeze({
   WORKER_HIRED: 'worker.hired',         // { role, id }
 
   // Requests an interaction raises for the view/commands to complete
-  WORK_REQUESTED:     'work.requested',     // { agentId, station }
   SELL_REQUESTED:     'sell.requested',     // { agentId }
   MINIGAME_REQUESTED: 'minigame.requested', // { agentId, game }
 

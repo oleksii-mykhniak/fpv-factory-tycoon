@@ -124,7 +124,7 @@ describe('sim/deliverySystem', () => {
 })
 
 describe('sim/stationSystem', () => {
-  const autoUpgrades = { ...createState().upgrades, solderingLevel: 3, workerLevel: 2 }
+  const autoUpgrades = { ...createState().upgrades, solderingLevel: 3 }
 
   function benchWithKit(kitId = 'mini_drone', upgrades = autoUpgrades) {
     const w = world({ upgrades })
@@ -154,28 +154,23 @@ describe('sim/stationSystem', () => {
     expect(first.done).toBe(0)
   })
 
-  it('SEMI waits to be armed by the player', () => {
-    const semi = { ...createState().upgrades, solderingLevel: 2, workerLevel: 2 }
+  it('C6: a level-2 bench runs on its own — no arming, no tap', () => {
+    const semi = { ...createState().upgrades, solderingLevel: 2 }
     const w = benchWithKit('mini_drone', semi)
-
-    expect(types(run(w, 10_000))).not.toContain(EV.STAGE_STARTED)
-    dispatch(w, 'armSolder')
     expect(types(run(w, 10_000))).toContain(EV.ASSEMBLY_DONE)
   })
 
-  it('MANUAL leaves the bench alone', () => {
-    const manual = { ...createState().upgrades, solderingLevel: 0, workerLevel: 2 }
+  it('C6: a hand iron cannot run unattended — someone has to be there', () => {
+    const manual = { ...createState().upgrades, solderingLevel: 0 }
     const w = benchWithKit('mini_drone', manual)
     expect(types(run(w, 30_000))).not.toContain(EV.STAGE_STARTED)
     expect(bench(w).phase).toBe(Phase.ASSEMBLY)
   })
 
-  it('disarms after the assembly finishes', () => {
+  it('stops running once the assembly finishes', () => {
     const w = benchWithKit()
     run(w, 60_000)
-    const rt = w.stationRuntime['station-0']
-    expect(rt.armed).toBe(false)
-    expect(rt.running).toBe(false)
+    expect(w.stationRuntime['station-0'].running).toBe(false)
   })
 })
 
@@ -249,7 +244,7 @@ describe('sim — full cycle, headless', () => {
   it('order → deliver → assemble → sell turns a profit with a full-auto shop', () => {
     const w = world({
       money: 500,
-      upgrades: { ...createState().upgrades, solderingLevel: 3, workerLevel: 2 },
+      upgrades: { ...createState().upgrades, solderingLevel: 3 },
     })
     const startMoney = w.game.money
 

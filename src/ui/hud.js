@@ -1,5 +1,5 @@
 import { Phase, DeliveryStatus, KIT_TYPES, calcPrice, focusStation, idleStations } from '../state/gameState.js'
-import { levelData, SOLDER_MODE } from '../state/upgrades.js'
+import { levelData } from '../state/upgrades.js'
 
 export function createHUD(root) {
   const el = document.createElement('div')
@@ -45,10 +45,10 @@ function hint(state, carrying) {
       const kit   = KIT_TYPES[station.kitId]
       const done  = station.solderPoints.length
       const total = kit?.solderPointCount ?? 0
-      const mode  = levelData('soldering', state.upgrades.solderingLevel ?? 0).mode
-      return mode === SOLDER_MODE.MANUAL
-        ? `Стань біля верстака — паяти (${done}/${total})`
-        : `Паяємо… (${done}/${total})`
+      const auto  = levelData('soldering', state.upgrades.solderingLevel ?? 0).qualityMin !== undefined
+      return auto
+        ? `Паяємо… (${done}/${total}) — стань поруч, буде краще`
+        : `Стань біля верстака — паяти (${done}/${total})`
     }
     case Phase.READY: {
       const kit   = KIT_TYPES[station.kitId]

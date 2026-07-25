@@ -84,7 +84,8 @@ export const INTERACTIONS = {
       if (hasBox) return phase === Phase.IDLE
       if (carriedType(agent, 'scrap')) return phase === Phase.IDLE
       if (phase === Phase.READY)       return !carryFull(agent)
-      if (phase === Phase.ASSEMBLY)    return carryEmpty(agent)
+      // ASSEMBLY is not a trigger any more (C6): working a bench is continuous
+      // presence, shown by the soldering strip, not a one-shot dwell.
       return false
     },
     run(world, zone, agent, events) {
@@ -109,11 +110,6 @@ export const INTERACTIONS = {
         take(agent, { type: 'drone', kitId: station.kitId, stationId })
         emit(events, EV.ITEM_PICKED, { agentId: agent.id, item: 'drone', stationId })
         return
-      }
-      if (station.phase === Phase.ASSEMBLY) {
-        // The view decides what "work here" means for the current soldering
-        // level: open the mini-game, or arm the automatic bench.
-        emit(events, EV.WORK_REQUESTED, { agentId: agent.id, stationId })
       }
     },
   },

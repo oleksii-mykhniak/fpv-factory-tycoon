@@ -15,12 +15,12 @@ import {
   moveToLocation,
 } from './gameState.js'
 import {
-  SOLDERING_UPGRADE_COSTS, WORKER_UPGRADE_COSTS, CONSUMABLES_UPGRADE_COSTS,
+  SOLDERING_UPGRADE_COSTS, CONSUMABLES_UPGRADE_COSTS,
   PIGGY_COOLDOWN_MS, PIGGY_TAP_VALUE, PIGGY_MAX_PAYOUT,
   STORAGE_UPGRADE_COSTS, STORAGE_SLOTS_BY_LEVEL,
   LOGISTICS_UPGRADE_COSTS, LOGISTICS_DELIVERY_MULT,
 } from './config.js'
-import { trackMaxLevel, nextCost, levelData, UPGRADE_TRACKS, SOLDER_MODE, WORKER_MODE } from './upgrades.js'
+import { trackMaxLevel, nextCost, levelData, UPGRADE_TRACKS } from './upgrades.js'
 import { LOCATIONS, LOCATION_ORDER, capFor, canMoveToLocation, currentLocation } from './locations.js'
 
 const SOLDERING_MAX_LEVEL = trackMaxLevel('soldering')
@@ -389,67 +389,29 @@ describe('Реєстр апгрейдів (data-driven)', () => {
     expect(nextCost('soldering', trackMaxLevel('soldering'))).toBeNull()
   })
 
-  it('levelData повертає режим збірки для кожного рівня', () => {
-    expect(levelData('soldering', 0).mode).toBe(SOLDER_MODE.MANUAL)
-    expect(levelData('soldering', 1).mode).toBe(SOLDER_MODE.MANUAL)
-    expect(levelData('soldering', 2).mode).toBe(SOLDER_MODE.SEMI)
-    expect(levelData('soldering', 3).mode).toBe(SOLDER_MODE.AUTO)
+  it('C6: кожен рівень дає параметри ручної пайки — трек не гейтить доступ', () => {
+    for (let i = 0; i < 4; i++) {
+      expect(levelData('soldering', i).greenHalf).toBeGreaterThan(0)
+      expect(levelData('soldering', i).overheatChance).toBeGreaterThan(0)
+    }
+  })
+
+  it('C6: лише рівні 2–3 вміють паяти без нагляду', () => {
+    expect(levelData('soldering', 0).qualityMin).toBeUndefined()
+    expect(levelData('soldering', 1).qualityMin).toBeUndefined()
+    expect(levelData('soldering', 2).qualityMin).toBeGreaterThan(0)
+    expect(levelData('soldering', 3).qualityMin).toBeGreaterThan(0)
+  })
+
+  it('C6: вища прокачка — прощучіша зона й менший ризик перегріву', () => {
+    expect(levelData('soldering', 3).greenHalf).toBeGreaterThan(levelData('soldering', 0).greenHalf)
+    expect(levelData('soldering', 3).overheatChance).toBeLessThan(levelData('soldering', 0).overheatChance)
   })
 
   it('buyUpgrade узагальнений: рухає рівень за stateKey трека', () => {
     const track = UPGRADE_TRACKS.soldering
     const s = buyUpgrade({ ...createState(), money: 9999 }, 'soldering')
     expect(s.upgrades[track.stateKey]).toBe(1)
-  })
-})
-
-describe('Апгрейди: worker-трек', () => {
-  function richState() { return { ...createState(), money: 9999, locationId: 'workshop' } }
-
-  it('початковий стан має workerLevel 0', () => {
-    expect(createState().upgrades.workerLevel).toBe(0)
-  })
-
-  it('рівень 0 → manual, 1 → semi, 2 → auto', () => {
-    expect(levelData('worker', 0).mode).toBe(WORKER_MODE.MANUAL)
-    expect(levelData('worker', 1).mode).toBe(WORKER_MODE.SEMI)
-    expect(levelData('worker', 2).mode).toBe(WORKER_MODE.AUTO)
-  })
-
-  it('buyUpgrade worker: рівень зростає, гроші зменшуються', () => {
-    const s = buyUpgrade(richState(), 'worker')
-    expect(s.upgrades.workerLevel).toBe(1)
-    expect(s.money).toBe(9999 - WORKER_UPGRADE_COSTS[0])
-  })
-
-  it('можна прокачати до максимального рівня', () => {
-    let s = richState()
-    const maxLevel = trackMaxLevel('worker')
-    for (let i = 0; i < maxLevel; i++) s = buyUpgrade(s, 'worker')
-    expect(s.upgrades.workerLevel).toBe(maxLevel)
-  })
-
-  it('вище максимуму — помилка', () => {
-    let s = richState()
-    const maxLevel = trackMaxLevel('worker')
-    for (let i = 0; i < maxLevel; i++) s = buyUpgrade(s, 'worker')
-    expect(() => buyUpgrade(s, 'worker')).toThrow('максимальному рівні')
-  })
-
-  it('max level збігається з довжиною WORKER_UPGRADE_COSTS', () => {
-    expect(trackMaxLevel('worker')).toBe(WORKER_UPGRADE_COSTS.length)
-  })
-
-  it('nextCost worker: повертає вартість і null на максимумі', () => {
-    expect(nextCost('worker', 0)).toBe(WORKER_UPGRADE_COSTS[0])
-    expect(nextCost('worker', trackMaxLevel('worker'))).toBeNull()
-  })
-
-  it('upgradeWorker не мутує стан', () => {
-    const s = richState()
-    const before = s.upgrades.workerLevel
-    buyUpgrade(s, 'worker')
-    expect(s.upgrades.workerLevel).toBe(before)
   })
 })
 
@@ -887,7 +849,6 @@ describe('D7 — Реєстр локацій', () => {
     const s = { ...createState(), locationId: 'workshop' }
     expect(capFor(s, 'storage')).toBe(2)
     expect(capFor(s, 'soldering')).toBe(3)
-    expect(capFor(s, 'worker')).toBe(2)
   })
 })
 
@@ -916,11 +877,9 @@ describe('D7 — Кепи апгрейдів за локацією', () => {
     expect(() => buyUpgrade(s, 'soldering')).toThrow('заблоковано')
   })
 
-  it('buyUpgrade worker в apartment: до рівня 1, але не 2', () => {
-    let s = { ...createState(), money: 9999 }
-    s = buyUpgrade(s, 'worker')
-    expect(s.upgrades.workerLevel).toBe(1)
-    expect(() => buyUpgrade(s, 'worker')).toThrow('заблоковано')
+  it('buyUpgrade benches у квартирі заблоковано — другий верстак з гаража', () => {
+    const s = { ...createState(), money: 9999 }
+    expect(() => buyUpgrade(s, 'benches')).toThrow('заблоковано')
   })
 
   it('після переїзду до garage: storage можна купити', () => {
@@ -1001,11 +960,10 @@ describe('D7 — moveToLocation', () => {
     expect(s.money).toBe(monBefore)
   })
 
-  it('garage → workshop: requires soldering=3 і worker=2', () => {
+  it('garage → workshop: потрібні soldering=3 і consumables=2', () => {
     const s = { ...createState(), money: 9999, locationId: 'garage',
-      upgrades: { ...createState().upgrades, solderingLevel: 3, workerLevel: 2 } }
-    const result = moveToLocation(s, 'workshop')
-    expect(result.locationId).toBe('workshop')
+      upgrades: { ...createState().upgrades, solderingLevel: 3, consumablesLevel: 2 } }
+    expect(moveToLocation(s, 'workshop').locationId).toBe('workshop')
   })
 
   it('старий save без locationId: createState дефолт — apartment', () => {

@@ -6,7 +6,7 @@
 // scrap kit's cost of 0 dragged the minimum kit cost to zero, so the rescue
 // mini-game never appeared).
 
-import { KIT_TYPES, busyStations } from '../state/gameState.js'
+import { KIT_TYPES, busyStations, Phase, stationsOf } from '../state/gameState.js'
 
 // Cheapest kit the player could actually buy. Free kits (scrap) are not
 // purchases and must not count.
@@ -19,4 +19,23 @@ export const cheapestKitCost = Math.min(
 export function piggyShouldShow(game) {
   const busy = (game.deliveries ?? []).length > 0 || busyStations(game).length > 0
   return game.money < cheapestKitCost && !busy
+}
+
+// The station the player is standing at, if it has a kit on it (C6).
+//
+// Shared by the view (to show the soldering strip) and by anything else that
+// cares about presence, so what you see and what the sim believes cannot
+// disagree — the same mistake the piggy bank made for a month.
+export function playerStation(world) {
+  const player = (world.agents ?? []).find(a => a.kind === 'player')
+  if (!player) return null
+
+  for (const zone of world.zones ?? []) {
+    if (zone.kind !== 'bench') continue
+    if (Math.abs(player.x - zone.cx) > zone.w / 2) continue
+    if (Math.abs(player.y - zone.cy) > zone.h / 2) continue
+    const station = stationsOf(world.game).find(s => s.id === zone.meta?.stationId)
+    if (station?.phase === Phase.ASSEMBLY) return station
+  }
+  return null
 }

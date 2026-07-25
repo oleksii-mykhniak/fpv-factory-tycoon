@@ -45,7 +45,7 @@ const status = async () => ({
   phase: await page.evaluate(() => globalThis.__world?.game?.stations?.[0]?.phase ?? '?'),
   stations: await page.evaluate(() =>
     (globalThis.__world?.game?.stations ?? []).map(s => s.phase).join('/')),
-  solderOpen: await page.locator('#solder-modal').isVisible().catch(() => false),
+  solderOpen: await page.locator('#solder-bar').isVisible().catch(() => false),
   trashOpen:  await page.locator('.tinder-overlay').isVisible().catch(() => false),
   piggyOpen:  await page.locator('.piggy-overlay').isVisible().catch(() => false),
   carrying: (await player())?.carrying ?? [],
@@ -129,8 +129,8 @@ await boot(seedState({}))          // manual iron
 await orderFirstKit()
 await page.waitForTimeout(5000)
 await goTo('slot0'); await page.waitForTimeout(600)
-await goTo('zone-station-0'); await page.waitForTimeout(3500)
-const bSolder = await log('bench zone, manual iron')
+await goTo('zone-station-0'); await page.waitForTimeout(2500)
+const bSolder = await log('standing at the bench, hand iron')
 
 await boot(seedState({}, { money: 5 }))
 await goTo('piggy'); await page.waitForTimeout(900)
@@ -247,6 +247,35 @@ const fDone = await page.evaluate(() => {
 })
 console.log(`  final: ${fDone.sales} sales, money ${fBefore} → ${fDone.money}, player moved: ${fDone.playerMoved}`)
 
+// ── G. Soldering is presence, not a modal (C6) ────────────
+console.log('\n### G. The soldering strip')
+await boot(seedState({}))          // hand iron: the bench cannot run itself
+await orderFirstKit()
+await page.waitForTimeout(5200)
+await goTo('slot0'); await page.waitForTimeout(700)
+await goTo('zone-station-0'); await page.waitForTimeout(2500)
+const gAtBench = await log('at the bench with a hand iron')
+
+// The strip must not freeze the character — that was the whole problem.
+const gBefore = await player()
+await hold('KeyD', 700)
+const gAfterWalk = await player()
+const gStripGone = await page.locator('#solder-bar').isVisible().catch(() => false)
+console.log(`  walked ${gBefore.x} → ${gAfterWalk.x} while soldering; strip still up: ${gStripGone}`)
+
+// Walking away leaves the bench mid-assembly, with no penalty.
+const gPhaseAway = await page.evaluate(() => globalThis.__world.game.stations[0].phase)
+
+// An upgraded bench runs unattended and does not need the player at all.
+await boot(seedState({ solderingLevel: 3 }))
+await orderFirstKit()
+await page.waitForTimeout(5200)
+await goTo('slot0'); await page.waitForTimeout(700)
+await goTo('zone-station-0'); await page.waitForTimeout(2000)
+await goAway()
+await page.waitForTimeout(14000)
+const gUnattended = await log('level-3 bench, player walked off')
+
 // ── C. Movement, collisions, camera (C1 regression) ───────
 console.log('\n### C. Movement (WASD)')
 await boot(seedState({}))
@@ -300,7 +329,7 @@ const checks = [
   ['A: bench finished by itself',         aReady.phase === 'READY'],
   ['A: bench zone handed over the drone', aTake.carrying.includes('drone')],
   ['A: mailbox zone sold it',             aSold.phase === 'IDLE' && money(aSold) > money(aReady)],
-  ['B: bench zone opened the mini-game',  bSolder.solderOpen === true],
+  ['B: standing at a bench shows the strip', bSolder.solderOpen === true],
   ['B: piggy zone opened the piggy game', bPiggy.piggyOpen === true],
   ['B: trash zone opened the swipe game', bTrash.trashOpen === true],
   ['C: moves right on D',                 cRight.x > c0.x + 100],
@@ -321,6 +350,11 @@ const checks = [
   ['F: hired three workers via the UI',   fHired.roster.length === 3 && fHired.agents === 3],
   ['F: workers sold drones on their own', fDone.sales >= 2],
   ['F: the player never moved',           fDone.playerMoved === false],
+  ['G: strip appears from standing there', gAtBench.solderOpen === true],
+  ['G: movement still works while soldering', Math.abs(gAfterWalk.x - gBefore.x) > 80],
+  ['G: strip closes on walking away',      gStripGone === false],
+  ['G: leaving costs nothing, bench waits', gPhaseAway === 'ASSEMBLY'],
+  ['G: an upgraded bench finishes alone',  gUnattended.phase === 'READY'],
   ['no console errors',                   errors.length === 0],
 ]
 console.log('\n=== checks ===')

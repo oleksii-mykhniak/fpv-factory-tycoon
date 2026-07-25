@@ -127,13 +127,13 @@ describe('sim/zoneSystem — dwell', () => {
     expect(types(events).filter(t => t === EV.ZONE_FIRED)).toHaveLength(1)
   })
 
-  it('a dwell zone keeps working while you stand in it', () => {
-    // Drop the box, then keep standing: the bench should ask to be worked on
-    // without making the player step out and back in.
+  it('C6: the bench stops asking once the box is down — working it is presence', () => {
+    // Drop the box and keep standing. The zone has nothing left to trigger:
+    // soldering is driven by being there, not by a repeated dwell.
     const w = benchWithBoxInHand()
     const events = run(w, ZONE_DWELL_BENCH_MS * 2 + 400)
     expect(bench(w).phase).toBe(Phase.ASSEMBLY)
-    expect(types(events)).toContain(EV.WORK_REQUESTED)
+    expect(types(events).filter(t => t === EV.ZONE_FIRED)).toHaveLength(1)
   })
 })
 
