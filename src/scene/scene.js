@@ -1,13 +1,14 @@
 import * as ex from 'excalibur'
 import { Phase, DeliveryStatus, KIT_TYPES } from '../state/gameState.js'
 import {
-  CAMERA_ZOOM_REF, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX,
+  VIEW_HEIGHT_UNITS, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX,
+  CAMERA_ELASTICITY, CAMERA_FRICTION,
   PIGGY_COOLDOWN_MS,
-  SCENE_ROOM_H_RATIO, SCENE_DRONE_W_RATIO, SCENE_BOX_W_RATIO,
   PULSE_FREQ_HZ, PULSE_SCALE_AMP,
 } from '../state/config.js'
 import { loadSprites, getSprite } from './loader.js'
 import { createWorker } from './worker.js'
+import { createCharacterSprite } from './character.js'
 
 // The scene is a *projection* of the simulation (C0): it never owns gameplay
 // state. Two hooks connect it to the sim:
@@ -62,98 +63,67 @@ function addPulse(actor) {
 
 // ── Layout ────────────────────────────────────────────────
 //
-// Coordinate origin = top-left of canvas.
-// Room occupies top SCENE_ROOM_H_RATIO of the game canvas (excl. action bar).
-// Exterior strip occupies the remaining bottom fraction.
-// Door gap in bottom wall: x ∈ [W*0.28, W*0.48], center W*0.38.
-// Returns refs needed for interaction wiring.
+// Geometry comes from defs/layouts/<location>.js in fixed world units. Nothing
+// here is expressed as a fraction of the screen any more: the world is larger
+// than the viewport and must look the same on every device.
 
-function buildRoom(scene, W, H, RH) {
-  const WW    = W * 0.06   // side wall thickness
-  const HW    = H * 0.035  // top/bottom wall thickness
-  const EXT_H = H - RH     // exterior strip height below room
+function buildRoom(scene, layout) {
+  const { world, room, street, walls, doorVoid, props, theme } = layout
 
-  // ── Exterior zone ──────────────────────────────────────
-  // Dark base (street/night)
-  colorRect(scene, { x: W * 0.5, y: RH + EXT_H * 0.5, w: W, h: EXT_H, hex: '#0c0c18', z: 0 })
-  // Lighter sidewalk band just below the door threshold
-  colorRect(scene, { x: W * 0.5, y: RH + EXT_H * 0.1, w: W, h: EXT_H * 0.18, hex: '#18182a', z: 0 })
+  // ── Street (below the building) ────────────────────────
+  colorRect(scene, {
+    x: world.w / 2, y: street.y + street.h / 2, w: world.w, h: street.h,
+    hex: '#0c0c18', z: 0,
+  })
+  // Lighter sidewalk band just outside the door
+  colorRect(scene, {
+    x: world.w / 2, y: street.y + street.h * 0.10, w: world.w, h: street.h * 0.18,
+    hex: '#18182a', z: 0,
+  })
 
   // ── Room floor ─────────────────────────────────────────
-  const floor = new ex.Actor({
-    pos:    ex.vec(W * 0.5, RH * 0.5),
-    width:  W,
-    height: RH,
-    z: 0,
-    color:  ex.Color.fromHex('#1a1a26'),
+  const floor = colorRect(scene, {
+    x: room.w / 2, y: room.h / 2, w: room.w, h: room.h,
+    hex: theme.floorColor, z: 0,
   })
-  scene.add(floor)
 
-  // ── Walls ──────────────────────────────────────────────
-  colorRect(scene, { x: W * 0.5,       y: HW * 0.5,       w: W,        h: HW, hex: '#2e2e42', z: 1 })
-  colorRect(scene, { x: WW * 0.5,      y: RH * 0.5,       w: WW,       h: RH, hex: '#2e2e42', z: 1 })
-  colorRect(scene, { x: W - WW * 0.5,  y: RH * 0.5,       w: WW,       h: RH, hex: '#2e2e42', z: 1 })
-  // Bottom wall left of door gap
-  colorRect(scene, { x: W * 0.14,      y: RH - HW * 0.5,  w: W * 0.28, h: HW, hex: '#2e2e42', z: 1 })
-  // Door gap (void to exterior)
-  colorRect(scene, { x: W * 0.38,      y: RH - HW * 0.5,  w: W * 0.20, h: HW, hex: '#0a0a14', z: 1 })
-  // Bottom wall right of door gap
-  colorRect(scene, { x: W * 0.74,      y: RH - HW * 0.5,  w: W * 0.52, h: HW, hex: '#2e2e42', z: 1 })
-
-  // ── Workbench ─────────────────────────────────────────
-  const workbench = colorRect(scene, { x: W * 0.50, y: RH * 0.35, w: W * 0.60, h: RH * 0.13, hex: '#6b4226', z: 2 })
-  colorRect(scene, { x: W * 0.50, y: RH * 0.42, w: W * 0.60, h: RH * 0.015, hex: '#4a2a18', z: 2 })
-  // Ceiling lamp (top-down view)
-  const lamp = new ex.Actor({
-    pos:    ex.vec(W * 0.50, RH * 0.16),
-    width:  W * 0.08,
-    height: W * 0.08,
-    z: 2,
-    color:  ex.Color.fromHex('#d4c060'),
-  })
-  scene.add(lamp)
-
-  // ── Mailbox (outside, near door, left side) ───────────
-  const MB_SIZE = W * 0.09
-  const mailbox = new ex.Actor({
-    pos:    ex.vec(W * 0.16, RH + EXT_H * 0.62),
-    width:  MB_SIZE,
-    height: MB_SIZE * 0.80,
-    z: 3,
-    color:  ex.Color.fromHex('#3a5db8'),
-  })
-  scene.add(mailbox)
-  // Mailbox slot detail
+  // ── Walls + door opening ───────────────────────────────
+  for (const wall of walls) {
+    colorRect(scene, { x: wall.cx, y: wall.cy, w: wall.w, h: wall.h, hex: '#2e2e42', z: 1 })
+  }
   colorRect(scene, {
-    x: W * 0.16,
-    y: RH + EXT_H * 0.58,
-    w: MB_SIZE,
-    h: H * 0.007,
-    hex: '#2244a0',
-    z: 4,
+    x: doorVoid.cx, y: doorVoid.cy, w: doorVoid.w, h: doorVoid.h, hex: '#0a0a14', z: 1,
   })
 
-  // ── Trash bin (outside, right side) ───────────────────
-  const TB_SIZE = W * 0.09
-  const trashbin = new ex.Actor({
-    pos:    ex.vec(W * 0.86, RH + EXT_H * 0.62),
-    width:  TB_SIZE,
-    height: TB_SIZE * 1.10,
-    z: 3,
-    color:  ex.Color.fromHex('#4a6a3a'),
-  })
-  scene.add(trashbin)
-  // Trash bin lid detail
+  // ── Props ──────────────────────────────────────────────
+  // One actor per entry in layout.props; a new object in the layout appears
+  // here automatically.
+  const actors = {}
+  for (const [name, p] of Object.entries(props)) {
+    const actor = new ex.Actor({
+      pos:    ex.vec(p.cx, p.cy),
+      width:  p.w,
+      height: p.h,
+      z:      p.z,
+      color:  ex.Color.fromHex(p.color),
+    })
+    scene.add(actor)
+    applySprite(actor, p.sprite)
+    actors[name] = actor
+  }
+
+  // Small hand-placed details that read better than a flat rectangle.
+  const bench = props.workbench
   colorRect(scene, {
-    x: W * 0.86,
-    y: RH + EXT_H * 0.50,
-    w: TB_SIZE * 1.1,
-    h: H * 0.008,
-    hex: '#3a5a2a',
-    z: 4,
+    x: bench.cx, y: bench.cy + bench.h * 0.44, w: bench.w, h: bench.h * 0.12,
+    hex: '#4a2a18', z: 2,
   })
+  const mb = props.mailbox
+  colorRect(scene, { x: mb.cx, y: mb.cy - mb.h * 0.34, w: mb.w, h: 5, hex: '#2244a0', z: 4 })
+  const tb = props.trashbin
+  colorRect(scene, { x: tb.cx, y: tb.cy - tb.h * 0.46, w: tb.w * 1.1, h: 6, hex: '#3a5a2a', z: 4 })
 
-  return { workbench, floor, mailbox, trashbin, lamp, HW, EXT_H }
+  return { floor, ...actors }
 }
 
 // ── Sprite swap ───────────────────────────────────────────
@@ -363,7 +333,7 @@ function createBenchProgress(scene, benchActor) {
 
 // ── Scene entry point ─────────────────────────────────────
 
-export async function initScene(canvas, { getWorld, onIntent, onLoadProgress }) {
+export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, layout }) {
   const engine = new ex.Engine({
     canvasElement: canvas,
     backgroundColor: BG,
@@ -375,46 +345,36 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress }) 
   await loadSprites(onLoadProgress)
   await engine.start()
 
-  const W   = engine.drawWidth
-  const H   = engine.drawHeight
-  const RH  = H * SCENE_ROOM_H_RATIO
   const scene = engine.currentScene
 
-  scene.camera.zoom = Math.max(CAMERA_ZOOM_MIN, Math.min(CAMERA_ZOOM_MAX, H / CAMERA_ZOOM_REF))
+  // Zoom shows a constant slice of the world instead of a constant pixel size,
+  // so a phone and a tablet see the same amount of game (C1.1).
+  scene.camera.zoom = Math.max(
+    CAMERA_ZOOM_MIN,
+    Math.min(CAMERA_ZOOM_MAX, engine.drawHeight / VIEW_HEIGHT_UNITS),
+  )
 
-  const { workbench, floor, mailbox, trashbin, lamp, HW, EXT_H } = buildRoom(scene, W, H, RH)
+  const { floor, workbench, mailbox, trashbin, piggy } = buildRoom(scene, layout)
   _floorActor = floor
 
-  // Apply environment sprites (swap colored rects to textured sprites)
-  applySprite(workbench, 'workbench')
-  applySprite(lamp, 'lamp')
-  applySprite(mailbox, 'mailbox')
-  applySprite(trashbin, 'trashbin')
+  const { spawns, sizes } = layout
 
-  // ── Key positions ──────────────────────────────────────
-  const WORKER_SIZE  = W * 0.18
-  const DOOR         = ex.vec(W * 0.38, RH - HW)              // door threshold inside room
-  const BOX_SPAWN    = ex.vec(W * 0.38, RH + EXT_H * 0.35)    // street slot 0 (in front of door)
+  // ── Key positions (world units, straight from the layout) ──
+  const slotSpawns   = spawns.deliverySlots.map(p => ex.vec(p.x, p.y))
+  const BOX_SPAWN    = slotSpawns[0]
+  const DOOR         = ex.vec(spawns.door.x, spawns.door.y)
+  const TABLE        = ex.vec(spawns.benchTop.x, spawns.benchTop.y)
+  const IDLE_POS     = ex.vec(spawns.workerIdle.x, spawns.workerIdle.y)
+  const BENCH_POS    = ex.vec(spawns.bench.x, spawns.bench.y)
+  const MAILBOX_POS  = mailbox.pos.clone()
+  const TRASHBIN_POS = trashbin.pos.clone()
 
-  // All 3 street slot positions indexed by slotIndex (matches delivery.slotIndex).
-  // Slot 0 = primary (door gap), slots 1-2 = right of door.
-  const slotSpawns = [
-    BOX_SPAWN,
-    ex.vec(W * 0.62, RH + EXT_H * 0.35),
-    ex.vec(W * 0.82, RH + EXT_H * 0.35),
-  ]
-  const TABLE         = workbench.pos.clone()
-  const IDLE_POS      = ex.vec(W * 0.72, RH * 0.66)
-  const BENCH_POS     = ex.vec(workbench.pos.x, workbench.pos.y + workbench.height / 2 + WORKER_SIZE / 2)
-  const MAILBOX_POS   = mailbox.pos.clone()
-  const TRASHBIN_POS  = trashbin.pos.clone()
-
-  // ── Delivery box — spawns in exterior zone ─────────────
-  const BOX_W = W * SCENE_BOX_W_RATIO
+  // ── Delivery box — spawns in the street ────────────────
+  const BOX_W = sizes.box.w
   const box = new ex.Actor({
     pos:    BOX_SPAWN.clone(),
     width:  BOX_W,
-    height: BOX_W * 0.65,
+    height: sizes.box.h,
     z: 3,
     color:  ex.Color.fromHex('#c49a3c'),
   })
@@ -430,7 +390,7 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress }) 
     const a = new ex.Actor({
       pos:    pos.clone(),
       width:  BOX_W,
-      height: BOX_W * 0.65,
+      height: sizes.box.h,
       z: 3,
       color:  ex.Color.fromHex('#c49a3c'),
     })
@@ -495,44 +455,31 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress }) 
   // Opened box on workbench (flat, lighter — visible during ASSEMBLY/READY)
   const boxOpen = new ex.Actor({
     pos:    TABLE.clone(),
-    width:  W  * 0.16,
-    height: RH * 0.04,
+    width:  sizes.box.w * 1.3,
+    height: sizes.box.h * 0.5,
     z: 3,
     color:  ex.Color.fromHex('#e8c870'),
   })
   boxOpen.graphics.visible = false
   scene.add(boxOpen)
 
-  // Drone silhouette on workbench (smaller than worker — realistic proportion)
-  const DRONE_W = W * SCENE_DRONE_W_RATIO
+  // Drone silhouette on the workbench (smaller than a character — real proportion)
   const drone = new ex.Actor({
-    pos:    ex.vec(W * 0.52, RH * 0.35),
-    width:  DRONE_W,
-    height: DRONE_W * 0.55,
+    pos:    TABLE.clone(),
+    width:  sizes.drone.w,
+    height: sizes.drone.h,
     z: 4,
     color:  ex.Color.fromHex('#2a2a3e'),
   })
   drone.graphics.visible = false
   scene.add(drone)
 
-  // ── Piggy bank ─────────────────────────────────────────
-  const piggySize = W * 0.11
-  const piggyPos  = ex.vec(W * 0.16, RH * 0.64)
-
-  const piggy = new ex.Actor({
-    pos:    piggyPos.clone(),
-    width:  piggySize,
-    height: piggySize,
-    z: 3,
-    color:  ex.Color.fromHex('#d4607a'),
-  })
+  // ── Piggy bank (built from the layout; only its behaviour lives here) ──
   piggy.graphics.visible = false
-  applySprite(piggy, 'piggy')
-  scene.add(piggy)
 
   const piggyTimerLabel = new ex.Label({
     text:  '',
-    pos:   ex.vec(piggyPos.x, piggyPos.y - piggySize * 0.78),
+    pos:   ex.vec(piggy.pos.x, piggy.pos.y - piggy.height * 0.78),
     color: ex.Color.fromHex('#dddddd'),
     font:  new ex.Font({ size: 13, family: 'monospace', textAlign: ex.TextAlign.Center }),
     z: 5,
@@ -566,7 +513,7 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress }) 
   // The puppet reports animation milestones back as intents; the sim decides
   // what they mean. C1 replaces this actor with a vel-driven agent.
   const worker = createWorker(scene, {
-    W, RH,
+    size:         sizes.character,
     doorPos:      DOOR,
     boxSpawnPos:  BOX_SPAWN,
     benchPos:     BENCH_POS,
@@ -585,16 +532,29 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress }) 
   })
   worker.setupSprite(getSprite('worker_walk'))
 
-  // ── Pointer intents ────────────────────────────────────
-
-  // Free walk on an empty bit of floor. Uses the engine-level pointer with a
-  // manual bounds check: floor.on('pointerup') at z=0 loses the hit-test to the
-  // workbench at z=2. C1 replaces this with joystick/WASD movement.
-  engine.input.pointers.primary.on('up', (evt) => {
-    const world = evt.worldPos
-    if (world.x > 0 && world.x < W && world.y > 0 && world.y < RH)
-      onIntent('floor.tap', { x: world.x, y: world.y })
+  // ── Player character (C1) ──────────────────────────────
+  // Position is owned by the sim (world.agents); this actor only renders it.
+  const player = new ex.Actor({
+    pos:    ex.vec(spawns.player.x, spawns.player.y),
+    width:  sizes.character,
+    height: sizes.character,
+    z: 6,
+    color:  ex.Color.fromHex('#1f9e92'),
   })
+  scene.add(player)
+  const playerRig = createCharacterSprite(player, getSprite('player_walk'))
+
+  // Y-sort: whoever stands lower on screen draws in front.
+  player.on('preupdate', () => { player.z = player.pos.y * 0.01 })
+
+  // Camera follows the player, clamped so it never shows past the world edge.
+  scene.camera.pos = ex.vec(spawns.player.x, spawns.player.y)
+  scene.camera.strategy.elasticToActor(player, CAMERA_ELASTICITY, CAMERA_FRICTION)
+  scene.camera.strategy.limitCameraBounds(
+    new ex.BoundingBox(0, 0, layout.world.w, layout.world.h),
+  )
+
+  // ── Pointer intents ────────────────────────────────────
 
   trashbin.on('pointerup', () => onIntent('trash.tap'))
   box.on('pointerup',      () => onIntent('box.tap'))
@@ -614,6 +574,7 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress }) 
     engine: { getFps: () => engine.clock.fpsSampler.fps, _ex: engine },
     scene,
     box, boxOpen, drone, worker, piggy, mailbox, trashbin,
+    player, playerRig,
     benchProgress,
     slotSpawns,
     boxSpawn: BOX_SPAWN,

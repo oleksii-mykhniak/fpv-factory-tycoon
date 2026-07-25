@@ -4,11 +4,12 @@ import {
   workerCanDeliver, workerCanSolder, workerCanSell,
   workerCanTrash, workerCanScrapPickup, workerIsDoingScrap,
 } from './workerFSM.js'
+import { createCharacterSprite } from './character.js'
 
 // Worker Actor + movement. FSM logic lives in workerFSM.js (testable in Node).
 //
 // config:
-//   W, RH             — canvas/room dimensions
+//   size              — character sprite size in world units
 //   doorPos           — door threshold inside the room (near bottom wall gap)
 //   boxSpawnPos       — outside position where box waits to be picked up
 //   benchPos          — where worker stands when soldering
@@ -25,11 +26,8 @@ import {
 //   onScrapArrivedAtTrash  — called when worker reaches trash bin for scrap pickup
 //   onScrapDelivered       — called when worker returns to bench with scrap parts
 
-const FRAME_W = 64
-const FRAME_H = 64
-
 export function createWorker(scene, {
-  W, RH,
+  size,
   doorPos, boxSpawnPos, benchPos, idlePos, mailboxPos, trashbinPos,
   box, tablePos, droneRef,
   onBoxPicked, onSolderRequested, onSellRequested, onTrashRequested,
@@ -37,7 +35,7 @@ export function createWorker(scene, {
 }) {
   let ws = createWorkerState()
 
-  const WORKER_SIZE = W * 0.18
+  const WORKER_SIZE = size
 
   const actor = new ex.Actor({
     pos:    idlePos.clone(),
@@ -53,13 +51,11 @@ export function createWorker(scene, {
     actor.z = actor.pos.y * 0.01
   })
 
-  let walkAnim = null
-  let idleAnim = null
+  // Assigned by setupSprite(); until then setMoving is a safe no-op.
+  let rig = { setMoving: () => {} }
 
   function setMoving(moving, toRight = false) {
-    if (!walkAnim) return
-    actor.graphics.flipHorizontal = toRight
-    actor.graphics.use(moving ? 'walk' : 'idle')
+    rig.setMoving(moving, toRight)
   }
 
   function dispatch(event) {
@@ -229,20 +225,6 @@ export function createWorker(scene, {
       .callMethod(() => setMoving(false))
   }
 
-  // ── Free walk (D4.7): tap on floor moves worker; interrupted by real commands ──
-  function walkTo(x, y) {
-    if (ws.state !== WS.IDLE && ws.state !== WS.FREE_WALK) return
-    dispatch('startFreeWalk')
-    actor.actions.clearActions()
-    setMoving(true, x > actor.pos.x)
-    actor.actions
-      .moveTo(ex.vec(x, y), 130)
-      .callMethod(() => {
-        dispatch('stopFreeWalk')
-        setMoving(false)
-      })
-  }
-
   // Called once all solder points are done (T3+).
   function notifySolderDone() {
     dispatch('solderDone')
@@ -260,30 +242,14 @@ export function createWorker(scene, {
 
   // Called from scene.js once the spritesheet is loaded.
   function setupSprite(src) {
-    if (!src) return
-    const sheet = ex.SpriteSheet.fromImageSource({
-      image: src,
-      grid: { rows: 1, columns: 4, spriteWidth: FRAME_W, spriteHeight: FRAME_H },
-    })
-    const sx = actor.width  / FRAME_W
-    const sy = actor.height / FRAME_H
-
-    walkAnim = ex.Animation.fromSpriteSheet(sheet, [0, 1, 2, 3], 120)
-    walkAnim.scale = ex.vec(sx, sy)
-
-    idleAnim = ex.Animation.fromSpriteSheet(sheet, [0], 1000)
-    idleAnim.scale = ex.vec(sx, sy)
-
-    actor.graphics.add('walk', walkAnim)
-    actor.graphics.add('idle', idleAnim)
-    actor.graphics.use('idle')
+    rig = createCharacterSprite(actor, src)
   }
 
   return {
     actor,
     commandDeliver, commandSolder, commandSell, commandTrash,
     commandScrapPickup, resumeScrapSuccess, resumeScrapFail,
-    walkTo, notifySolderDone, reset, setupSprite,
+    notifySolderDone, reset, setupSprite,
     getState: () => ws.state,
     isDoingScrap: () => workerIsDoingScrap(ws),
   }

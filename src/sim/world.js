@@ -11,12 +11,40 @@
 // single injection point for randomness so headless tests are deterministic.
 
 import { createState } from '../state/gameState.js'
+import { PLAYER_SPEED, PLAYER_HALF_W, PLAYER_HALF_H } from '../state/config.js'
 
-export function createWorld({ state, salesLog = [] } = {}, { now = Date.now(), rng = Math.random } = {}) {
+// An agent is anything that occupies space and moves under its own velocity.
+// C1 has exactly one (the player); C5 adds hired workers with the same shape,
+// which is why moveSystem already loops over a list.
+export function createAgent({ id, kind, x, y, speed = PLAYER_SPEED }) {
+  return {
+    id, kind,
+    x, y,
+    vx: 0, vy: 0,
+    halfW: PLAYER_HALF_W,
+    halfH: PLAYER_HALF_H,
+    speed,
+    facing: 1,      // 1 = right, -1 = left
+    moving: false,
+  }
+}
+
+export function createWorld({ state, salesLog = [] } = {}, { now = Date.now(), rng = Math.random, layout = null } = {}) {
   return {
     // ── Persisted ──────────────────────────────────────────
     game:     state ?? createState(),
     salesLog,
+
+    // ── Space (C1) ─────────────────────────────────────────
+    // Fixed world units from the location's layout. `obstacles` is what
+    // moveSystem collides against and what C4 will rasterise into a nav grid.
+    layout,
+    bounds:    layout ? { w: layout.world.w, h: layout.world.h } : null,
+    obstacles: layout?.obstacles ?? [],
+    agents:    layout ? [createAgent({ id: 'player', kind: 'player', ...layout.spawns.player })] : [],
+
+    // Movement vector published by the view each frame (already deadzoned).
+    input: { x: 0, y: 0 },
 
     // ── Simulated clock ────────────────────────────────────
     // Authoritative "now" for the sim. Advanced by loop.advance(); every

@@ -1,11 +1,16 @@
 import './style.css'
 import { saveGame, loadGame, clearSave } from './save/storage.js'
 import { createState, Phase, DeliveryStatus } from './state/gameState.js'
-import { ADS_ENABLED, SCRAP_CONSOLATION } from './state/config.js'
+import { ADS_ENABLED, SCRAP_CONSOLATION, INPUT_DEADZONE } from './state/config.js'
 import { levelData, SOLDER_MODE } from './state/upgrades.js'
 import { currentLocation } from './state/locations.js'
 import { setMuted } from './audio/sfx.js'
 import { showRewarded, PLACEMENTS } from './monetization/ads.js'
+
+import { apartment } from './defs/layouts/apartment.js'
+import { createJoystick } from './input/joystick.js'
+import { createKeyboard } from './input/keyboard.js'
+import { mergeInput } from './input/inputVector.js'
 
 import { createWorld, serializeWorld } from './sim/world.js'
 import { advance } from './sim/loop.js'
@@ -80,7 +85,9 @@ function initState() {
 
 // The world is the single source of truth. Nothing outside sim/ writes to it —
 // UI and scene go through send() below.
-const world = createWorld(initState(), { now: Date.now() })
+// The layout supplies world size, obstacles and spawn points (C1).
+// C7 will pick it per location; for now the apartment is the only floor plan.
+const world = createWorld(initState(), { now: Date.now(), layout: apartment })
 
 // Dev-only inspection hook: lets the browser smoke test read the sim without
 // the view having to expose it. Stripped from production builds.
@@ -108,6 +115,19 @@ function haptic(style = 'light') {
   } catch {}
 }
 
+// ── Input (C1) ────────────────────────────────────────────
+
+// Movement must not fire while a modal has the player's attention, and a
+// pointer that starts on UI chrome belongs to that chrome (see joystick.js).
+function inputBlocked() {
+  if (document.querySelector('.modal-overlay:not([hidden])')) return true
+  const onboarding = document.getElementById('onboarding')
+  return !!onboarding && !onboarding.hasAttribute('hidden')
+}
+
+const joystick = createJoystick(uiRoot, { isBlocked: inputBlocked })
+const keyboard = createKeyboard({ isBlocked: inputBlocked })
+
 // ── Sim plumbing ──────────────────────────────────────────
 
 const effects = createEffects({
@@ -125,7 +145,12 @@ function send(type, payload) {
 }
 
 // Advances the simulation to now and presents the result. Driven by the engine.
+// Input is sampled into the world first so the sim itself stays free of the DOM.
 function tick() {
+  world.input = mergeInput(
+    { joystick: joystick.read(), keys: keyboard.read() },
+    INPUT_DEADZONE,
+  )
   effects.apply(advance(world, Date.now(), SYSTEMS))
   present()
 }
@@ -298,10 +323,6 @@ const INTENTS = {
     if (world.game.scrapAvailable && world.game.phase === Phase.IDLE)
       sceneRefs?.worker?.commandScrapPickup()
   },
-  'floor.tap': ({ x, y }) => {
-    if (world.game.phase === Phase.IDLE && !world.worker.desired)
-      sceneRefs?.worker?.walkTo(x, y)
-  },
   // The carry box is driven by world.worker.desired; a tap on it is redundant.
   'box.tap': () => {},
 
@@ -338,6 +359,7 @@ function onIntent(type, payload = {}) {
 initScene(canvas, {
   getWorld: () => world,
   onIntent,
+  layout: apartment,
   onLoadProgress: (loaded, total) => {
     if (loadBar) loadBar.style.width = `${Math.round((loaded / total) * 100)}%`
   },

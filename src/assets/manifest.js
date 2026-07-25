@@ -44,6 +44,12 @@ export const SPRITES = Object.freeze({
     anchors: {},
   },
 
+  // Player character — same 4-frame walk cycle, distinct palette (C1).
+  player_walk: {
+    url: `${BASE}sprites/player_walk.png`,
+    anchors: {},
+  },
+
   racing_drone: {
     url: `${BASE}sprites/racing_drone.png`,
     anchors: {},

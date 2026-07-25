@@ -92,6 +92,15 @@ export function syncScene(refs, world) {
     box.pos.y = -9999
   }
 
+  // ── Player character (C1) ──────────────────────────────
+  // The sim owns the position; the actor is told where it ended up.
+  const player = (world.agents ?? []).find(a => a.kind === 'player')
+  if (player && refs.player) {
+    refs.player.pos.x = player.x
+    refs.player.pos.y = player.y
+    refs.playerRig?.setMoving(player.moving, player.facing > 0)
+  }
+
   // ── Worker intent ──────────────────────────────────────
   applyWorkerIntent(refs, world)
 

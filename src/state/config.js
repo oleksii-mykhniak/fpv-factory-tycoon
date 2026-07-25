@@ -47,17 +47,38 @@ export const AUTO_QUALITY_MIN   = 0.55
 export const AUTO_QUALITY_MAX   = 0.75
 export const AUTO_POINT_DELAY_MS = 2000  // ms between auto-soldered points
 
-// ── Camera zoom (dynamic, based on screen height) ────────
-// zoom = clamp(H / CAMERA_ZOOM_REF, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX)
-export const CAMERA_ZOOM_REF = 980   // reference height for zoom=1.0 feel
-export const CAMERA_ZOOM_MIN = 0.78  // floor for small phones (iPhone SE)
-export const CAMERA_ZOOM_MAX = 0.90  // ceiling for large phones (Pro Max)
+// ── Camera (C1) ──────────────────────────────────────────
+// The world is now larger than the screen and measured in fixed world units,
+// so zoom is chosen to show a constant slice of the world regardless of device:
+//   zoom = clamp(canvasHeight / VIEW_HEIGHT_UNITS, MIN, MAX)
+// A phone and a tablet then see the same amount of game, not the same pixels.
+export const VIEW_HEIGHT_UNITS = 980
+export const CAMERA_ZOOM_MIN   = 0.55
+export const CAMERA_ZOOM_MAX   = 1.60
+// Elastic follow — higher elasticity snaps harder, higher friction damps sooner.
+export const CAMERA_ELASTICITY = 0.20
+export const CAMERA_FRICTION   = 0.28
 
-// ── Scene object proportions (ratios relative to canvas dimensions) ──
-export const SCENE_ROOM_H_RATIO   = 0.70  // room fraction of game canvas height
-export const SCENE_WORKER_W_RATIO = 0.18  // worker size (square) fraction of canvas width
-export const SCENE_DRONE_W_RATIO  = 0.09  // drone width fraction (smaller than worker)
-export const SCENE_BOX_W_RATIO    = 0.12  // delivery box width fraction
+// ── Player movement (C1) ─────────────────────────────────
+export const PLAYER_SPEED  = 240   // world units per second
+// Collision box — deliberately smaller than the sprite and biased to the feet,
+// so the character's head can overlap furniture drawn behind it.
+export const PLAYER_HALF_W = 20
+export const PLAYER_HALF_H = 14
+// Longest displacement resolved in one collision substep. Must stay below the
+// thinnest obstacle (walls are 24) or a fast agent tunnels straight through it.
+export const MOVE_MAX_STEP = 8
+
+// ── Input (C1) ───────────────────────────────────────────
+export const INPUT_DEADZONE = 0.18   // below this magnitude the stick reads as centred
+
+// ── Virtual joystick (C1) ────────────────────────────────
+export const JOYSTICK_RADIUS       = 62   // px from base centre to full deflection
+export const JOYSTICK_ZONE_H_RATIO = 1.0  // fraction of the game area that can start a drag
+
+// Scene object proportions used to live here as fractions of the canvas.
+// C1 replaced them with absolute world units in defs/layouts/<location>.js —
+// the world is bigger than the screen now, so screen fractions are meaningless.
 
 // ── Interaction pulse cues ────────────────────────────────
 export const PULSE_FREQ_HZ   = 1.5   // oscillations per second

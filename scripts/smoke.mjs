@@ -11,24 +11,36 @@ const errors = []
 page.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
 page.on('pageerror', e => errors.push(`PAGEERROR: ${e.message}\n${e.stack}`))
 
-// World fractions → screen pixels, mirroring scene.js layout and camera zoom.
-async function tapWorld(fx, fy) {
-  const p = await page.evaluate(({ fx, fy }) => {
-    const c = document.getElementById('game-canvas')
-    const r = c.getBoundingClientRect()
-    const zoom = Math.max(0.78, Math.min(0.90, r.height / 980))
+// World units → screen pixels, through the live camera (it follows the player,
+// so a fixed screen coordinate is no longer good enough).
+async function tapWorld(wx, wy) {
+  const p = await page.evaluate(({ wx, wy }) => {
+    const cam = globalThis.__refs.scene.camera
+    const r = document.getElementById('game-canvas').getBoundingClientRect()
     return {
-      x: r.left + (fx - 0.5) * r.width * zoom + r.width / 2,
-      y: r.top + (fy - 0.5) * r.height * zoom + r.height / 2,
+      x: r.left + (wx - cam.pos.x) * cam.zoom + r.width / 2,
+      y: r.top + (wy - cam.pos.y) * cam.zoom + r.height / 2,
     }
-  }, { fx, fy })
+  }, { wx, wy })
   await page.mouse.click(p.x, p.y)
 }
 
-const ROOM = 0.70
-const SLOT0   = [0.38, ROOM + 0.30 * 0.35]
-const BENCH   = [0.50, ROOM * 0.35]
-const MAILBOX = [0.16, ROOM + 0.30 * 0.62]
+// Straight from defs/layouts/apartment.js
+const SLOT0   = [420, 1180]
+const BENCH   = [500, 380]
+const MAILBOX = [170, 1300]
+
+const player = () => page.evaluate(() => {
+  const a = globalThis.__world?.agents?.find(x => x.kind === 'player')
+  return a ? { x: Math.round(a.x), y: Math.round(a.y), moving: a.moving } : null
+})
+
+async function hold(key, ms) {
+  await page.keyboard.down(key)
+  await page.waitForTimeout(ms)
+  await page.keyboard.up(key)
+  await page.waitForTimeout(150)
+}
 
 const status = async () => ({
   money: (await page.textContent('#hud-money').catch(() => '?')).trim(),
@@ -42,7 +54,9 @@ const status = async () => ({
     const r = globalThis.__refs
     const a = r?.worker?.actor
     const pos = a ? `(${a.pos.x.toFixed(0)},${a.pos.y.toFixed(0)})` : '?'
-    return `desired=${w.worker.desired} fsm=${r?.worker?.getState?.()} pos=${pos} actions=${a?.actions?.getQueue?.()?.isComplete?.() ?? '?'} deliveries=[${d}]`
+    const p = w.agents?.find(x => x.kind === 'player')
+    const pp = p ? `(${p.x.toFixed(0)},${p.y.toFixed(0)})` : '?'
+    return `player=${pp} desired=${w.worker.desired} fsm=${r?.worker?.getState?.()} workerPos=${pos} deliveries=[${d}]`
   }),
 })
 const log = async (label) => {
@@ -113,6 +127,38 @@ await tapWorld(...BENCH)
 await page.waitForTimeout(9000)
 const bSold = await log('tapped bench → sell')
 
+// ── Scenario C — C1: character movement, camera, collisions ───────────
+console.log('\n### C. Movement (WASD)')
+await boot(seed)
+const c0 = await player()
+console.log(`  spawn: ${JSON.stringify(c0)}`)
+
+await hold('KeyD', 900)
+const cRight = await player()
+console.log(`  after D 900ms: ${JSON.stringify(cRight)}`)
+
+await hold('KeyA', 900)
+const cBack = await player()
+console.log(`  after A 900ms: ${JSON.stringify(cBack)}`)
+
+// Walk hard into the left wall (x=24 thick) — must stop, never pass through.
+await hold('KeyA', 4000)
+const cWall = await player()
+console.log(`  after A 4s (into wall): ${JSON.stringify(cWall)}`)
+
+// Walk up into the workbench (bench spans y 340..420, x 350..650).
+await boot(seed)
+await hold('KeyW', 4000)
+const cBench = await player()
+console.log(`  after W 4s (into bench): ${JSON.stringify(cBench)}`)
+
+// Camera must have followed rather than stayed put.
+await boot(seed)
+const camBefore = await page.evaluate(() => globalThis.__refs.scene.camera.pos.y)
+await hold('KeyS', 1200)
+const camAfter = await page.evaluate(() => globalThis.__refs.scene.camera.pos.y)
+console.log(`  camera y: ${camBefore.toFixed(0)} → ${camAfter.toFixed(0)}`)
+
 await page.screenshot({ path: '.smoke.png' })
 
 console.log('\n=== console errors ===')
@@ -123,6 +169,11 @@ const checks = [
   ['A: bench tap opened the mini-game', aSolder.solderOpen === true],
   ['B: assembly completed on its own',  bReady.phase === 'READY'],
   ['B: sale paid out',                  parseFloat(bSold.money.replace('$', '')) > parseFloat(b0.money.replace('$', '')) - 72],
+  ['C: moves right on D',               cRight.x > c0.x + 100],
+  ['C: moves back left on A',           cBack.x < cRight.x - 100],
+  ['C: stopped by the left wall',       cWall.x >= 24 && cWall.x <= 60],
+  ['C: stopped by the workbench',       cBench.y > 420 && cBench.y < 500],
+  ['C: camera follows the player',      camAfter > camBefore + 100],
   ['no console errors',                 errors.length === 0],
 ]
 console.log('\n=== checks ===')

@@ -437,7 +437,21 @@ function drawPiggy(pixels, w, h) {
 }
 
 // Worker character — top-down view, 64×64 per frame, 4 frames wide = 256×64.
-function drawWorkerWalk(pixels, w, h) {
+// Palettes let one walk-cycle routine produce visually distinct characters.
+// The player must be readable at a glance next to a hired worker.
+const WORKER_PALETTE = {
+  jacket: [0xd8, 0x62, 0x18], jacketHi: [0xf0, 0x84, 0x30], jacketDark: [0xb8, 0x48, 0x10],
+  trim:   [0xee, 0xcc, 0x40], pants: [0x22, 0x2e, 0x52], hair: [0x38, 0x1e, 0x0c],
+  hairDark: [0x28, 0x14, 0x06],
+}
+
+const PLAYER_PALETTE = {
+  jacket: [0x1f, 0x9e, 0x92], jacketHi: [0x36, 0xc4, 0xb4], jacketDark: [0x14, 0x74, 0x6c],
+  trim:   [0xff, 0xe0, 0x74], pants: [0x2c, 0x2c, 0x3e], hair: [0x6a, 0x33, 0x14],
+  hairDark: [0x4a, 0x22, 0x0c],
+}
+
+function drawWalkCycle(pixels, w, h, pal) {
   const FRAME = 64
   // foot positions relative to frame center (x offset from frame center, absolute y)
   const frames = [
@@ -465,18 +479,18 @@ function drawWorkerWalk(pixels, w, h) {
     fillCircle(pixels, w, ox + f.lx - 1, f.ly - 1,  2,  0x28, 0x28, 0x34)
     fillCircle(pixels, w, ox + f.rx - 1, f.ry - 1,  2,  0x28, 0x28, 0x34)
 
-    // Pants (dark navy blue)
-    fillCircle(pixels, w, ox + f.lx, f.ly - 5,  5,  0x22, 0x2e, 0x52)
-    fillCircle(pixels, w, ox + f.rx, f.ry - 5,  5,  0x22, 0x2e, 0x52)
+    // Pants
+    fillCircle(pixels, w, ox + f.lx, f.ly - 5,  5,  ...pal.pants)
+    fillCircle(pixels, w, ox + f.rx, f.ry - 5,  5,  ...pal.pants)
 
-    // Body / work jacket (orange)
-    fillCircle(pixels, w, cx, 34,  10,  0xd8, 0x62, 0x18)
-    fillCircle(pixels, w, cx, 32,   7,  0xf0, 0x84, 0x30)   // highlight
+    // Body / work jacket
+    fillCircle(pixels, w, cx, 34,  10,  ...pal.jacket)
+    fillCircle(pixels, w, cx, 32,   7,  ...pal.jacketHi)   // highlight
     // Jacket collar / zipper stripe
-    fillRect(pixels, w, cx - 1, 28, cx + 1, 36,  0xb8, 0x48, 0x10)
+    fillRect(pixels, w, cx - 1, 28, cx + 1, 36,  ...pal.jacketDark)
     // Side buttons / reflective strips
-    fillRect(pixels, w, cx - 8, 32, cx - 6, 35,  0xee, 0xcc, 0x40)
-    fillRect(pixels, w, cx + 6, 32, cx + 8, 35,  0xee, 0xcc, 0x40)
+    fillRect(pixels, w, cx - 8, 32, cx - 6, 35,  ...pal.trim)
+    fillRect(pixels, w, cx + 6, 32, cx + 8, 35,  ...pal.trim)
 
     // Head (warm skin tone)
     fillCircle(pixels, w, cx, 18,  12,  0xf0, 0xc4, 0x84)
@@ -486,9 +500,9 @@ function drawWorkerWalk(pixels, w, h) {
     for (let dy = -12; dy <= -3; dy++)
       for (let dx = -12; dx <= 12; dx++)
         if (dx * dx + dy * dy <= 144)
-          setPixel(pixels, w, cx + dx, 18 + dy,  0x38, 0x1e, 0x0c)
+          setPixel(pixels, w, cx + dx, 18 + dy,  ...pal.hair)
     // Cap visor (flat brim)
-    fillRect(pixels, w, cx - 9, 16, cx + 9, 17,  0x28, 0x14, 0x06)
+    fillRect(pixels, w, cx - 9, 16, cx + 9, 17,  ...pal.hairDark)
 
     // Eyes (small dark dots below cap brim)
     setPixel(pixels, w, cx - 4, 18,  0x18, 0x18, 0x22)
@@ -508,6 +522,9 @@ function drawWorkerWalk(pixels, w, h) {
   }
 }
 
+const drawWorkerWalk = (pixels, w, h) => drawWalkCycle(pixels, w, h, WORKER_PALETTE)
+const drawPlayerWalk = (pixels, w, h) => drawWalkCycle(pixels, w, h, PLAYER_PALETTE)
+
 // ── Generate all sprites ──────────────────────────────────────────────────────
 
 mkdirSync('public/sprites', { recursive: true })
@@ -525,6 +542,7 @@ const sprites = [
   { name: 'soldering_iron',   w:  64, h:  16, draw: drawSolderingIron   },
   // Worker — 4 frames × 64×64 = 256×64
   { name: 'worker_walk',      w: 256, h:  64, draw: drawWorkerWalk      },
+  { name: 'player_walk',      w: 256, h:  64, draw: drawPlayerWalk      },
   // Environment objects
   { name: 'lamp',             w:  48, h:  48, draw: drawLamp            },
   { name: 'mailbox',          w:  64, h:  52, draw: drawMailbox         },
