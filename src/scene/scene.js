@@ -8,10 +8,27 @@ import {
 } from '../state/config.js'
 import { loadSprites, getSprite } from './loader.js'
 import { createCharacterSprite } from './character.js'
+import { roleColor, roleBadge } from '../defs/roles.js'
 
 // How many carried items the stack can show at once. The gameplay limit is
 // CARRY_CAPACITY in config; this is only how many actors exist to draw.
 const CARRY_STACK_SLOTS = 3
+
+// Floor markings (S1.3): one colour per kind of trigger zone, so the room says
+// what each patch of floor is for. Dim by default, lit when the player could
+// actually do something by standing there.
+const ZONE_PAINT = {
+  delivery_slot: '#3a5db8',
+  bench:         '#c49a3c',
+  bench_out:     '#4fbf6a',
+  mailbox:       '#7a5ad8',
+  trashbin:      '#4a6a3a',
+  piggy:         '#d4607a',
+}
+export const ZONE_FILL_DIM  = 0.07
+export const ZONE_FILL_LIVE = 0.20
+export const ZONE_EDGE_DIM  = 0.22
+export const ZONE_EDGE_LIVE = 0.75
 
 // The scene is a *projection* of the simulation (C0): it never owns gameplay
 // state. Two hooks connect it to the sim:
@@ -427,9 +444,37 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
       progress: createBenchProgress(scene, actor),
       workSpot: placed.workSpot,
       surface:  placed.surface,
+      outSpot:  placed.outSpot,
       spriteKey: null,
     }
   })
+  // ── Painted floor zones (S1.3) ─────────────────────────
+  // Every trigger zone gets a mark on the floor in its own colour, the way a
+  // real shop tapes off a picking area. Before this the only clue that
+  // somewhere was worth standing was a pulsing object, so "walk round to the
+  // far side of the bench" was not something the room could tell you.
+  const zonePaints = (world.zones ?? []).map(zone => {
+    const hex = ZONE_PAINT[zone.kind]
+    if (!hex) return null
+
+    const fill = colorRect(scene, {
+      x: zone.cx, y: zone.cy, w: zone.w, h: zone.h, hex, z: 0.5,
+    })
+    fill.graphics.opacity = ZONE_FILL_DIM
+
+    // Border, four thin bars — a filled rectangle alone reads as a stain.
+    const T = 4
+    const edges = [
+      colorRect(scene, { x: zone.cx, y: zone.cy - zone.h / 2 + T / 2, w: zone.w, h: T, hex, z: 0.6 }),
+      colorRect(scene, { x: zone.cx, y: zone.cy + zone.h / 2 - T / 2, w: zone.w, h: T, hex, z: 0.6 }),
+      colorRect(scene, { x: zone.cx - zone.w / 2 + T / 2, y: zone.cy, w: T, h: zone.h, hex, z: 0.6 }),
+      colorRect(scene, { x: zone.cx + zone.w / 2 - T / 2, y: zone.cy, w: T, h: zone.h, hex, z: 0.6 }),
+    ]
+    for (const e of edges) e.graphics.opacity = ZONE_EDGE_DIM
+
+    return { zoneId: zone.id, fill, edges }
+  }).filter(Boolean)
+
   const workbench = stations[0].actor
 
   const { spawns, sizes } = layout
@@ -552,7 +597,7 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
   // Position is owned by the sim (world.agents); these actors only render it.
   // One factory for both, because a worker is now an agent exactly like the
   // player — the difference is who writes its velocity.
-  function makeCharacter(spriteKey, color) {
+  function makeCharacter(spriteKey, color, { badge = null, tint = false } = {}) {
     // A soft ellipse under the feet: without it characters look pasted onto the
     // floor rather than standing on it.
     const shadow = new ex.Actor({
@@ -564,6 +609,19 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     })
     scene.add(track(shadow))
 
+    // Colour ring on the floor (S1.4). The tint alone is easy to miss on a
+    // small screen; a ring in the role's colour reads at a glance, even in a
+    // crowd around one bench.
+    const ring = new ex.Actor({
+      pos:    ex.vec(-9999, -9999),
+      width:  sizes.character * 0.60,
+      height: sizes.character * 0.24,
+      z: 4,
+      color:  ex.Color.fromHex(color),
+      opacity: 0.55,
+    })
+    scene.add(track(ring))
+
     const actor = new ex.Actor({
       pos:    ex.vec(spawns.player.x, spawns.player.y),
       width:  sizes.character,
@@ -572,15 +630,40 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
       color:  ex.Color.fromHex(color),
     })
     scene.add(track(actor))
-    const rig = createCharacterSprite(actor, getSprite(spriteKey))
+    const rig = createCharacterSprite(actor, getSprite(spriteKey), tint ? color : null)
+
+    // Role badge above the head — the emoji says what the colour means.
+    let badgeLabel = null
+    if (badge) {
+      badgeLabel = new ex.Label({
+        text: badge,
+        pos:  ex.vec(-9999, -9999),
+        z: 25,
+        font: new ex.Font({
+          family: 'sans-serif', size: 22, unit: ex.FontUnit.Px,
+          textAlign: ex.TextAlign.Center, baseAlign: ex.BaseAlign.Middle,
+        }),
+      })
+      scene.add(badgeLabel)
+      track(badgeLabel)
+    }
+
     // Y-sort: whoever stands lower on screen draws in front.
     actor.on('preupdate', () => {
       actor.z = actor.pos.y * 0.01
       shadow.pos.x = actor.pos.x
       shadow.pos.y = actor.pos.y + actor.height * 0.36
       shadow.z = actor.z - 0.001
+      ring.pos.x = actor.pos.x
+      ring.pos.y = actor.pos.y + actor.height * 0.38
+      ring.z = actor.z - 0.002
+      if (badgeLabel) {
+        badgeLabel.pos.x = actor.pos.x
+        badgeLabel.pos.y = actor.pos.y - actor.height * 0.72
+        badgeLabel.z = actor.z + 6
+      }
     })
-    return { actor, rig, shadow }
+    return { actor, rig, shadow, ring, badge: badgeLabel }
   }
 
   const { actor: player, rig: playerRig } = makeCharacter('player_walk', '#1f9e92')
@@ -597,10 +680,12 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
 
   // Worker actors are created on demand — hiring happens mid-game.
   const workerViews = new Map()
-  function workerView(agentId) {
+  function workerView(agentId, role = null) {
     let view = workerViews.get(agentId)
     if (!view) {
-      view = makeCharacter('worker_walk', '#f0a030')
+      // Colour and badge come from the role registry, so adding a role gives
+      // its people a look without touching the scene.
+      view = makeCharacter('worker_walk', roleColor(role), { badge: roleBadge(role), tint: true })
       // Carried items ride above the head, same rig as the player's stack.
       view.carrySlots = Array.from({ length: 2 }, () => {
         const a = new ex.Actor({
@@ -673,6 +758,7 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     arrow,
     dwell: { bg: dwellBg, fill: dwellFill, width: DWELL_W },
     slotSpawns,
+    zonePaints,
     boxSpawn: BOX_SPAWN,
     _pulses: { box: boxPulse, mailbox: mailboxPulse, trashbin: trashbinPulse },
   }

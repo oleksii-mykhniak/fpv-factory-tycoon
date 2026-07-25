@@ -16,6 +16,9 @@
 
 import { Phase, DeliveryStatus, KIT_TYPES, stationsOf } from '../state/gameState.js'
 import { getSprite } from '../scene/loader.js'
+import {
+  ZONE_FILL_DIM, ZONE_FILL_LIVE, ZONE_EDGE_DIM, ZONE_EDGE_LIVE,
+} from '../scene/scene.js'
 import { INTERACTIONS, carrySpriteKey } from '../defs/interactions.js'
 import { dwellProgress } from '../sim/systems/zone.js'
 import { piggyShouldShow, nextObjective } from '../sim/derive.js'
@@ -80,10 +83,18 @@ export function syncScene(refs, world) {
       view.spriteKey = spriteKey
     }
 
-    // A drone carried away from this station must not also lie on it.
-    const carriedFromHere = inHand.some(i => i.type === 'drone' && i.stationId === station.id)
+    // A drone carried away from this station must not also lie on it. `takenBy`
+    // covers everyone: the player, a seller, or nobody.
+    const carriedFromHere =
+      !!station.takenBy || inHand.some(i => i.type === 'drone' && i.stationId === station.id)
     view.drone.graphics.visible =
       (assembling || station.phase === Phase.BURNT) && !carriedFromHere
+
+    // A finished drone waits on the OUTPUT edge of the bench, where it is
+    // collected (S1.2) — not in the middle, where the work happens.
+    const spot = station.phase === Phase.READY ? (view.outSpot ?? view.surface) : view.surface
+    view.drone.pos.x = spot.x
+    view.drone.pos.y = spot.y
   }
 
   // Nobody carries the loose box actor any more — every character has its own
@@ -99,9 +110,13 @@ export function syncScene(refs, world) {
     _pulses.mailbox.stop()
     _pulses.trashbin?.stop()
     for (const view of refs.stations ?? []) view.pulse.stop()
+    for (const paint of refs.zonePaints ?? []) setZonePaint(paint, false)
 
     for (const zone of world.zones ?? []) {
       if (!INTERACTIONS[zone.kind]?.enabled(world, zone, player)) continue
+      // The floor mark lights up for the same reason the object pulses.
+      const paint = (refs.zonePaints ?? []).find(p => p.zoneId === zone.id)
+      if (paint) setZonePaint(paint, true)
       // A station zone pulses its own station; fixed zones use a named pulse.
       const stationView = (refs.stations ?? []).find(v => v.id === zone.meta?.stationId)
       if (stationView) { stationView.pulse.start(); continue }
@@ -127,6 +142,13 @@ export function syncScene(refs, world) {
   syncWorkers(refs, world)
 }
 
+// Dim floor marking → lit. Two states only: there is something to do here, or
+// there is not.
+function setZonePaint(paint, live) {
+  paint.fill.graphics.opacity = live ? ZONE_FILL_LIVE : ZONE_FILL_DIM
+  for (const edge of paint.edges) edge.graphics.opacity = live ? ZONE_EDGE_LIVE : ZONE_EDGE_DIM
+}
+
 function syncWorkers(refs, world) {
   if (!refs.workerView) return
   const seen = new Set()
@@ -134,7 +156,7 @@ function syncWorkers(refs, world) {
   for (const agent of world.agents ?? []) {
     if (agent.kind !== 'worker') continue
     seen.add(agent.id)
-    const view = refs.workerView(agent.id)
+    const view = refs.workerView(agent.id, agent.role)
     follow(view.actor, agent.x, agent.y)
     view.actor.graphics.visible = true
     view.rig?.setMoving(agent.moving, agent.facing > 0)

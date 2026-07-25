@@ -9,7 +9,7 @@
 // walking into a trigger zone is what actually picks things up and puts them
 // down, exactly as it does for the player.
 
-import { Phase, stationsOf } from '../../state/gameState.js'
+import { Phase, stationsOf, releaseOutput } from '../../state/gameState.js'
 import { taskDef } from '../../defs/tasks.js'
 import { roleDef, roleLevelData } from '../../defs/roles.js'
 import { WANDER_RADIUS, WANDER_PAUSE_MS } from '../../state/config.js'
@@ -27,6 +27,8 @@ function pickJob(world, agent) {
 
   for (const job of world.jobs ?? []) {
     if (job.claimedBy || !accepts.includes(job.type)) continue
+    // Half-finished errands belong to whoever is holding the goods.
+    if (job.onlyAgent && job.onlyAgent !== agent.id) continue
     const zone = zoneById(world, job.fromZone ?? job.atZone)
     if (!zone) continue
     const d = Math.hypot(zone.cx - agent.x, zone.cy - agent.y)
@@ -57,10 +59,26 @@ const CONDITIONS = {
 function release(world, agent, reason, events) {
   const job = (world.jobs ?? []).find(j => j.id === agent.task?.jobId)
   if (job && job.claimedBy === agent.id) job.claimedBy = null
+  // Walking off an errand must not take the goods out of the world: a drone
+  // still in hand goes back on the output table it came from, where the next
+  // free pair of hands (or the player) can find it.
+  if (reason !== 'finished') returnCarriedDrones(world, agent, events)
   if (agent.task) emit(events, EV.JOB_RELEASED, { agentId: agent.id, jobId: agent.task.jobId, reason })
   agent.task = null
   agent.holdZone = null
   stopPath(agent)
+}
+
+function returnCarriedDrones(world, agent, events) {
+  const kept = []
+  for (const item of agent.carrying ?? []) {
+    if (item.type !== 'drone' || !item.stationId) { kept.push(item); continue }
+    const station = stationsOf(world.game).find(s => s.id === item.stationId)
+    if (!station || station.takenBy !== agent.id) { kept.push(item); continue }
+    world.game = releaseOutput(world.game, item.stationId)
+    emit(events, EV.ITEM_DROPPED, { agentId: agent.id, item: 'drone', stationId: item.stationId })
+  }
+  agent.carrying = kept
 }
 
 function runStep(world, agent, dt, events) {
@@ -71,9 +89,12 @@ function runStep(world, agent, dt, events) {
   let step = def.steps[agent.task.stepIndex]
   if (!step) { release(world, agent, 'finished', events); return }
 
-  // Resuming a haul that is already half done: the box is in hand, so the trip
-  // to the street slot is behind us.
-  if (agent.task.stepIndex === 0 && job.type === 'haul_delivery' && (agent.carrying ?? []).length) {
+  // Resuming a fetch-and-carry that is already half done: the goods are in
+  // hand, so the trip to the pickup point is behind us. True for a box from the
+  // street and for a drone off the output table alike.
+  if (agent.task.stepIndex === 0 &&
+      (job.type === 'haul_delivery' || job.type === 'sell_drone') &&
+      (agent.carrying ?? []).length) {
     agent.task.stepIndex = 2
     stopPath(agent)
   }
@@ -153,15 +174,33 @@ function runStep(world, agent, dt, events) {
 // seconds.
 function idleWander(world, agent, dt) {
   agent.idleMs = (agent.idleMs ?? 0) + dt
+
+  // Finished (or gave up on) the last stroll: let go of the target. Leaving it
+  // set looked harmless — the agent was standing still either way — but
+  // pathSystem sees "wants to be somewhere, has no route" and re-plans every
+  // single tick. Two idle workers were quietly consuming the entire per-tick
+  // path budget, so whoever actually needed a route (a seller carrying a drone
+  // to the mailbox) never got one and drifted on stale velocity.
+  if (agent.pathTarget && (agent.arrived || agent.pathFailed)) stopPath(agent)
+
   if (agent.path || agent.pathTarget) return
   if (agent.idleMs < WANDER_PAUSE_MS) return
 
   agent.idleMs = 0
-  const home = world.layout?.spawns?.workerIdle ?? { x: agent.x, y: agent.y }
+  const home = postFor(world, agent)
   const angle = world.rng() * Math.PI * 2
   const r = world.rng() * WANDER_RADIUS
   agent.pathTarget = { x: home.x + Math.cos(angle) * r, y: home.y + Math.sin(angle) * r }
   agent.arrived = false
+}
+
+// Where this worker belongs when there is nothing to do: their own post, not
+// one shared huddle by the door (S1.5). A courier waits near the street, a
+// technician by the benches, a seller by the mailbox — so the shop reads as
+// staffed rather than as a queue.
+export function postFor(world, agent) {
+  const spawns = world.layout?.spawns ?? {}
+  return spawns.posts?.[agent.role] ?? spawns.workerIdle ?? { x: agent.x, y: agent.y }
 }
 
 export function agentSystem(world, dt, events) {

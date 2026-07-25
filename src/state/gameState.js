@@ -32,7 +32,30 @@ export function createStation(id, defId = 'workbench') {
     solderPoints: [],
     quality:      null,
     coldPenalty:  0,
+    // Who took the finished drone off the output table (S1.1). The station is
+    // still READY — it holds the kit and the quality until the sale — but its
+    // output is in someone's hands, so nobody may take it a second time.
+    takenBy:      null,
   }
+}
+
+// Someone lifts the finished drone off the output table. Kept separate from
+// sell() because the drone still has to be carried to the mailbox: the station
+// must stop offering it the moment it leaves the table, or the job board hands
+// a second, imaginary drone to the next free seller.
+export function takeOutput(state, stationId, agentId) {
+  const station = getStation(state, stationId)
+  if (station.phase !== Phase.READY)
+    throw new Error(`takeOutput: станція ${stationId} у фазі ${station.phase}`)
+  if (station.takenBy)
+    throw new Error(`takeOutput: дрон зі станції ${stationId} вже несе ${station.takenBy}`)
+  return withStation(state, stationId, s => ({ ...s, takenBy: agentId }))
+}
+
+// The carrier is gone (reload, a fired worker, a dropped errand) — the drone
+// goes back on the table rather than out of the world.
+export function releaseOutput(state, stationId) {
+  return withStation(state, stationId, s => ({ ...s, takenBy: null }))
 }
 
 // ── Station lookup ────────────────────────────────────────

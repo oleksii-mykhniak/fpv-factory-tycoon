@@ -96,6 +96,8 @@ export const OFFLINE_CAP_MS = 4 * 60 * 60 * 1000
 
 // Idle behaviour: workers with no job drift around the rest area instead of
 // standing frozen, which is what makes the shop look alive.
+// Small enough that a worker reads as standing at their own post rather than
+// roaming the shop (S1.5).
 export const WANDER_RADIUS   = 120
 export const WANDER_PAUSE_MS = 2600
 
@@ -143,6 +145,9 @@ export const VIEW_SMOOTHING = 0.35
 // Longer dwell = the action reads as "work"; instant = "pick up".
 export const ZONE_DWELL_INSTANT_MS = 0
 export const ZONE_DWELL_BENCH_MS   = 1100
+// Collecting a finished drone from the output table (S1.2). Short: the walk
+// round the bench is the cost, standing still is not.
+export const ZONE_DWELL_OUTPUT_MS  = 250
 export const ZONE_DWELL_MAILBOX_MS = 700
 export const ZONE_DWELL_TRASH_MS   = 900
 // Progress drains this many times faster than it fills when you step out, so

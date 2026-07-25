@@ -33,7 +33,7 @@ import { createPiggyModal } from './ui/piggyModal.js'
 import { createTrashModal } from './ui/trashModal.js'
 
 import { initScene, rebuildScene, applyLocationTheme } from './scene/scene.js'
-import { syncScene } from './view/sceneSync.js'
+import { syncScene, resetSceneSync } from './view/sceneSync.js'
 import { createEffects } from './view/effects.js'
 
 // ── State init ────────────────────────────────────────────
@@ -213,13 +213,25 @@ const shopModal = createShopModal(uiRoot, {
 })
 
 const upgradeModal = createUpgradeModal(uiRoot, {
-  onBuyUpgrade:     (id) => send('buyUpgrade', { trackId: id }),
+  onBuyUpgrade: (id) => {
+    send('buyUpgrade', { trackId: id })
+    // A new bench is a new object in the room, with its own footprint and its
+    // own floor markings — the sim built it, so the scene has to be rebuilt to
+    // show it. Without this the station existed but nothing was drawn there.
+    if (id === 'benches') {
+      sceneRefs = rebuildScene({ getWorld: () => world, onIntent, layout: world.layout, world })
+      resetSceneSync()
+      uiDirty = true
+      present()
+    }
+  },
   onHire:           (role) => send('hireWorker', { role }),
   onMoveToLocation: (id) => {
     send('moveToLocation', { locationId: id })
     // A move is a different room, not a re-tint: tear the scene down and build
     // the new floor plan (C7).
     sceneRefs = rebuildScene({ getWorld: () => world, onIntent, layout: world.layout, world })
+    resetSceneSync()
     applyLocationTheme(world.layout.theme)
     upgradeModal.close?.()
     uiDirty = true

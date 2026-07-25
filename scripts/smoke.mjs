@@ -66,7 +66,11 @@ async function boot(seed) {
   }, seed)
   await page.reload({ waitUntil: 'networkidle' })
   await page.waitForTimeout(1500)
-  await page.click('#onboarding').catch(() => {})
+  // Short timeout on purpose: with a seeded save the onboarding card is
+  // already dismissed, and the default 30 s wait was costing half a minute per
+  // boot — most of this suite's runtime for a click that is meant to be a
+  // best-effort no-op.
+  await page.click('#onboarding', { timeout: 1000 }).catch(() => {})
   await page.waitForTimeout(300)
 }
 
@@ -120,10 +124,16 @@ const aDrop = await log('stood at the bench')
 await page.waitForTimeout(12000)
 const aReady = await log('bench finished with the player at it')
 
+// The finished drone comes off the OUTPUT side of the bench (S1.2) — standing
+// where you soldered it is no longer enough.
 await goAway(); await page.waitForTimeout(600)
 await goTo('zone-station-0')
-await page.waitForTimeout(2000)
-const aTake = await log('collected the drone')
+await page.waitForTimeout(1500)
+const aStillEmpty = await log('back at the work side: nothing to collect')
+
+await goTo('zone-out-station-0')
+await page.waitForTimeout(1500)
+const aTake = await log('collected the drone from the output table')
 
 await goTo('mailbox')
 await page.waitForTimeout(2500)
@@ -368,7 +378,8 @@ const checks = [
   ['A: slot zone put the box in hand',    aPick.carrying.includes('kit_box')],
   ['A: bench zone started assembly',      aDrop.phase === 'ASSEMBLY' && aDrop.carrying.length === 0],
   ['A: bench finished with someone at it', aReady.phase === 'READY'],
-  ['A: bench zone handed over the drone', aTake.carrying.includes('drone')],
+  ['A: work side does NOT hand over the drone', !aStillEmpty.carrying.includes('drone')],
+  ['A: output table handed over the drone', aTake.carrying.includes('drone')],
   ['A: mailbox zone sold it',             aSold.phase === 'IDLE' && money(aSold) > money(aReady)],
   ['B: standing at a bench shows the strip', bSolder.solderOpen === true],
   ['B: piggy zone opened the piggy game', bPiggy.piggyOpen === true],

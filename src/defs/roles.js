@@ -15,6 +15,11 @@ export const ROLES = Object.freeze({
     id: 'courier',
     name: "Кур'єр",
     emoji: '🏃',
+    // Livery (S1.4): the shop is read at a glance, so who is who has to be a
+    // colour and not a job title. `color` tints the sprite and the ring under
+    // the feet; `badge` rides above the head.
+    color: '#4a8ef0',
+    badge: '📦',
     hint: 'Носить коробки з вулиці на верстак',
     accepts: ['haul_delivery'],
     hire: { base: HIRE_COST_BASE.courier, growth: HIRE_COST_GROWTH },
@@ -25,6 +30,8 @@ export const ROLES = Object.freeze({
     id: 'tech',
     name: 'Технік',
     emoji: '🔧',
+    color: '#f0a030',
+    badge: '🔧',
     hint: 'Паяє за вас — навіть з ручним паяльником',
     accepts: ['assemble'],
     hire: { base: HIRE_COST_BASE.tech, growth: HIRE_COST_GROWTH },
@@ -42,6 +49,8 @@ export const ROLES = Object.freeze({
     id: 'seller',
     name: 'Продавець',
     emoji: '📮',
+    color: '#4fbf6a',
+    badge: '💵',
     hint: 'Відносить готові дрони до скриньки',
     accepts: ['sell_drone'],
     hire: { base: HIRE_COST_BASE.seller, growth: HIRE_COST_GROWTH },
@@ -70,6 +79,9 @@ export function hireCost(roleId, alreadyHired) {
 }
 
 // Which roles can take this task type.
+export const roleColor = (roleId) => ROLES[roleId]?.color ?? '#f0a030'
+export const roleBadge = (roleId) => ROLES[roleId]?.badge ?? '•'
+
 export function rolesFor(taskType) {
   return ROLE_ORDER.filter(id => ROLES[id].accepts.includes(taskType))
 }

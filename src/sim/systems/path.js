@@ -68,7 +68,18 @@ export function planPath(world, agent) {
 export function pathSystem(world, dt) {
   let budget = PATHS_PER_TICK
 
-  for (const agent of world.agents ?? []) {
+  // Round-robin start, so the budget cannot be monopolised by whoever happens
+  // to sit first in the list: with a fixed start the last agent in a busy shop
+  // could wait forever for a route.
+  const agents = world.agents ?? []
+  if (agents.length) {
+    world.pathCursor = ((world.pathCursor ?? 0) + 1) % agents.length
+  }
+  const order = agents.length
+    ? [...agents.slice(world.pathCursor), ...agents.slice(0, world.pathCursor)]
+    : agents
+
+  for (const agent of order) {
     if (!agent.pathTarget) {
       agent.path = null
       continue
@@ -114,6 +125,8 @@ export function pathSystem(world, dt) {
 export function stopPath(agent) {
   agent.pathTarget = null
   agent.path       = null
+  agent.vx         = 0
+  agent.vy         = 0
   agent.pathFailed = false
   agent.stuckMs    = 0
 }

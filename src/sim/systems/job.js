@@ -11,7 +11,12 @@ import { taskDef } from '../../defs/tasks.js'
 
 // The zone a station's work happens in.
 const stationZone = (world, stationId) =>
-  (world.zones ?? []).find(z => z.meta?.stationId === stationId)?.id
+  (world.zones ?? []).find(z => z.kind === 'bench' && z.meta?.stationId === stationId)?.id
+
+// The output side of a station — where a finished drone is collected (S1.2).
+const stationOutZone = (world, stationId) =>
+  (world.zones ?? []).find(z => z.kind === 'bench_out' && z.meta?.stationId === stationId)?.id ??
+  stationZone(world, stationId)
 
 const slotZone = (world, slotIndex) =>
   (world.zones ?? []).find(z => z.kind === 'delivery_slot' && z.meta?.slotIndex === slotIndex)?.id
@@ -83,14 +88,24 @@ export function deriveJobs(world) {
     }
 
     // 3. A finished drone wants taking to the mailbox.
-    if (station.phase === Phase.READY) {
-      const fromZone = stationZone(world, station.id)
+    //
+    // Two halves of one errand, exactly like hauling a box: the drone waiting
+    // on the output table, and the drone already in a seller's hands. Deriving
+    // this from READY alone sent a second seller after an imaginary drone the
+    // moment the first one (or the player) picked it up; deriving it only from
+    // the untaken state would instead cancel the errand mid-walk.
+    const takenByWorker = station.takenBy && station.takenBy !== 'player'
+    if (station.phase === Phase.READY && (!station.takenBy || takenByWorker)) {
+      const fromZone = stationOutZone(world, station.id)
       const toZone   = (world.zones ?? []).find(z => z.kind === 'mailbox')?.id
       if (fromZone && toZone) {
         jobs.push({
           id: `sell_drone:${station.id}`,
           type: 'sell_drone',
           stationId: station.id,
+          // A drone already in hand belongs to the one holding it: nobody else
+          // may claim the errand and walk to an output table that is now empty.
+          onlyAgent: takenByWorker ? station.takenBy : null,
           fromZone,
           toZone,
         })

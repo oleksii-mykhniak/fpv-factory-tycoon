@@ -19,10 +19,10 @@
 import {
   Phase, DeliveryStatus, KIT_TYPES,
   pickupDelivery, startAssembly, startScrapAssembly, getStation,
-  sell as sellStation, calcPrice,
+  sell as sellStation, calcPrice, takeOutput,
 } from '../state/gameState.js'
 import {
-  ZONE_DWELL_INSTANT_MS, ZONE_DWELL_BENCH_MS,
+  ZONE_DWELL_INSTANT_MS, ZONE_DWELL_BENCH_MS, ZONE_DWELL_OUTPUT_MS,
   ZONE_DWELL_MAILBOX_MS, ZONE_DWELL_TRASH_MS,
   CARRY_CAPACITY,
 } from '../state/config.js'
@@ -72,8 +72,8 @@ export const INTERACTIONS = {
     },
   },
 
-  // Workbench: drop a box to start assembly, collect a finished drone, or —
-  // while it is being assembled — work at it (the mini-game).
+  // Workbench, front side: drop a box to start assembly, or — while it is being
+  // assembled — work at it. Collecting the result happens at `bench_out`.
   bench: {
     dwellMs: ZONE_DWELL_BENCH_MS,
     repeat:  true,
@@ -86,7 +86,6 @@ export const INTERACTIONS = {
       // A box can only be put down where there is a delivery to consume.
       if (hasBox) return phase === Phase.IDLE
       if (carriedType(agent, 'scrap')) return phase === Phase.IDLE
-      if (phase === Phase.READY)       return !carryFull(agent)
       // ASSEMBLY is not a trigger any more (C6): working a bench is continuous
       // presence, shown by the soldering strip, not a one-shot dwell.
       return false
@@ -109,11 +108,30 @@ export const INTERACTIONS = {
         emit(events, EV.STATE_DIRTY)
         return
       }
-      if (station.phase === Phase.READY) {
-        take(agent, { type: 'drone', kitId: station.kitId, stationId })
-        emit(events, EV.ITEM_PICKED, { agentId: agent.id, item: 'drone', stationId })
-        return
-      }
+    },
+  },
+
+  // Workbench, output side: the only place a finished drone can be collected.
+  bench_out: {
+    dwellMs: ZONE_DWELL_OUTPUT_MS,
+    repeat:  false,
+    accepts:  'any',
+    enabled(world, zone, agent) {
+      const station = stationOf(world, zone)
+      if (!station) return false
+      // `takenBy` is what stops the drone being taken twice: before it existed
+      // the station stayed READY while the drone was already in somebody's
+      // hands, so the job board sent a seller to fetch a second, imaginary one.
+      if (station.phase !== Phase.READY || station.takenBy) return false
+      return !carryFull(agent)
+    },
+    run(world, zone, agent, events) {
+      const station = stationOf(world, zone)
+      if (!station || station.phase !== Phase.READY || station.takenBy) return
+      world.game = takeOutput(world.game, station.id, agent.id)
+      take(agent, { type: 'drone', kitId: station.kitId, stationId: station.id })
+      emit(events, EV.ITEM_PICKED, { agentId: agent.id, item: 'drone', stationId: station.id })
+      emit(events, EV.STATE_DIRTY)
     },
   },
 

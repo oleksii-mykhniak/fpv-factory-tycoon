@@ -36,7 +36,14 @@ function moveAxis(agent, obstacles, axis, delta) {
 // Runs before integration so a path-following agent and a player-driven one go
 // through exactly the same collision code afterwards.
 function followPath(agent) {
-  if (!agent.path || agent.pathIndex >= agent.path.length) return
+  // No route: a path-driven character stands still. Returning here without
+  // clearing the velocity left the LAST heading in place, so a worker that
+  // finished (or lost) its route kept sliding across the room at full speed —
+  // which is how a technician drifted out of the bench zone it was holding.
+  if (!agent.path || agent.pathIndex >= agent.path.length) {
+    if (agent.kind !== 'player') { agent.vx = 0; agent.vy = 0 }
+    return
+  }
 
   let target = agent.path[agent.pathIndex]
   // Skip any waypoints already satisfied — a smoothed path can pass close to

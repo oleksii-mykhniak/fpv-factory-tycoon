@@ -12,7 +12,7 @@ const FRAME_H = 64
 // Attaches 'walk' and 'idle' graphics to an actor from a 4-frame sheet.
 // Returns a setter for the animation state; no-ops safely when the sprite is
 // missing (loader.js resolves absent files to null on purpose).
-export function createCharacterSprite(actor, imageSource) {
+export function createCharacterSprite(actor, imageSource, tintHex = null) {
   if (!imageSource) return { setMoving: () => {} }
 
   const sheet = ex.SpriteSheet.fromImageSource({
@@ -26,6 +26,18 @@ export function createCharacterSprite(actor, imageSource) {
   walk.scale = ex.vec(sx, sy)
   const idle = ex.Animation.fromSpriteSheet(sheet, [0], 1000)
   idle.scale = ex.vec(sx, sy)
+
+  // Livery (S1.4): one sheet, one palette per role. Tinting the frames is what
+  // lets a courier and a technician be told apart across the room without
+  // drawing (and shipping) a sprite sheet per role.
+  if (tintHex) {
+    const tint = ex.Color.fromHex(tintHex)
+    for (const anim of [walk, idle]) {
+      for (const frame of anim.frames) {
+        if (frame.graphic instanceof ex.Sprite) frame.graphic.tint = tint
+      }
+    }
+  }
 
   actor.graphics.add('walk', walk)
   actor.graphics.add('idle', idle)

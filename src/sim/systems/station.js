@@ -16,7 +16,9 @@
 // This replaced "any upgrade runs the bench on its own", which meant a drone
 // assembled itself in an empty room and made hiring a technician pointless.
 
-import { Phase, KIT_TYPES, recordSolderPoint, finishAssembly, calcPrice, stationsOf } from '../../state/gameState.js'
+import {
+  Phase, KIT_TYPES, recordSolderPoint, finishAssembly, calcPrice, stationsOf, releaseOutput,
+} from '../../state/gameState.js'
 import { levelData } from '../../state/upgrades.js'
 import { roleLevelData } from '../../defs/roles.js'
 import { EV, emit } from '../events.js'
@@ -24,7 +26,7 @@ import { EV, emit } from '../events.js'
 // Whoever is physically standing at this station. Presence is the whole
 // contract — the same rule the trigger zones use.
 function agentAt(world, stationId, match) {
-  const zone = (world.zones ?? []).find(z => z.meta?.stationId === stationId)
+  const zone = (world.zones ?? []).find(z => z.kind === 'bench' && z.meta?.stationId === stationId)
   if (!zone) return null
   return (world.agents ?? []).find(a =>
     match(a) &&
@@ -94,7 +96,23 @@ function startStage(world, station, rt, kit, data, events) {
   })
 }
 
+// A drone marked as taken but that nobody is actually holding goes back on the
+// table. Without this a reload (or a worker that stopped existing) mid-errand
+// would leave a station stuck READY forever, its drone owned by a ghost.
+function reclaimLostOutput(world) {
+  for (const station of stationsOf(world.game)) {
+    if (!station.takenBy) continue
+    const holder = (world.agents ?? []).find(a =>
+      a.id === station.takenBy &&
+      (a.carrying ?? []).some(i => i.type === 'drone' && i.stationId === station.id)
+    )
+    if (!holder) world.game = releaseOutput(world.game, station.id)
+  }
+}
+
 export function stationSystem(world, dt, events) {
+  reclaimLostOutput(world)
+
   const data = levelData('soldering', world.game.upgrades.solderingLevel)
 
   // Snapshot: world.game is replaced by each transition below, so iterate over

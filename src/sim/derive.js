@@ -74,7 +74,9 @@ export function nextObjective(world, interactions) {
   if (!general && !scrap) return null
 
   // Order matters: finish what is in your hands before starting something new.
-  const PRIORITY = ['mailbox', 'bench', 'delivery_slot', 'trashbin', 'piggy']
+  // The output table sits just under the mailbox: a finished drone is worth
+  // collecting before fetching the next box (S1.2).
+  const PRIORITY = ['mailbox', 'bench_out', 'bench', 'delivery_slot', 'trashbin', 'piggy']
 
   let best = null
   let bestRank = Infinity

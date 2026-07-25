@@ -72,15 +72,28 @@ export function rebuildStationGeometry(world) {
         ...rect(slot.x, slot.y + def.zone.offsetY, def.zone.w, def.zone.h),
         meta: { stationId: station.id },
       },
+      // Pickup side (S1.2): the finished drone is handed out at the back.
+      outZone: def.outZone && {
+        id:   `zone-out-${station.id}`,
+        kind: 'bench_out',
+        ...rect(slot.x, slot.y + def.outZone.offsetY, def.outZone.w, def.outZone.h),
+        meta: { stationId: station.id },
+      },
       // Where a character stands to work, and where items sit on the surface.
       workSpot: { x: slot.x, y: slot.y + def.size.h / 2 + 46 },
       surface:  { x: slot.x, y: slot.y },
+      // Where the finished drone waits: on the output edge, not in the middle.
+      outSpot:  { x: slot.x, y: slot.y - def.size.h / 2 - 14 },
     }
   })
 
   world.placedStations = placed
   world.obstacles = [...layout.obstacles, ...placed.map(p => p.body)]
-  world.zones     = [...layout.zones, ...placed.map(p => p.zone)]
+  world.zones     = [
+    ...layout.zones,
+    ...placed.map(p => p.zone),
+    ...placed.map(p => p.outZone).filter(Boolean),
+  ]
 
   // The nav grid is a rasterisation of exactly these obstacles, so it is
   // rebuilt here and nowhere else — a station added without a matching grid
@@ -154,9 +167,15 @@ export function createWorld({ state, salesLog = [] } = {}, { now = Date.now(), r
 // Gives every hired worker an agent, and removes agents for workers that are
 // gone. Called at startup and after a hire — the roster is state, the agents
 // are the sim's view of it.
+// Where a worker of this role belongs when idle (S1.5). Each role has its own
+// post, so a new hire walks to their station instead of joining a huddle.
+export function postSpawn(layout, role) {
+  const spawns = layout?.spawns ?? {}
+  return spawns.posts?.[role] ?? spawns.workerIdle ?? { x: 0, y: 0 }
+}
+
 export function syncWorkerAgents(world) {
   const hired = workersOf(world.game)
-  const spawn = world.layout?.spawns?.workerIdle ?? { x: 0, y: 0 }
 
   const existing = new Map(
     (world.agents ?? []).filter(a => a.kind === 'worker').map(a => [a.id, a])
@@ -164,6 +183,7 @@ export function syncWorkerAgents(world) {
   const players = (world.agents ?? []).filter(a => a.kind !== 'worker')
 
   const workers = hired.map((w, i) => {
+    const spawn = postSpawn(world.layout, w.role)
     const agent = existing.get(w.id) ?? createAgent({
       id:   w.id,
       kind: 'worker',
@@ -198,7 +218,7 @@ export function applyLayout(world, layout) {
 
   const spawn = layout.spawns.player
   for (const agent of world.agents ?? []) {
-    const home = agent.kind === 'player' ? spawn : layout.spawns.workerIdle
+    const home = agent.kind === 'player' ? spawn : postSpawn(layout, agent.role)
     agent.x = home.x
     agent.y = home.y
     agent.vx = 0

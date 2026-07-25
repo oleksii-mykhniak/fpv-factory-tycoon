@@ -13,6 +13,9 @@ const T0 = 1_000_000
 // Bench zones are generated from the built stations (C3), so look them up on
 // the world rather than in the static layout.
 const BENCH_ZONE = 'zone-station-0'
+// The output table on the far side of the bench (S1.2) — the only place a
+// finished drone can be collected.
+const OUT_ZONE = 'zone-out-station-0'
 let _w = null
 const zone = (id) => _w.zones.find(z => z.id === id)
 
@@ -137,6 +140,21 @@ describe('sim/zoneSystem — dwell', () => {
   })
 })
 
+// A bench holding a finished drone, with the player standing well clear.
+function readyBench() {
+  const w = withArrivedBox(world({
+    upgrades: { ...createState().upgrades, solderingLevel: 3 },
+  }))
+  standAt(w, zone('slot0'))
+  run(w, TICK_MS * 2)
+  standAt(w, zone(BENCH_ZONE))
+  run(w, ZONE_DWELL_BENCH_MS + 200)
+  run(w, 60_000)
+  standAt(w, { cx: 800, cy: 700 })
+  run(w, 3000)
+  return w
+}
+
 describe('sim/interactions — the full loop without a single tap', () => {
   it('slot → bench → mailbox pays out', () => {
     const w = withArrivedBox(world({
@@ -158,11 +176,16 @@ describe('sim/interactions — the full loop without a single tap', () => {
     run(w, 60_000)
     expect(bench(w).phase).toBe(Phase.READY)
 
-    // 3. Back to the bench to collect the finished drone.
+    // 3. Round to the OUTPUT side to collect the finished drone: the front of
+    // the bench is where work goes in, never where it comes out.
     standAt(w, { cx: 800, cy: 700 })
     run(w, 3000)                       // clear the zone so it can fire again
     standAt(w, zone(BENCH_ZONE))
     run(w, ZONE_DWELL_BENCH_MS + 200)
+    expect(carrying(w)).toEqual([])
+
+    standAt(w, zone(OUT_ZONE))
+    run(w, 1000)
     expect(carrying(w)).toEqual(['drone'])
 
     // 4. The mailbox completes the sale on the spot — no view required.
@@ -172,6 +195,40 @@ describe('sim/interactions — the full loop without a single tap', () => {
     expect(carrying(w)).toEqual([])
     expect(w.game.money).toBeGreaterThan(startMoney)
     expect(bench(w).phase).toBe(Phase.IDLE)
+  })
+
+  it('S1.1: a drone taken off the table cannot be taken a second time', () => {
+    const w = readyBench()
+    standAt(w, zone(OUT_ZONE))
+    run(w, 1000)
+    expect(carrying(w)).toEqual(['drone'])
+    expect(bench(w).takenBy).toBe('player')
+
+    // Step out and back in: the table is empty now, whatever the phase says.
+    standAt(w, { cx: 800, cy: 700 })
+    run(w, 3000)
+    standAt(w, zone(OUT_ZONE))
+    run(w, 2000)
+    expect(carrying(w)).toEqual(['drone'])
+  })
+
+  it('S1.1: no sell job exists while the player is carrying the drone', () => {
+    const w = readyBench()
+    standAt(w, zone(OUT_ZONE))
+    run(w, 1000)
+    expect(w.jobs.filter(j => j.type === 'sell_drone')).toHaveLength(0)
+  })
+
+  it('S1.1: a drone whose carrier vanished goes back on the table', () => {
+    const w = readyBench()
+    standAt(w, zone(OUT_ZONE))
+    run(w, 1000)
+
+    // Simulate a reload mid-errand: the drone is no longer in anyone's hands.
+    player(w).carrying = []
+    run(w, TICK_MS * 2)
+    expect(bench(w).takenBy).toBe(null)
+    expect(w.jobs.filter(j => j.type === 'sell_drone')).toHaveLength(1)
   })
 
   it('refuses to hand over a box while the bench is busy', () => {

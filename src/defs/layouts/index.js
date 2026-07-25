@@ -15,7 +15,9 @@ export const apartment = buildLayout({
   roomH: 880,
   door:  { x: 360, w: 170 },
   stationSlots: [
-    { def: 'workbench', x: 420, y: 250 },
+    // Deep enough into the room that the output side behind the bench is a
+    // corridor a character can actually walk down (S1.2).
+    { def: 'workbench', x: 420, y: 330 },
   ],
   props: {
     lamp:     { x: 420, y: 110, w: 40, h: 40, sprite: 'lamp',     color: '#d4c060', z: 2 },
@@ -31,6 +33,13 @@ export const apartment = buildLayout({
   spawns: {
     player:     { x: 600, y: 700 },
     workerIdle: { x: 640, y: 730 },
+    // No hiring in the apartment, but the posts keep the shape of the data the
+    // same everywhere — a location never has to be a special case.
+    posts: {
+      courier: { x: 420, y: 780 },
+      tech:    { x: 570, y: 500 },
+      seller:  { x: 200, y: 830 },
+    },
   },
   theme: { bgColor: '#0e0e18', floorColor: '#1a1a26' },
 })
@@ -42,8 +51,8 @@ export const garage = buildLayout({
   roomH: 1200,
   door:  { x: 620, w: 200 },
   stationSlots: [
-    { def: 'workbench', x: 420, y: 300 },
-    { def: 'workbench', x: 900, y: 300 },
+    { def: 'workbench', x: 420, y: 380 },
+    { def: 'workbench', x: 900, y: 380 },
   ],
   props: {
     lamp:     { x: 660, y: 130, w: 48, h: 48, sprite: 'lamp',     color: '#d4c060', z: 2 },
@@ -59,6 +68,13 @@ export const garage = buildLayout({
   spawns: {
     player:     { x: 1100, y: 950 },
     workerIdle: { x: 1180, y: 1000 },
+    // Courier by the door, technician between the benches, seller on the way
+    // to the mailbox — each waits where their work starts.
+    posts: {
+      courier: { x: 620, y: 1080 },
+      tech:    { x: 660, y: 560 },
+      seller:  { x: 300, y: 1080 },
+    },
   },
   theme: { bgColor: '#0d1810', floorColor: '#1a2618' },
 })
@@ -70,9 +86,9 @@ export const workshop = buildLayout({
   roomH: 1400,
   door:  { x: 900, w: 240 },
   stationSlots: [
-    { def: 'workbench', x: 420,  y: 300 },
-    { def: 'workbench', x: 980,  y: 300 },
-    { def: 'workbench', x: 1540, y: 300 },
+    { def: 'workbench', x: 420,  y: 380 },
+    { def: 'workbench', x: 980,  y: 380 },
+    { def: 'workbench', x: 1540, y: 380 },
   ],
   props: {
     lamp:     { x: 980, y: 130, w: 56, h: 56, sprite: 'lamp',     color: '#d4c060', z: 2 },
@@ -88,6 +104,11 @@ export const workshop = buildLayout({
   spawns: {
     player:     { x: 1500, y: 1100 },
     workerIdle: { x: 1620, y: 1150 },
+    posts: {
+      courier: { x: 900, y: 1270 },
+      tech:    { x: 980, y: 560 },
+      seller:  { x: 380, y: 1280 },
+    },
   },
   theme: { bgColor: '#180d18', floorColor: '#261a26' },
 })

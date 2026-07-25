@@ -31,7 +31,7 @@ export function buildLayout({
   stationSlots,   // [{ def, x, y }] where benches may stand
   props,          // { name: { x, y, w, h, sprite, color, z } }
   deliverySlots,  // [{ x, y }] street positions, indexed by delivery.slotIndex
-  spawns,         // { player, workerIdle }
+  spawns,         // { player, workerIdle, posts: { courier, tech, seller } }
   theme,
 }) {
   const walls = [
@@ -83,6 +83,10 @@ export function buildLayout({
     props: propRects,
     zones,
     spawns: {
+      // Every role has a post to stand at (S1.5). Falling back to one shared
+      // idle spot put the whole payroll in a huddle by the door, which read as
+      // a queue of people waiting to be told what to do.
+      posts: spawns.posts ?? {},
       ...spawns,
       door:          { x: door.x, y: roomH - WALL_HORIZ - 30 },
       deliverySlots,

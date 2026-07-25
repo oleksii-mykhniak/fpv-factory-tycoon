@@ -36,6 +36,13 @@ export const STATION_DEFS = Object.freeze({
     // it, never on top — the station itself blocks movement.
     zone: { w: 330, h: 120, offsetY: 100, dwellMs: ZONE_DWELL_BENCH_MS },
 
+    // Output table, on the FAR side of the bench (S1.2). Work goes in at the
+    // front and comes out at the back, so finishing a drone and collecting it
+    // are two different places to stand: the technician who just soldered it
+    // cannot also scoop it up without walking round, and a seller collecting
+    // one never stands in the technician's spot.
+    outZone: { w: 300, h: 110, offsetY: -100 },
+
     // Upgrade tracks that affect this station's output.
     upgrades: ['soldering', 'consumables'],
   },

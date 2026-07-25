@@ -99,11 +99,13 @@ describe('sim/jobSystem — the board is derived, never accumulated', () => {
   it('a worker lets go when the player does its job first', () => {
     const w = world({ hire: ['courier'] })
     dispatch(w, 'order', { kitId: 'mini_drone' })
-    run(w, 5000)
-    run(w, 500)
+
+    // Steal it the moment the courier commits, not after a fixed wait: since
+    // S1.5 a courier waits by the door, so any wait long enough to see the
+    // claim is also long enough for them to reach the box first.
+    for (let i = 0; i < 400 && !workers(w)[0].task; i++) run(w, TICK_MS)
     expect(workers(w)[0].task).not.toBeNull()
 
-    // The player grabs the box from under them.
     dispatch(w, 'pickup', { deliveryId: w.game.deliveries[0].id })
     run(w, 500)
     expect(workers(w)[0].task).toBeNull()
