@@ -1,45 +1,50 @@
 import './style.css'
 import { saveGame, loadGame, clearSave } from './save/storage.js'
 import {
-  createState, Phase, DeliveryStatus, KIT_TYPES,
-  orderKit, startAssembly, pickupDelivery,
-  recordSolderPoint, finishAssembly, sell,
-  burnKit, abandonBurntDrone, buyUpgrade,
-  applyColdSolderPenalty,
-  calcPrice,
-  canOpenPiggy, collectPiggy,
-  moveToLocation,
-  startScrap, startScrapAssembly, cancelScrap,
+  createState, Phase, DeliveryStatus,
+  createStation, stationsOf,
 } from './state/gameState.js'
-import {
-  COLD_SOLDER_THRESHOLD, SALVAGE_RATE,
-  COLD_SOLDER_QUALITY_PENALTY,
-  ADS_ENABLED, SCRAP_CONSOLATION,
-} from './state/config.js'
-import { levelData, SOLDER_MODE, WORKER_MODE } from './state/upgrades.js'
+import { ADS_ENABLED, SCRAP_CONSOLATION, INPUT_DEADZONE } from './state/config.js'
+import { levelData } from './state/upgrades.js'
 import { currentLocation } from './state/locations.js'
-import { playSfx, setMuted } from './audio/sfx.js'
+import { setMuted } from './audio/sfx.js'
 import { showRewarded, PLACEMENTS } from './monetization/ads.js'
+
+import { layoutFor } from './defs/layouts/index.js'
+import { createJoystick } from './input/joystick.js'
+import { createKeyboard } from './input/keyboard.js'
+import { mergeInput } from './input/inputVector.js'
+
+import { createWorld, serializeWorld } from './sim/world.js'
+import { advance } from './sim/loop.js'
+import { dispatch, piggyAvailable } from './sim/commands.js'
+import { settleOffline } from './sim/offline.js'
+import { playerStation } from './sim/derive.js'
+import { SYSTEMS } from './sim/systems/index.js'
+
 import { createHUD } from './ui/hud.js'
 import { createActionBar } from './ui/actionBar.js'
 import { createShopModal } from './ui/shopModal.js'
 import { createUpgradeModal } from './ui/upgradeModal.js'
 import { createSettingsModal } from './ui/settingsModal.js'
 import { createSolderModal } from './ui/solderModal.js'
+import { createSolderBar } from './ui/solderBar.js'
 import { createPiggyModal } from './ui/piggyModal.js'
 import { createTrashModal } from './ui/trashModal.js'
-import { initScene, updateScene, applyLocationTheme } from './scene/scene.js'
+
+import { initScene, rebuildScene, applyLocationTheme } from './scene/scene.js'
+import { syncScene } from './view/sceneSync.js'
+import { createEffects } from './view/effects.js'
 
 // ── State init ────────────────────────────────────────────
 
-// Migrate saves written before the per-delivery-status refactor.
+// Migrate saves written before the per-delivery-status refactor (D6).
 // Old saves may have phase=ORDERED/DELIVERY, activeDeliveryReadyAt,
 // activeSlotIndex, and deliveryQueue instead of deliveries[].
 function migrateState(raw) {
   let s = raw
   const now = Date.now()
 
-  // Convert legacy deliveryQueue → deliveries
   if (!s.deliveries && s.deliveryQueue) {
     s = {
       ...s,
@@ -48,24 +53,39 @@ function migrateState(raw) {
   }
   if (!s.deliveries) s = { ...s, deliveries: [] }
 
-  // Convert legacy ORDERED / DELIVERY phase → IDLE + delivery entry
   if (s.phase === 'ORDERED' || s.phase === 'DELIVERY') {
     const readyAt = s.phase === 'DELIVERY'
       ? now - 1   // already arrived — force readyAt in past
       : (s.activeDeliveryReadyAt ?? now)
     const primary = {
-      id:       `migrated-${now}`,
-      kitId:    s.activeKit,
+      id:        `migrated-${now}`,
+      kitId:     s.activeKit,
       slotIndex: s.activeSlotIndex ?? 0,
       readyAt,
-      status:   DeliveryStatus.TRANSIT,
+      status:    DeliveryStatus.TRANSIT,
     }
     s = {
       ...s,
-      phase:     Phase.IDLE,
-      activeKit: null,
+      phase:      Phase.IDLE,
+      activeKit:  null,
       deliveries: [primary, ...s.deliveries.filter(d => d.slotIndex !== primary.slotIndex)],
     }
+  }
+
+  // C3: the bench's own fields became stations[]. An old save carries them at
+  // the top level; move them onto the first station rather than dropping the
+  // drone the player was in the middle of building.
+  if (!s.stations) {
+    const station = {
+      ...createStation('station-0'),
+      phase:        s.phase ?? Phase.IDLE,
+      kitId:        s.activeKit ?? null,
+      solderPoints: s.solderPoints ?? [],
+      quality:      s.assemblyQuality ?? null,
+      coldPenalty:  s.coldSolderPenalty ?? 0,
+    }
+    const { phase, activeKit, solderPoints, assemblyQuality, coldSolderPenalty, ...rest } = s
+    s = { ...rest, stations: [station] }
   }
 
   return s
@@ -82,20 +102,39 @@ function initState() {
     upgrades:   { ...defaults.upgrades, ...saved.state.upgrades },
     locationId: saved.state.locationId ?? defaults.locationId,
   }
-  state = migrateState(state)
-  return { state, salesLog: saved.salesLog }
+  return { state: migrateState(state), salesLog: saved.salesLog, savedAt: saved.savedAt }
 }
 
-const loaded   = initState()
-let state      = loaded.state
-const salesLog = loaded.salesLog
+// The world is the single source of truth. Nothing outside sim/ writes to it —
+// UI and scene go through send() below.
+// The layout supplies world size, obstacles and spawn points (C1).
+// C7 will pick it per location; for now the apartment is the only floor plan.
+const _boot = initState()
 
-let autoTimer         = null
-let deliveryCheckTimer = null  // fires draw() when earliest transit delivery arrives
-let warning           = null
+// What the shop finished while the app was closed (C7). Settled analytically
+// rather than by fast-forwarding the tick loop — see sim/offline.js.
+const _offline = _boot.savedAt
+  ? settleOffline(_boot.state, Date.now() - _boot.savedAt)
+  : null
+if (_offline && _offline.state !== _boot.state) _boot.state = _offline.state
+const world = createWorld(_boot, {
+  now: Date.now(),
+  layout: layoutFor(_boot.state.locationId),
+})
+
+// Dev-only inspection hook: lets the browser smoke test read the sim without
+// the view having to expose it. Stripped from production builds.
+if (import.meta.env.DEV || import.meta.env.MODE === 'debug') {
+  globalThis.__world = world
+}
 
 const uiRoot = document.getElementById('ui-root')
 const canvas = document.getElementById('game-canvas')
+
+let sceneRefs   = null
+let saveQueued  = false   // coalesces STATE_DIRTY events into one save per frame
+let uiDirty     = true    // forces a UI render even when the state object is unchanged
+let coldWarning = null    // transient: consumed by solderModal on the next render
 
 // ── Haptics ───────────────────────────────────────────────
 
@@ -107,6 +146,178 @@ function haptic(style = 'light') {
     const ms = style === 'heavy' ? 50 : style === 'medium' ? 30 : 15
     navigator.vibrate?.(ms)
   } catch {}
+}
+
+// ── Input (C1) ────────────────────────────────────────────
+
+// Movement must not fire while a modal has the player's attention, and a
+// pointer that starts on UI chrome belongs to that chrome (see joystick.js).
+// The soldering strip deliberately does NOT block movement: it is not a modal,
+// and walking away from a bench mid-solder is a legitimate move.
+function inputBlocked() {
+  if (document.querySelector('.modal-overlay:not([hidden])')) return true
+  const onboarding = document.getElementById('onboarding')
+  return !!onboarding && !onboarding.hasAttribute('hidden')
+}
+
+const joystick = createJoystick(uiRoot, { isBlocked: inputBlocked })
+const keyboard = createKeyboard({ isBlocked: inputBlocked })
+
+// ── Sim plumbing ──────────────────────────────────────────
+
+const effects = createEffects({
+  getRefs:      () => sceneRefs,
+  haptic,
+  onStateDirty: () => { saveQueued = true },
+  onColdSolder: (missMsg) => { coldWarning = missMsg ?? 'cold'; uiDirty = true },
+  // Trigger zones ask; the view decides how to answer (C2).
+  onSaleMade:      () => offerSaleBonus(),
+  onMinigame:      ({ game, agentId }) => openMinigame(game, agentId),
+})
+
+// Applies a player command and pushes the result through the presentation layer.
+// The single entry point for every button, tap and mini-game result.
+function send(type, payload) {
+  effects.apply(dispatch(world, type, payload))
+  present()
+}
+
+// Advances the simulation to now and presents the result. Driven by the engine.
+// Input is sampled into the world first so the sim itself stays free of the DOM.
+function tick() {
+  world.input = mergeInput(
+    { joystick: joystick.read(), keys: keyboard.read() },
+    INPUT_DEADZONE,
+  )
+  effects.apply(advance(world, Date.now(), SYSTEMS))
+  present()
+}
+
+function present() {
+  syncScene(sceneRefs, world)
+  renderUI()
+  if (saveQueued) {
+    const { state, salesLog } = serializeWorld(world)
+    saveGame(state, salesLog)
+    saveQueued = false
+  }
+}
+
+// ── UI ────────────────────────────────────────────────────
+
+const hud = createHUD(uiRoot)
+
+const shopModal = createShopModal(uiRoot, {
+  onOrder: (kitId) => { dismissOnboarding(); send('order', { kitId }) },
+  onScrapStart: () => send('startScrap'),
+})
+
+const upgradeModal = createUpgradeModal(uiRoot, {
+  onBuyUpgrade:     (id) => send('buyUpgrade', { trackId: id }),
+  onHire:           (role) => send('hireWorker', { role }),
+  onMoveToLocation: (id) => {
+    send('moveToLocation', { locationId: id })
+    // A move is a different room, not a re-tint: tear the scene down and build
+    // the new floor plan (C7).
+    sceneRefs = rebuildScene({ getWorld: () => world, onIntent, layout: world.layout, world })
+    applyLocationTheme(world.layout.theme)
+    upgradeModal.close?.()
+    uiDirty = true
+    present()
+  },
+})
+
+const settingsModal = createSettingsModal(uiRoot, {
+  onClearSave:     () => { clearSave(); location.reload() },
+  onSoundChange:   (on) => setMuted(!on),
+  onHapticsChange: (on) => { hapticsEnabled = on },
+  onAddMoney:      (amount) => send('addMoney', { amount }),
+})
+
+{
+  const s = settingsModal.getSettings()
+  setMuted(!s.sound)
+  hapticsEnabled = s.haptics
+}
+
+// The soldering strip: shown while the player stands at a bench (C6).
+const solderBar = createSolderBar(uiRoot, {
+  onSolderResult: (quality, stationId) => send('solderResult', { quality, stationId }),
+})
+
+// The modal survives for one job only: deciding what to do with a burnt kit.
+const solderModal = createSolderModal(uiRoot, {
+  onSolderResult: (quality, stationId) => send('solderResult', { quality, stationId }),
+  // The burnt drone is carried out first; the state change lands when the
+  // worker reaches the bin (worker.droppedBurnt).
+  // The burnt kit is written off on the spot: there is no puppet to walk it to
+  // the bin any more, and a modal button should resolve immediately.
+  onAbandon: (stationId) => send('abandon', { stationId }),
+})
+
+const piggyModal = createPiggyModal(uiRoot, {
+  onCollect:         (taps) => send('collectPiggy', { taps }),
+  adsEnabled:        ADS_ENABLED,
+  onRewardedRequest: () => showRewarded(PLACEMENTS.REWARD_PIGGY_DOUBLE),
+})
+
+const trashModal = createTrashModal(uiRoot, {
+  // Salvage is a player errand: the parts land in whoever's hands opened the
+  // game, and they still have to be carried to a bench.
+  onSuccess: () => {
+    haptic('light')
+    send('scrapCollected', { agentId: scrapAgent ?? 'player' })
+    scrapAgent = null
+  },
+  onFail: () => {
+    haptic('medium')
+    scrapAgent = null
+    send('scrapFailed', { consolation: SCRAP_CONSOLATION })
+  },
+})
+
+const actionBar = createActionBar(uiRoot, {
+  onShopOpen:     () => shopModal.open(world.game),
+  onUpgradeOpen:  () => upgradeModal.open(world.game),
+  onSettingsOpen: () => settingsModal.open(),
+})
+
+let _lastRendered = null
+let _lastCarrySig = ''
+let _lastStation  = ''
+
+function renderUI() {
+  // Every state transition returns a fresh object, so identity is a reliable
+  // dirty check — it keeps the DOM work off the 20 Hz tick. Carried items are
+  // mutated in place though, so they need their own signature.
+  const carrySig = (world.agents ?? [])
+    .map(a => `${a.id}:${(a.carrying ?? []).map(i => i.type).join('+')}`).join('|')
+  // Standing at a bench is not part of game state, so it needs its own signal —
+  // without it the strip would not appear until something else changed.
+  const atStation = playerStation(world)?.id ?? ''
+  if (world.game === _lastRendered && carrySig === _lastCarrySig &&
+      atStation === _lastStation && !uiDirty) return
+  _lastStation = atStation
+  _lastRendered = world.game
+  _lastCarrySig = carrySig
+  uiDirty = false
+
+  const player = (world.agents ?? []).find(a => a.kind === 'player')
+  hud.update(world.game, (player?.carrying ?? []).map(i => i.type))
+  actionBar.update(world.game)
+  shopModal.update(world.game)
+  upgradeModal.update(world.game)
+  solderModal.update(world.game, coldWarning ? 'cold' : null)
+
+  // The soldering strip follows the player's feet, not a button (C6).
+  solderBar.update(world.game, playerStation(world), coldWarning)
+  coldWarning = null
+
+  // Progress cards belong to the sim's assembly stages; hide the ones whose
+  // station is not running one right now.
+  for (const view of sceneRefs?.stations ?? []) {
+    if (!world.stationRuntime?.[view.id]?.running) view.progress.hide()
+  }
 }
 
 // ── Onboarding ────────────────────────────────────────────
@@ -126,90 +337,42 @@ onboardingEl.innerHTML = `
     <div class="onboarding__tap">Тап щоб почати</div>
   </div>
 `
-if (state.onboarded) onboardingEl.setAttribute('hidden', '')
+if (world.game.onboarded) onboardingEl.setAttribute('hidden', '')
 
 function dismissOnboarding() {
-  if (state.onboarded) return
+  if (world.game.onboarded) return
   onboardingEl.setAttribute('hidden', '')
-  update({ ...state, onboarded: true })
+  send('setOnboarded')
 }
 
 onboardingEl.addEventListener('click', dismissOnboarding, { once: true })
 uiRoot.appendChild(onboardingEl)
 
-// ── UI components ─────────────────────────────────────────
+// ── While you were away ───────────────────────────────────
 
-const hud = createHUD(uiRoot)
-
-const shopModal = createShopModal(uiRoot, {
-  onOrder: (kitId) => {
-    playSfx('order')
-    haptic('medium')
-    dismissOnboarding()
-    update(orderKit(state, kitId))
-  },
-  onScrapStart: () => {
-    update(startScrap(state))
-  },
-})
-
-const upgradeModal = createUpgradeModal(uiRoot, {
-  onBuyUpgrade:     (id) => update(buyUpgrade(state, id)),
-  onMoveToLocation: (id) => {
-    applyLocationTheme(currentLocation({ ...state, locationId: id }).sceneConfig)
-    update(moveToLocation(state, id))
-  },
-})
-
-const settingsModal = createSettingsModal(uiRoot, {
-  onClearSave:     () => { clearSave(); location.reload() },
-  onSoundChange:   (on) => setMuted(!on),
-  onHapticsChange: (on) => { hapticsEnabled = on },
-  onAddMoney:      (amount) => update({ ...state, money: state.money + amount }),
-})
-
-// Apply persisted sound/haptics settings immediately
-{
-  const s = settingsModal.getSettings()
-  setMuted(!s.sound)
-  hapticsEnabled = s.haptics
+if (_offline && (_offline.assembled || _offline.sold)) {
+  const mins = Math.round(_offline.elapsedMs / 60000)
+  const away = mins >= 60 ? `${Math.floor(mins / 60)} год ${mins % 60} хв` : `${mins} хв`
+  const box = document.createElement('div')
+  box.id = 'offline-report'
+  box.className = 'modal-overlay'
+  box.innerHTML = `
+    <div class="modal">
+      <div class="modal__header"><span class="modal__title">Поки вас не було</span></div>
+      <div class="modal__body">
+        <p class="offline-report__away">Минуло ${away}</p>
+        <p>🔧 Зібрано дронів: <b>${_offline.assembled}</b></p>
+        ${_offline.sold ? `<p>📮 Продано: <b>${_offline.sold}</b> — <b>$${_offline.earned.toFixed(2)}</b></p>` : ''}
+        ${!_offline.sold && _offline.assembled
+          ? '<p class="upgrade-effect-hint">Готові дрони чекають на верстаку — найміть продавця, щоб їх відносили</p>'
+          : ''}
+        <button class="btn btn--upgrade" id="offline-ok">Продовжити</button>
+      </div>
+    </div>
+  `
+  uiRoot.appendChild(box)
+  box.querySelector('#offline-ok').addEventListener('click', () => box.remove())
 }
-
-const solderModal = createSolderModal(uiRoot, {
-  onSolderResult: handleSolderResult,
-  onAbandon: () => {
-    // Trigger trash animation; state update fires from onTrashRequested at animation end.
-    if (sceneRefs?.worker) {
-      sceneRefs.worker.commandTrash()
-    } else {
-      update(abandonBurntDrone(state, SALVAGE_RATE))
-    }
-  },
-})
-
-const piggyModal = createPiggyModal(uiRoot, {
-  onCollect:         (taps) => update(collectPiggy(state, taps, Date.now())),
-  adsEnabled:        ADS_ENABLED,
-  onRewardedRequest: () => showRewarded(PLACEMENTS.REWARD_PIGGY_DOUBLE),
-})
-
-const trashModal = createTrashModal(uiRoot, {
-  onSuccess: () => {
-    haptic('light')
-    sceneRefs?.worker?.resumeScrapSuccess()
-  },
-  onFail: () => {
-    haptic('medium')
-    sceneRefs?.worker?.resumeScrapFail()
-    update(cancelScrap(state, SCRAP_CONSOLATION))
-  },
-})
-
-const actionBar = createActionBar(uiRoot, {
-  onShopOpen:     () => shopModal.open(state),
-  onUpgradeOpen:  () => upgradeModal.open(state),
-  onSettingsOpen: () => settingsModal.open(),
-})
 
 // ── Loading overlay ───────────────────────────────────────
 
@@ -236,282 +399,67 @@ if (import.meta.env.MODE === 'debug') {
   }, 500)
 }
 
-// ── Scene ─────────────────────────────────────────────────
+// ── Intents from the scene ────────────────────────────────
+//
+// One channel for taps and for the puppet's animation milestones. The scene
+// says what happened; the sim decides what it means.
 
-let sceneRefs = null
+// The scene has no intents left to report: taps went in C2 and the worker
+// puppet in C5. The channel stays because C6/C7 will add cues (a tutorial
+// arrow, a tapped hint) and it costs nothing to keep it wired.
+const INTENTS = {}
+
+function onIntent(type, payload = {}) {
+  const handler = INTENTS[type]
+  if (!handler) throw new Error(`onIntent: невідомий намір "${type}"`)
+  handler(payload)
+}
+
+// ── Shared actions ────────────────────────────────────────
+//
+// A zone and the worker puppet can both ask for these, so neither owns them.
+
+// Which agent asked for the salvage mini-game; null = the puppet did.
+let scrapAgent = null
+
+// D8.2: rewarded ×2 sale hook. The sale itself already completed at the
+// mailbox — this only offers to double it, and is a no-op while ADS_ENABLED is
+// false. Whoever made the sale (player or a hired seller) does not matter.
+async function offerSaleBonus() {
+  if (!ADS_ENABLED) return
+  if (await showRewarded(PLACEMENTS.REWARD_DOUBLE_SALE)) send('grantSaleBonus', { multiplier: 2 })
+}
+
+function openMinigame(game, agentId) {
+  if (game === 'piggy') {
+    if (piggyAvailable(world)) piggyModal.open()
+    return
+  }
+  if (game === 'scrap') {
+    scrapAgent = agentId
+    trashModal.open()
+  }
+}
+
+// ── Boot ──────────────────────────────────────────────────
+
 initScene(canvas, {
-  onBoxPicked: () => {
-    // Worker delivered box to bench — any carrying delivery triggers assembly.
-    const hasCarrying = (state.deliveries ?? []).some(d => d.status === DeliveryStatus.CARRYING)
-    if (hasCarrying) update(startAssembly(state))
-  },
-  onPiggyRequested: () => {
-    const { can } = canOpenPiggy(state, Date.now())
-    if (can) piggyModal.open()
-  },
-  onSolderRequested: () => {
-    const level  = state.upgrades.solderingLevel
-    const { mode } = levelData('soldering', level)
-
-    if (mode === SOLDER_MODE.MANUAL) {
-      solderModal.open(state)
-      return
-    }
-    if (mode === SOLDER_MODE.SEMI) {
-      scheduleAutoPoint()
-      return
-    }
-    // AUTO: solder fires via scheduleAutoPoint — bench tap is no-op
-  },
-  onSellRequested: async () => {
-    if (state.phase !== Phase.READY) return
-
-    // D8.2: rewarded ×2 sale hook (button is hidden when ADS_ENABLED=false)
-    let priceMultBonus = 1
-    if (ADS_ENABLED) {
-      const granted = await showRewarded(PLACEMENTS.REWARD_DOUBLE_SALE)
-      if (granted) priceMultBonus = 2
-    }
-
-    const kit        = KIT_TYPES[state.activeKit]
-    const basePrice  = calcPrice(kit.basePrice, state.assemblyQuality, state.upgrades.priceMultiplier)
-    const finalPrice = basePrice * priceMultBonus
-    salesLog.push({ quality: state.assemblyQuality, price: finalPrice })
-    playSfx('sell')
-    haptic('heavy')
-
-    // sell() adds basePrice internally; add the bonus delta on top if applicable
-    let nextState = sell(state)
-    if (priceMultBonus > 1) {
-      nextState = { ...nextState, money: nextState.money + (finalPrice - basePrice) }
-    }
-    update(nextState)
-  },
+  getWorld: () => world,
+  onIntent,
+  layout: world.layout,
+  world,
   onLoadProgress: (loaded, total) => {
     if (loadBar) loadBar.style.width = `${Math.round((loaded / total) * 100)}%`
   },
-  onSlotTapped: (deliveryId) => {
-    if (state.phase !== Phase.IDLE) return
-    const now      = Date.now()
-    const delivery = (state.deliveries ?? []).find(d => d.id === deliveryId)
-    if (!delivery || delivery.readyAt > now) return
-    update(pickupDelivery(state, deliveryId, now))
-    // MANUAL worker: draw() won't auto-deliver — trigger explicitly
-    const workerMode = levelData('worker', state.upgrades.workerLevel ?? 0).mode
-    if (workerMode === WORKER_MODE.MANUAL) {
-      sceneRefs?.worker?.commandDeliver(sceneRefs?.activeBoxSpawn)
-    }
-  },
-  onTrashRequested: () => {
-    if (state.phase !== Phase.BURNT) return
-    playSfx('sell')
-    haptic('medium')
-    update(abandonBurntDrone(state, SALVAGE_RATE))
-  },
-  onScrapRequested: () => {
-    // Manual tap on trash bin — trigger scrap walk if worker is free
-    if (state.scrapAvailable && state.phase === Phase.IDLE) {
-      sceneRefs?.worker?.commandScrapPickup()
-    }
-  },
-  onScrapArrivedAtTrash: () => {
-    trashModal.open()
-  },
-  onScrapDelivered: () => {
-    update(startScrapAssembly(state))
-  },
 }).then(refs => {
   sceneRefs = refs
-  applyLocationTheme(currentLocation(state).sceneConfig)
+  if (import.meta.env.DEV || import.meta.env.MODE === 'debug') globalThis.__refs = refs
+  applyLocationTheme(world.layout.theme)
   hideOverlay()
-  draw()
-  // If an auto-solder timer is already running (started before scene was ready),
-  // retroactively show the progress strip for the current in-progress step.
-  const _solderMode = levelData('soldering', state.upgrades.solderingLevel).mode
-  if (autoTimer !== null && state.phase === Phase.ASSEMBLY &&
-      (_solderMode === SOLDER_MODE.AUTO || _solderMode === SOLDER_MODE.SEMI)) {
-    const _data = levelData('soldering', state.upgrades.solderingLevel)
-    const _kit  = KIT_TYPES[state.activeKit]
-    if (_kit) {
-      const _done  = state.solderPoints.length
-      const _label = _kit.assemblySteps?.[_done]?.label ?? `Крок ${_done + 1}`
-      sceneRefs.benchProgress?.startStep(_label, _kit.solderPointCount, _done, _data.pointDelayMs)
-    }
-  }
+
+  // The single drive point: one fixed-step sim advance per rendered frame.
+  refs.engine._ex.on('preupdate', tick)
+
+  uiDirty = true
+  present()
 })
-
-// ── Timers ────────────────────────────────────────────────
-
-function clearAutoTimer() {
-  if (autoTimer !== null) { clearTimeout(autoTimer); autoTimer = null }
-}
-
-function clearDeliveryCheckTimer() {
-  if (deliveryCheckTimer !== null) { clearTimeout(deliveryCheckTimer); deliveryCheckTimer = null }
-}
-
-// Schedule draw() for when the earliest transit delivery arrives.
-// Fires regardless of bench phase so indicators update and auto-pickup triggers.
-function scheduleDeliveryCheck() {
-  clearDeliveryCheckTimer()
-  const transit = (state.deliveries ?? []).filter(d => d.status === DeliveryStatus.TRANSIT)
-  if (!transit.length) return
-  const now  = Date.now()
-  const next = transit.reduce((min, d) => Math.min(min, d.readyAt), Infinity)
-  if (next <= now) { draw(); return }
-  deliveryCheckTimer = setTimeout(() => { deliveryCheckTimer = null; draw() }, next - now + 50)
-}
-
-function scheduleAutoPoint() {
-  const data = levelData('soldering', state.upgrades.solderingLevel)
-  const kit  = KIT_TYPES[state.activeKit]
-  if (!kit) return
-
-  const done  = state.solderPoints.length
-  const total = kit.solderPointCount
-  const label = kit.assemblySteps?.[done]?.label ?? `Крок ${done + 1}`
-
-  sceneRefs?.benchProgress?.startStep(label, total, done, data.pointDelayMs)
-
-  autoTimer = setTimeout(() => {
-    autoTimer = null
-    if (state.phase !== Phase.ASSEMBLY) return
-
-    const q = data.qualityMin + Math.random() * (data.qualityMax - data.qualityMin)
-    const s = recordSolderPoint(state, q)
-
-    if (s.solderPoints.length >= total) {
-      const finished = finishAssembly(s)
-      const finalQ   = finished.assemblyQuality
-      const price    = calcPrice(kit.basePrice, finalQ, s.upgrades.priceMultiplier)
-      const pct      = Math.round(finalQ * 100)
-      sceneRefs?.benchProgress?.showResult(`✓ Зібрано! ${pct}% → $${price.toFixed(0)}`)
-      sceneRefs?.worker?.notifySolderDone()
-      update(finished)
-    } else {
-      sceneRefs?.benchProgress?.advanceDots(total, s.solderPoints.length)
-      update(s)
-      scheduleAutoPoint()
-    }
-  }, data.pointDelayMs)
-}
-
-// ── Solder result handler ─────────────────────────────────
-
-function handleSolderResult(quality) {
-  const solderLevel      = state.upgrades.solderingLevel
-  const consumablesLevel = state.upgrades.consumablesLevel ?? 0
-  const overheatChance   = levelData('soldering', solderLevel).overheatChance
-  const fluxData         = levelData('consumables', consumablesLevel)
-  const effectiveOverheat = overheatChance * fluxData.overheatMult
-  const boostedQuality    = Math.min(1, quality + fluxData.qualityBonus)
-
-  if (boostedQuality < COLD_SOLDER_THRESHOLD) {
-    if (Math.random() < effectiveOverheat) {
-      playSfx('overheat')
-      haptic('heavy')
-      update(burnKit(state))
-    } else {
-      playSfx('solder_cold')
-      haptic('medium')
-      warning = 'cold'
-      update(applyColdSolderPenalty(state, COLD_SOLDER_QUALITY_PENALTY))
-    }
-    return
-  }
-  playSfx('solder_good')
-  haptic('light')
-  const newState = recordSolderPoint(state, boostedQuality)
-  const kit      = KIT_TYPES[newState.activeKit]
-  if (newState.solderPoints.length >= kit.solderPointCount) {
-    const finished = finishAssembly(newState)
-    sceneRefs?.worker?.notifySolderDone()
-    update(finished)
-  } else {
-    update(newState)
-  }
-}
-
-// ── Draw ──────────────────────────────────────────────────
-
-function draw() {
-  hud.update(state)
-  actionBar.update(state)
-  shopModal.update(state)
-  upgradeModal.update(state)
-  solderModal.update(state, warning)
-  warning = null
-
-  const level = state.upgrades.solderingLevel
-  const mode  = levelData('soldering', level).mode
-
-  // Hide auto-solder progress when not in semi/auto assembly
-  if (state.phase !== Phase.ASSEMBLY || mode === SOLDER_MODE.MANUAL) {
-    sceneRefs?.benchProgress?.hide()
-  }
-
-  if (state.phase === Phase.ASSEMBLY && mode === SOLDER_MODE.AUTO && autoTimer === null) {
-    scheduleAutoPoint()
-  }
-
-  // Sync scene state BEFORE issuing worker commands:
-  //   – updates _carryingSlotIndex so commandDeliver targets the right street slot
-  //   – fires worker.reset() for IDLE so workerCanDeliver is true on auto-pickup
-  //   – parks carry box off-screen during IDLE (no pointer interference with slot indicators)
-  const minCost        = Math.min(...Object.values(KIT_TYPES).map(k => k.cost))
-  const hasAnyBoxOrDrone = (state.deliveries ?? []).length > 0 || state.phase !== Phase.IDLE
-  const showPiggy      = state.money < minCost && !hasAnyBoxOrDrone
-  const droneSpriteKey = state.activeKit ? (KIT_TYPES[state.activeKit]?.spriteKey ?? null) : null
-  const carrying       = (state.deliveries ?? []).find(d => d.status === DeliveryStatus.CARRYING)
-  updateScene(
-    sceneRefs,
-    state.phase,
-    { show: showPiggy, lastAt: state.lastPiggyAt ?? null },
-    droneSpriteKey,
-    state.deliveries ?? [],
-    carrying?.slotIndex ?? 0,
-    state.scrapAvailable ?? false,
-  )
-
-  const workerMode = levelData('worker', state.upgrades.workerLevel ?? 0).mode
-
-  // IDLE + arrived delivery → auto-pickup (SEMI/AUTO) or schedule timer for arrival (MANUAL).
-  if (state.phase === Phase.IDLE && !carrying) {
-    const now     = Date.now()
-    const arrived = (state.deliveries ?? []).find(d =>
-      d.status === DeliveryStatus.TRANSIT && d.readyAt <= now
-    )
-    if (arrived) {
-      if (workerMode === WORKER_MODE.SEMI || workerMode === WORKER_MODE.AUTO) {
-        update(pickupDelivery(state, arrived.id, now))
-        return
-      }
-    } else if (deliveryCheckTimer === null) {
-      scheduleDeliveryCheck()
-    }
-  }
-
-  // carrying delivery → trigger worker to fetch it
-  if (carrying && (workerMode === WORKER_MODE.SEMI || workerMode === WORKER_MODE.AUTO)) {
-    sceneRefs?.worker?.commandDeliver(sceneRefs?.activeBoxSpawn)
-  }
-
-  if (state.phase === Phase.ASSEMBLY && workerMode === WORKER_MODE.AUTO) {
-    sceneRefs?.worker?.commandSolder()
-  }
-
-  // Auto-trigger scrap walk when shop activates scrapAvailable: true
-  if (state.scrapAvailable && state.phase === Phase.IDLE && !carrying && !sceneRefs?.worker?.isDoingScrap?.()) {
-    sceneRefs?.worker?.commandScrapPickup()
-  }
-}
-
-function update(newState) {
-  if (newState.phase !== Phase.ASSEMBLY) clearAutoTimer()
-  state = newState
-  saveGame(state, salesLog)
-  scheduleDeliveryCheck()
-  draw()
-}
-
-draw()

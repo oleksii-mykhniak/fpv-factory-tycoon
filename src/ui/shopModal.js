@@ -1,4 +1,4 @@
-import { Phase, KIT_TYPES, calcPrice } from '../state/gameState.js'
+import { Phase, KIT_TYPES, calcPrice, idleStations } from '../state/gameState.js'
 import { PRICE_BASE_COEFF, PRICE_QUALITY_COEFF, STORAGE_SLOTS_BY_LEVEL } from '../state/config.js'
 import { kitsForLocation, LOCATIONS } from '../state/locations.js'
 
@@ -63,9 +63,11 @@ export function createShopModal(root, { onOrder, onScrapStart }) {
     const maxSecondary  = STORAGE_SLOTS_BY_LEVEL[storageLevel] ?? 0
     const maxSlots      = 1 + maxSecondary
     const deliveryCount = (state.deliveries ?? []).length
-    const usedSlots     = deliveryCount + (state.phase !== Phase.IDLE ? 1 : 0)
+    // C3: a busy station no longer eats a delivery slot — an ordered box may
+    // wait in the street while every bench works.
+    const usedSlots     = deliveryCount
     // Ordering allowed from any phase except BURNT, as long as a slot is free.
-    const canOrderAny    = state.phase !== Phase.BURNT && usedSlots < maxSlots
+    const canOrderAny    = usedSlots < maxSlots
     const locationKitIds = kitsForLocation(state)
 
     // Slot indicator header (only shown when Storage upgrade is active)
@@ -95,7 +97,8 @@ export function createShopModal(root, { onOrder, onScrapStart }) {
 
       let note = ''
       if (!canOrderAny) {
-        if (state.phase === Phase.BURNT)       note = '<p class="kit-card__note">Спочатку відремонтуйте</p>'
+        if (!idleStations(state).length && !usedSlots)
+          note = '<p class="kit-card__note">Всі верстаки зайняті</p>'
         else if (maxSecondary === 0)           note = '<p class="kit-card__note">Потрібен апгрейд Складу</p>'
         else                                   note = '<p class="kit-card__note">Всі слоти зайняті</p>'
       } else if (noMoney) {
@@ -133,7 +136,7 @@ export function createShopModal(root, { onOrder, onScrapStart }) {
     const scrapCard = document.createElement('div')
     scrapCard.className = 'kit-card kit-card--scrap'
 
-    if (state.phase === Phase.IDLE && !state.scrapAvailable) {
+    if (idleStations(state).length && !state.scrapAvailable) {
       scrapCard.innerHTML = `
         <div class="kit-card__header">
           <span class="kit-card__emoji">♻️</span>

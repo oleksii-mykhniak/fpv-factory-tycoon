@@ -1,44 +1,44 @@
 import * as ex from 'excalibur'
-import { Phase, KIT_TYPES } from '../state/gameState.js'
+import { Phase, DeliveryStatus, KIT_TYPES } from '../state/gameState.js'
 import {
-  CAMERA_ZOOM_REF, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX,
+  VIEW_HEIGHT_UNITS, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX,
+  CAMERA_ELASTICITY, CAMERA_FRICTION,
   PIGGY_COOLDOWN_MS,
-  SCENE_ROOM_H_RATIO, SCENE_DRONE_W_RATIO, SCENE_BOX_W_RATIO,
   PULSE_FREQ_HZ, PULSE_SCALE_AMP,
 } from '../state/config.js'
 import { loadSprites, getSprite } from './loader.js'
-import { createWorker } from './worker.js'
+import { createCharacterSprite } from './character.js'
+
+// How many carried items the stack can show at once. The gameplay limit is
+// CARRY_CAPACITY in config; this is only how many actors exist to draw.
+const CARRY_STACK_SLOTS = 3
+
+// The scene is a *projection* of the simulation (C0): it never owns gameplay
+// state. Two hooks connect it to the sim:
+//   getWorld()            — read-only access, called from preupdate closures
+//   onIntent(type, data)  — one channel for everything the player or the puppet
+//                           wants the sim to know (taps, animation milestones)
+//
+// Before C0 this file mirrored eight pieces of state in module-level variables
+// and took ten callbacks. Both are gone; adding an interactive object now costs
+// one onIntent call, not a callback threaded through three files.
 
 const BG = ex.Color.fromHex('#0e0e18')
 
-// Height of the action bar (must match --ab-h in style.css).
-const ACTION_BAR_H = 68
-
-// Stored after initScene for use by applyLocationTheme.
-let _engine    = null
+// Stored after initScene: the engine and scene outlive a move, everything the
+// floor plan produced does not.
+let _engine     = null
+let _scene      = null
 let _floorActor = null
+// Every actor belonging to the current layout. Moving house kills these and
+// builds the next room from scratch (C7) — a location is a different place now,
+// not a different palette.
+let _built      = []
 
-// Tracks the current game phase so pointer handlers can gate commands.
-let currentPhase = Phase.IDLE
-
-// lastPiggyAt from game state — piggy preupdate uses this for real-time cooldown display.
-let _piggyLastAt = null
-
-// Tracks which drone sprite is currently applied to avoid redundant applySprite calls.
-let _lastDroneSpriteKey = null
-
-// All street slot positions (index = slotIndex). Populated in initScene once dims are known.
-let _slotSpawns = []
-
-// Current phase and active carrying slot — read by slot preupdate closures every frame.
-let _activePhase     = Phase.IDLE
-let _activeSlotIndex = 0  // slotIndex of the currently-carrying delivery (or 0)
-
-// All deliveries [{id, kitId, slotIndex, readyAt, status}] — drives slot indicators.
-let _deliveries = []
-
-// Track previous carrying delivery ID to detect carry-start and reposition carry box.
-let _prevCarryingId = null
+function track(actor) {
+  _built.push(actor)
+  return actor
+}
 
 // ── Helpers ───────────────────────────────────────────────
 
@@ -56,7 +56,7 @@ function colorRect(scene, { x, y, w, h, hex, z = 0 }) {
     color: ex.Color.fromHex(hex),
   })
   scene.add(a)
-  return a
+  return track(a)
 }
 
 // Pulse utility: sine-wave scale on actor while active.
@@ -77,98 +77,63 @@ function addPulse(actor) {
 
 // ── Layout ────────────────────────────────────────────────
 //
-// Coordinate origin = top-left of canvas.
-// Room occupies top SCENE_ROOM_H_RATIO of the game canvas (excl. action bar).
-// Exterior strip occupies the remaining bottom fraction.
-// Door gap in bottom wall: x ∈ [W*0.28, W*0.48], center W*0.38.
-// Returns refs needed for interaction wiring.
+// Geometry comes from defs/layouts/<location>.js in fixed world units. Nothing
+// here is expressed as a fraction of the screen any more: the world is larger
+// than the viewport and must look the same on every device.
 
-function buildRoom(scene, W, H, RH) {
-  const WW    = W * 0.06   // side wall thickness
-  const HW    = H * 0.035  // top/bottom wall thickness
-  const EXT_H = H - RH     // exterior strip height below room
+function buildRoom(scene, layout) {
+  const { world, room, street, walls, doorVoid, props, theme } = layout
 
-  // ── Exterior zone ──────────────────────────────────────
-  // Dark base (street/night)
-  colorRect(scene, { x: W * 0.5, y: RH + EXT_H * 0.5, w: W, h: EXT_H, hex: '#0c0c18', z: 0 })
-  // Lighter sidewalk band just below the door threshold
-  colorRect(scene, { x: W * 0.5, y: RH + EXT_H * 0.1, w: W, h: EXT_H * 0.18, hex: '#18182a', z: 0 })
-
-  // ── Room floor (interactive — receives free-walk taps) ─
-  const floor = new ex.Actor({
-    pos:    ex.vec(W * 0.5, RH * 0.5),
-    width:  W,
-    height: RH,
-    z: 0,
-    color:  ex.Color.fromHex('#1a1a26'),
-  })
-  scene.add(floor)
-
-  // ── Walls ──────────────────────────────────────────────
-  colorRect(scene, { x: W * 0.5,       y: HW * 0.5,       w: W,        h: HW, hex: '#2e2e42', z: 1 })
-  colorRect(scene, { x: WW * 0.5,      y: RH * 0.5,       w: WW,       h: RH, hex: '#2e2e42', z: 1 })
-  colorRect(scene, { x: W - WW * 0.5,  y: RH * 0.5,       w: WW,       h: RH, hex: '#2e2e42', z: 1 })
-  // Bottom wall left of door gap
-  colorRect(scene, { x: W * 0.14,      y: RH - HW * 0.5,  w: W * 0.28, h: HW, hex: '#2e2e42', z: 1 })
-  // Door gap (void to exterior)
-  colorRect(scene, { x: W * 0.38,      y: RH - HW * 0.5,  w: W * 0.20, h: HW, hex: '#0a0a14', z: 1 })
-  // Bottom wall right of door gap
-  colorRect(scene, { x: W * 0.74,      y: RH - HW * 0.5,  w: W * 0.52, h: HW, hex: '#2e2e42', z: 1 })
-
-  // ── Workbench ─────────────────────────────────────────
-  const workbench = colorRect(scene, { x: W * 0.50, y: RH * 0.35, w: W * 0.60, h: RH * 0.13, hex: '#6b4226', z: 2 })
-  colorRect(scene, { x: W * 0.50, y: RH * 0.42, w: W * 0.60, h: RH * 0.015, hex: '#4a2a18', z: 2 })
-  // Ceiling lamp (top-down view)
-  const lamp = new ex.Actor({
-    pos:    ex.vec(W * 0.50, RH * 0.16),
-    width:  W * 0.08,
-    height: W * 0.08,
-    z: 2,
-    color:  ex.Color.fromHex('#d4c060'),
-  })
-  scene.add(lamp)
-
-  // ── Mailbox (outside, near door, left side) ───────────
-  const MB_SIZE = W * 0.09
-  const mailbox = new ex.Actor({
-    pos:    ex.vec(W * 0.16, RH + EXT_H * 0.62),
-    width:  MB_SIZE,
-    height: MB_SIZE * 0.80,
-    z: 3,
-    color:  ex.Color.fromHex('#3a5db8'),
-  })
-  scene.add(mailbox)
-  // Mailbox slot detail
+  // ── Street (below the building) ────────────────────────
   colorRect(scene, {
-    x: W * 0.16,
-    y: RH + EXT_H * 0.58,
-    w: MB_SIZE,
-    h: H * 0.007,
-    hex: '#2244a0',
-    z: 4,
+    x: world.w / 2, y: street.y + street.h / 2, w: world.w, h: street.h,
+    hex: '#0c0c18', z: 0,
   })
-
-  // ── Trash bin (outside, right side) ───────────────────
-  const TB_SIZE = W * 0.09
-  const trashbin = new ex.Actor({
-    pos:    ex.vec(W * 0.86, RH + EXT_H * 0.62),
-    width:  TB_SIZE,
-    height: TB_SIZE * 1.10,
-    z: 3,
-    color:  ex.Color.fromHex('#4a6a3a'),
-  })
-  scene.add(trashbin)
-  // Trash bin lid detail
+  // Lighter sidewalk band just outside the door
   colorRect(scene, {
-    x: W * 0.86,
-    y: RH + EXT_H * 0.50,
-    w: TB_SIZE * 1.1,
-    h: H * 0.008,
-    hex: '#3a5a2a',
-    z: 4,
+    x: world.w / 2, y: street.y + street.h * 0.10, w: world.w, h: street.h * 0.18,
+    hex: '#18182a', z: 0,
   })
 
-  return { workbench, floor, mailbox, trashbin, lamp, HW, EXT_H }
+  // ── Room floor ─────────────────────────────────────────
+  const floor = colorRect(scene, {
+    x: room.w / 2, y: room.h / 2, w: room.w, h: room.h,
+    hex: theme.floorColor, z: 0,
+  })
+
+  // ── Walls + door opening ───────────────────────────────
+  for (const wall of walls) {
+    colorRect(scene, { x: wall.cx, y: wall.cy, w: wall.w, h: wall.h, hex: '#2e2e42', z: 1 })
+  }
+  colorRect(scene, {
+    x: doorVoid.cx, y: doorVoid.cy, w: doorVoid.w, h: doorVoid.h, hex: '#0a0a14', z: 1,
+  })
+
+  // ── Props ──────────────────────────────────────────────
+  // One actor per entry in layout.props; a new object in the layout appears
+  // here automatically.
+  const actors = {}
+  for (const [name, p] of Object.entries(props)) {
+    const actor = new ex.Actor({
+      pos:    ex.vec(p.cx, p.cy),
+      width:  p.w,
+      height: p.h,
+      z:      p.z,
+      color:  ex.Color.fromHex(p.color),
+    })
+    scene.add(actor)
+    track(actor)
+    applySprite(actor, p.sprite)
+    actors[name] = actor
+  }
+
+  // Small hand-placed details that read better than a flat rectangle.
+  const mb = props.mailbox
+  colorRect(scene, { x: mb.cx, y: mb.cy - mb.h * 0.34, w: mb.w, h: 5, hex: '#2244a0', z: 4 })
+  const tb = props.trashbin
+  colorRect(scene, { x: tb.cx, y: tb.cy - tb.h * 0.46, w: tb.w * 1.1, h: 6, hex: '#3a5a2a', z: 4 })
+
+  return { floor, ...actors }
 }
 
 // ── Sprite swap ───────────────────────────────────────────
@@ -188,6 +153,7 @@ function applySprite(actor, key) {
 // space. Intentionally scene-native so future multi-bench layouts get one
 // progress card per bench automatically.
 function createBenchProgress(scene, benchActor) {
+  const add = (a) => { scene.add(track(a)); return a }
   const BW    = benchActor.width
   const BH    = benchActor.height
   const CARD_W = Math.min(BW * 0.88, 210)
@@ -215,7 +181,7 @@ function createBenchProgress(scene, benchActor) {
     z: 11, color: ex.Color.fromHex('#3a4a80'),
   })
   cardBorder.graphics.visible = false
-  scene.add(cardBorder)
+  add(cardBorder)
 
   // Card background
   const card = new ex.Actor({
@@ -223,7 +189,7 @@ function createBenchProgress(scene, benchActor) {
     z: 12, color: ex.Color.fromHex('#1c1c38'),
   })
   card.graphics.visible = false
-  scene.add(card)
+  add(card)
 
   // Step label
   const stepLbl = new ex.Label({
@@ -234,7 +200,7 @@ function createBenchProgress(scene, benchActor) {
     z: 13,
   })
   stepLbl.graphics.visible = false
-  scene.add(stepLbl)
+  add(stepLbl)
 
   // Progress dots — small square actors (more reliable than ex.Circle in WebGL)
   const DOT_SZ = DOT_R * 2
@@ -244,7 +210,7 @@ function createBenchProgress(scene, benchActor) {
       z: 13, color: ex.Color.fromHex('#6868a0'),
     })
     d.graphics.visible = false
-    scene.add(d)
+    add(d)
     return d
   })
 
@@ -254,11 +220,12 @@ function createBenchProgress(scene, benchActor) {
     z: 13, color: ex.Color.fromHex('#3a3a60'),
   })
   barBg.graphics.visible = false
-  scene.add(barBg)
+  add(barBg)
 
   // Timer bar fill — uses graphic swap for left-to-right fill
   const barFill = new ex.Actor({ pos: ex.vec(cx, barY), z: 14 })
   barFill.graphics.visible = false
+  add(barFill)
   barFill.on('preupdate', (evt) => {
     if (!running) return
     elapsed += evt.delta
@@ -267,7 +234,6 @@ function createBenchProgress(scene, benchActor) {
     barFill.graphics.use(new ex.Rectangle({ width: fillW, height: BAR_H + 2, color: ex.Color.fromHex('#7aa0ff') }))
     barFill.pos.x = LEFT_X + fillW / 2
   })
-  scene.add(barFill)
 
   // Result toast — card + label that fade out
   const TOAST_H = 28
@@ -276,7 +242,7 @@ function createBenchProgress(scene, benchActor) {
     z: 12, color: ex.Color.fromHex('#0a1e0e'),
   })
   toastCard.graphics.visible = false
-  scene.add(toastCard)
+  add(toastCard)
 
   const toastLbl = new ex.Label({
     text:  '',
@@ -286,7 +252,7 @@ function createBenchProgress(scene, benchActor) {
     z: 13,
   })
   toastLbl.graphics.visible = false
-  scene.add(toastLbl)
+  add(toastLbl)
 
   let toastAge = 0, toastDur = 0, toasting = false
   toastCard.on('preupdate', (evt) => {
@@ -376,9 +342,9 @@ function createBenchProgress(scene, benchActor) {
   return { startStep, advanceDots, hide, showResult }
 }
 
-// ── Scene entry points ────────────────────────────────────
+// ── Scene entry point ─────────────────────────────────────
 
-export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSellRequested, onLoadProgress, onPiggyRequested, onSlotTapped, onTrashRequested, onScrapRequested, onScrapArrivedAtTrash, onScrapDelivered }) {
+export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, layout, world }) {
   const engine = new ex.Engine({
     canvasElement: canvas,
     backgroundColor: BG,
@@ -390,77 +356,126 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
   await loadSprites(onLoadProgress)
   await engine.start()
 
-  const W   = engine.drawWidth
-  const H   = engine.drawHeight
-  const RH  = H * SCENE_ROOM_H_RATIO
-  const scene = engine.currentScene
+  _scene = engine.currentScene
 
-  scene.camera.zoom = Math.max(CAMERA_ZOOM_MIN, Math.min(CAMERA_ZOOM_MAX, H / CAMERA_ZOOM_REF))
+  // Zoom shows a constant slice of the world instead of a constant pixel size,
+  // so a phone and a tablet see the same amount of game (C1.1).
+  _scene.camera.zoom = Math.max(
+    CAMERA_ZOOM_MIN,
+    Math.min(CAMERA_ZOOM_MAX, engine.drawHeight / VIEW_HEIGHT_UNITS),
+  )
 
-  const { workbench, floor, mailbox, trashbin, lamp, HW, EXT_H } = buildRoom(scene, W, H, RH)
+  return buildFloor({ getWorld, onIntent, layout, world })
+}
+
+// Tears down the current room and builds another one. Everything the floor plan
+// produced is tracked, so a move is a real change of place: different size,
+// different walls, different bench slots, its own nav grid.
+export function rebuildScene({ getWorld, onIntent, layout, world }) {
+  for (const actor of _built) actor.kill()
+  _built = []
+  return buildFloor({ getWorld, onIntent, layout, world })
+}
+
+function buildFloor({ getWorld, onIntent, layout, world }) {
+  const engine = _engine
+  const scene  = _scene
+
+  const { floor, mailbox, trashbin, piggy } = buildRoom(scene, layout)
   _floorActor = floor
 
-  // Apply environment sprites (swap colored rects to textured sprites)
-  applySprite(workbench, 'workbench')
-  applySprite(lamp, 'lamp')
-  applySprite(mailbox, 'mailbox')
-  applySprite(trashbin, 'trashbin')
+  // ── Stations (C3) ──────────────────────────────────────
+  // One actor + one progress card per built station, placed from the world's
+  // geometry. Buying a bench adds an entry and everything else follows.
+  const stations = world.placedStations.map(placed => {
+    const actor = new ex.Actor({
+      pos:    ex.vec(placed.body.cx, placed.body.cy),
+      width:  placed.body.w,
+      height: placed.body.h,
+      z: 2,
+      color:  ex.Color.fromHex(placed.def.color),
+    })
+    scene.add(track(actor))
+    applySprite(actor, placed.def.sprite)
+    // Front edge, so the surface reads as a table rather than a slab.
+    colorRect(scene, {
+      x: placed.body.cx, y: placed.body.cy + placed.body.h * 0.44,
+      w: placed.body.w, h: placed.body.h * 0.12, hex: '#4a2a18', z: 2,
+    })
 
-  // ── Key positions ──────────────────────────────────────
-  const WORKER_SIZE  = W * 0.18
-  const DOOR         = ex.vec(W * 0.38, RH - HW)              // door threshold inside room
-  const BOX_SPAWN    = ex.vec(W * 0.38, RH + EXT_H * 0.35)    // street slot 0 (in front of door)
+    // Opened box + drone that sit on this station's surface.
+    const boxOpen = new ex.Actor({
+      pos: ex.vec(placed.surface.x, placed.surface.y),
+      width: layout.sizes.box.w * 1.3, height: layout.sizes.box.h * 0.5,
+      z: 3, color: ex.Color.fromHex('#e8c870'),
+    })
+    boxOpen.graphics.visible = false
+    scene.add(track(boxOpen))
 
-  // All 3 street slot positions indexed by slotIndex (matches delivery.slotIndex).
-  // Slot 0 = primary (door gap), slots 1-2 = right of door.
-  _slotSpawns = [
-    BOX_SPAWN,
-    ex.vec(W * 0.62, RH + EXT_H * 0.35),
-    ex.vec(W * 0.82, RH + EXT_H * 0.35),
-  ]
-  const TABLE         = workbench.pos.clone()
-  const IDLE_POS      = ex.vec(W * 0.72, RH * 0.66)
-  const BENCH_POS     = ex.vec(workbench.pos.x, workbench.pos.y + workbench.height / 2 + WORKER_SIZE / 2)
-  const MAILBOX_POS   = mailbox.pos.clone()
-  const TRASHBIN_POS  = trashbin.pos.clone()
+    const drone = new ex.Actor({
+      pos: ex.vec(placed.surface.x, placed.surface.y),
+      width: layout.sizes.drone.w, height: layout.sizes.drone.h,
+      z: 4, color: ex.Color.fromHex('#2a2a3e'),
+    })
+    drone.graphics.visible = false
+    scene.add(track(drone))
 
-  // ── Delivery box — spawns in exterior zone ─────────────
-  const BOX_W = W * SCENE_BOX_W_RATIO
+    return {
+      id: placed.id,
+      actor, boxOpen, drone,
+      pulse:    addPulse(actor),
+      progress: createBenchProgress(scene, actor),
+      workSpot: placed.workSpot,
+      surface:  placed.surface,
+      spriteKey: null,
+    }
+  })
+  const workbench = stations[0].actor
+
+  const { spawns, sizes } = layout
+
+  // ── Key positions (world units, straight from the layout) ──
+  const slotSpawns   = spawns.deliverySlots.map(p => ex.vec(p.x, p.y))
+  const BOX_SPAWN    = slotSpawns[0]
+  const DOOR         = ex.vec(spawns.door.x, spawns.door.y)
+  const TABLE        = ex.vec(spawns.benchTop.x, spawns.benchTop.y)
+  const IDLE_POS     = ex.vec(spawns.workerIdle.x, spawns.workerIdle.y)
+  const BENCH_POS    = ex.vec(spawns.bench.x, spawns.bench.y)
+  const MAILBOX_POS  = mailbox.pos.clone()
+  const TRASHBIN_POS = trashbin.pos.clone()
+
+  // ── Delivery box — spawns in the street ────────────────
+  const BOX_W = sizes.box.w
   const box = new ex.Actor({
     pos:    BOX_SPAWN.clone(),
     width:  BOX_W,
-    height: BOX_W * 0.65,
+    height: sizes.box.h,
     z: 3,
     color:  ex.Color.fromHex('#c49a3c'),
   })
   box.graphics.visible = false
   applySprite(box, 'delivery_box')
-  scene.add(box)
+  scene.add(track(box))
 
-  // ── Delivery slot indicators (D6.6) ──────────────────────
-  // One indicator box + one countdown label per street slot (slotIndex 0, 1, 2).
-  // Slot actors are independent: each reads its own slice of game state via preupdate.
-  // The carry `box` actor (above) is SEPARATE — it's the one the worker physically picks
-  // up and adds as a child. Indicators are purely visual: they show transit timers and
-  // arrived-box sprites, but never leave their positions.
-  //
-  // When a delivery is being carried, the carry box is repositioned to its slotIndex position
-  // and becomes visible; the indicator at that slot hides to avoid overlap.
-  const slotIndicators = _slotSpawns.map(pos => {
+  // ── Delivery slot indicators ───────────────────────────
+  // One indicator box + one countdown label per street slot. Each reads its own
+  // slice of the world in preupdate — no mirrored copy of `deliveries` here.
+  // The carry `box` above is SEPARATE: it is the one the worker picks up.
+  const slotIndicators = slotSpawns.map(pos => {
     const a = new ex.Actor({
       pos:    pos.clone(),
       width:  BOX_W,
-      height: BOX_W * 0.65,
+      height: sizes.box.h,
       z: 3,
       color:  ex.Color.fromHex('#c49a3c'),
     })
     a.graphics.visible = false
     applySprite(a, 'delivery_box')
-    scene.add(a)
+    scene.add(track(a))
     return a
   })
 
-  const slotLabels = _slotSpawns.map(pos => {
+  const slotLabels = slotSpawns.map(pos => {
     const lbl = new ex.Label({
       text:  '',
       pos:   ex.vec(pos.x, pos.y - BOX_W * 1.05),
@@ -469,34 +484,27 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
       z: 5,
     })
     lbl.graphics.visible = false
-    scene.add(lbl)
+    scene.add(track(lbl))
     return lbl
   })
 
-  // Slot indicator tap: when bench is IDLE and the box has arrived, player can tap to pick up.
-  slotIndicators.forEach((ind, slotIdx) => {
-    ind.on('pointerup', () => {
-      if (currentPhase !== Phase.IDLE) return
-      if (_deliveries.some(d => d.status === 'carrying')) return  // worker already mid-delivery
-      const d = _deliveries.find(d => d.slotIndex === slotIdx && d.status === 'transit')
-      if (d && d.readyAt <= Date.now()) onSlotTapped?.(d.id)
-    })
-  })
-
-  // Unified preupdate: each slot independently decides what to show.
   slotIndicators.forEach((ind, slotIdx) => {
     const lbl = slotLabels[slotIdx]
-    ind.on('preupdate', () => {
-      const d = _deliveries.find(d => d.slotIndex === slotIdx)
 
-      // No delivery OR worker is carrying it — hide indicator (carry box actor shown instead)
-      if (!d || d.status === 'carrying') {
+    // Projection: countdown while in transit, box sprite once it has arrived.
+    // Walking into the slot's trigger zone is what picks it up (C2).
+    ind.on('preupdate', () => {
+      const { game, now } = getWorld()
+      const d = (game.deliveries ?? []).find(d => d.slotIndex === slotIdx)
+
+      // No delivery OR the worker is carrying it — the carry box is shown instead.
+      if (!d || d.status === DeliveryStatus.CARRYING) {
         ind.graphics.visible = false
         lbl.graphics.visible = false
         return
       }
 
-      const ms  = Math.max(0, d.readyAt - Date.now())
+      const ms  = Math.max(0, d.readyAt - now)
       const kit = KIT_TYPES[d.kitId]
       if (ms > 0) {
         ind.graphics.visible = false
@@ -509,58 +517,23 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
     })
   })
 
-  // Opened box on workbench (flat, lighter — visible during ASSEMBLY/READY)
-  const boxOpen = new ex.Actor({
-    pos:    TABLE.clone(),
-    width:  W  * 0.16,
-    height: RH * 0.04,
-    z: 3,
-    color:  ex.Color.fromHex('#e8c870'),
-  })
-  boxOpen.graphics.visible = false
-  scene.add(boxOpen)
-
-  // Drone silhouette on workbench (smaller than worker — realistic proportion)
-  const DRONE_W = W * SCENE_DRONE_W_RATIO
-  const drone = new ex.Actor({
-    pos:    ex.vec(W * 0.52, RH * 0.35),
-    width:  DRONE_W,
-    height: DRONE_W * 0.55,
-    z: 4,
-    color:  ex.Color.fromHex('#2a2a3e'),
-  })
-  drone.graphics.visible = false
-  scene.add(drone)
-
-  // ── Piggy bank ─────────────────────────────────────────
-  const piggySize = W * 0.11
-  const piggyPos  = ex.vec(W * 0.16, RH * 0.64)
-
-  const piggy = new ex.Actor({
-    pos:    piggyPos.clone(),
-    width:  piggySize,
-    height: piggySize,
-    z: 3,
-    color:  ex.Color.fromHex('#d4607a'),
-  })
+  // ── Piggy bank (built from the layout; only its behaviour lives here) ──
   piggy.graphics.visible = false
-  applySprite(piggy, 'piggy')
-  scene.add(piggy)
 
   const piggyTimerLabel = new ex.Label({
     text:  '',
-    pos:   ex.vec(piggyPos.x, piggyPos.y - piggySize * 0.78),
+    pos:   ex.vec(piggy.pos.x, piggy.pos.y - piggy.height * 0.78),
     color: ex.Color.fromHex('#dddddd'),
     font:  new ex.Font({ size: 13, family: 'monospace', textAlign: ex.TextAlign.Center }),
     z: 5,
   })
   piggyTimerLabel.graphics.visible = false
-  scene.add(piggyTimerLabel)
+  scene.add(track(piggyTimerLabel))
 
   piggy.on('preupdate', () => {
     if (!piggy.graphics.visible) return
-    const now = Date.now()
-    const remaining = _piggyLastAt != null ? PIGGY_COOLDOWN_MS - (now - _piggyLastAt) : 0
+    const { game, now } = getWorld()
+    const remaining = game.lastPiggyAt != null ? PIGGY_COOLDOWN_MS - (now - game.lastPiggyAt) : 0
     if (remaining > 0) {
       piggy.graphics.opacity = 0.35
       piggy.scale = ex.vec(1, 1)
@@ -575,166 +548,137 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
     }
   })
 
-  piggy.on('pointerup', () => {
-    if (piggy.graphics.visible) onPiggyRequested?.()
+  // ── Characters (C1 player, C5 hired workers) ───────────
+  // Position is owned by the sim (world.agents); these actors only render it.
+  // One factory for both, because a worker is now an agent exactly like the
+  // player — the difference is who writes its velocity.
+  function makeCharacter(spriteKey, color) {
+    // A soft ellipse under the feet: without it characters look pasted onto the
+    // floor rather than standing on it.
+    const shadow = new ex.Actor({
+      pos:    ex.vec(-9999, -9999),
+      width:  sizes.character * 0.52,
+      height: sizes.character * 0.20,
+      z: 5,
+      color:  ex.Color.fromRGB(0, 0, 0, 0.28),
+    })
+    scene.add(track(shadow))
+
+    const actor = new ex.Actor({
+      pos:    ex.vec(spawns.player.x, spawns.player.y),
+      width:  sizes.character,
+      height: sizes.character,
+      z: 6,
+      color:  ex.Color.fromHex(color),
+    })
+    scene.add(track(actor))
+    const rig = createCharacterSprite(actor, getSprite(spriteKey))
+    // Y-sort: whoever stands lower on screen draws in front.
+    actor.on('preupdate', () => {
+      actor.z = actor.pos.y * 0.01
+      shadow.pos.x = actor.pos.x
+      shadow.pos.y = actor.pos.y + actor.height * 0.36
+      shadow.z = actor.z - 0.001
+    })
+    return { actor, rig, shadow }
+  }
+
+  const { actor: player, rig: playerRig } = makeCharacter('player_walk', '#1f9e92')
+
+  // ── Objective arrow (C7.3) ─────────────────────────────
+  // Bobs above the player's head, pointing at the next useful zone.
+  const arrow = new ex.Actor({
+    pos: ex.vec(-9999, -9999), width: 26, height: 26,
+    z: 30, color: ex.Color.fromHex('#ffe074'),
+  })
+  arrow.graphics.visible = false
+  scene.add(track(arrow))
+
+  // Worker actors are created on demand — hiring happens mid-game.
+  const workerViews = new Map()
+  function workerView(agentId) {
+    let view = workerViews.get(agentId)
+    if (!view) {
+      view = makeCharacter('worker_walk', '#f0a030')
+      // Carried items ride above the head, same rig as the player's stack.
+      view.carrySlots = Array.from({ length: 2 }, () => {
+        const a = new ex.Actor({
+          pos: ex.vec(-9999, -9999),
+          width: sizes.box.w * 0.8, height: sizes.box.h * 0.8,
+          z: 20, color: ex.Color.fromHex('#c49a3c'),
+        })
+        a.graphics.visible = false
+        scene.add(track(a))
+        return a
+      })
+      workerViews.set(agentId, view)
+    }
+    return view
+  }
+
+  // ── Carried items ──────────────────────────────────────
+  // A small stack of actors floating above the head. Kept as scene-level actors
+  // rather than children: addChild removes an actor from the scene's render
+  // list in Excalibur 0.32, which cost us a whole evening back in D4.
+  const carrySlotActors = Array.from({ length: CARRY_STACK_SLOTS }, () => {
+    const a = new ex.Actor({
+      pos:    ex.vec(-9999, -9999),
+      width:  sizes.box.w * 0.8,
+      height: sizes.box.h * 0.8,
+      z: 20,
+      color:  ex.Color.fromHex('#c49a3c'),
+    })
+    a.graphics.visible = false
+    scene.add(track(a))
+    return a
   })
 
-  // ── Worker ─────────────────────────────────────────────
-  const worker = createWorker(scene, {
-    W, RH,
-    doorPos:      DOOR,
-    boxSpawnPos:  BOX_SPAWN,
-    benchPos:     BENCH_POS,
-    idlePos:      IDLE_POS,
-    mailboxPos:   MAILBOX_POS,
-    trashbinPos:  TRASHBIN_POS,
-    box,
-    tablePos:     TABLE,
-    droneRef:     drone,
-    onBoxPicked,
-    onSolderRequested,
-    onSellRequested,
-    onTrashRequested,
-    onScrapArrivedAtTrash,
-    onScrapDelivered,
+  // ── Dwell progress ─────────────────────────────────────
+  // Fills while standing in a zone that has something to offer.
+  const DWELL_W = sizes.character * 0.9
+  const dwellBg = new ex.Actor({
+    pos: ex.vec(-9999, -9999), width: DWELL_W + 4, height: 10,
+    z: 21, color: ex.Color.fromHex('#20203a'),
   })
-  worker.setupSprite(getSprite('worker_walk'))
+  dwellBg.graphics.visible = false
+  scene.add(track(dwellBg))
 
-  // ── Trash bin tap: open scrap mini-game ───────────────
-  trashbin.on('pointerup', () => onScrapRequested?.())
+  const dwellFill = new ex.Actor({ pos: ex.vec(-9999, -9999), z: 22 })
+  dwellFill.graphics.visible = false
+  scene.add(track(dwellFill))
+
+  // Camera follows the player, clamped so it never shows past the world edge.
+  scene.camera.pos = ex.vec(spawns.player.x, spawns.player.y)
+  // Strategies accumulate, so a move would otherwise stack a second follow and
+  // keep the old room's bounds.
+  scene.camera.clearAllStrategies()
+  scene.camera.strategy.elasticToActor(player, CAMERA_ELASTICITY, CAMERA_FRICTION)
+  scene.camera.strategy.limitCameraBounds(
+    new ex.BoundingBox(0, 0, layout.world.w, layout.world.h),
+  )
 
   // ── Pulse controllers ──────────────────────────────────
   const boxPulse      = addPulse(box)
-  const benchPulse    = addPulse(workbench)
   const mailboxPulse  = addPulse(mailbox)
   const trashbinPulse = addPulse(trashbin)
-
-  // ── Bench progress (auto / semi soldering) ────────────
-  const benchProgress = createBenchProgress(scene, workbench)
-
-  // ── Pointer events ─────────────────────────────────────
-
-  // Tap box → worker fetches (when a delivery has status=carrying).
-  box.on('pointerup', () => {
-    const carrying = _deliveries.find(d => d.status === 'carrying')
-    if (carrying) worker.commandDeliver(_slotSpawns[carrying.slotIndex] ?? BOX_SPAWN)
-  })
-
-  // Tap workbench → solder (ASSEMBLY) or sell animation (READY)
-  workbench.on('pointerup', () => {
-    if (currentPhase === Phase.ASSEMBLY) worker.commandSolder()
-    if (currentPhase === Phase.READY)    worker.commandSell()
-  })
-
-  // Tap mailbox → sell animation (READY)
-  mailbox.on('pointerup', () => {
-    if (currentPhase === Phase.READY) worker.commandSell()
-  })
-
-  // Tap floor → idle free walk (D4.7).
-  // Using engine-level pointer to avoid actor z-order dispatch quirks in Excalibur:
-  // floor.on('pointerup') at z=0 may not fire when a higher-z actor (workbench z=2)
-  // covers the same area. Global pointer always fires; we check bounds manually.
-  engine.input.pointers.primary.on('up', (evt) => {
-    if (currentPhase !== Phase.IDLE) return
-    const world = evt.worldPos
-    // Only if tap is inside the room floor (not on a wall, not in exterior zone)
-    if (world.x > 0 && world.x < W && world.y > 0 && world.y < RH) {
-      worker.walkTo(world.x, world.y)
-    }
-  })
 
   return {
     engine: { getFps: () => engine.clock.fpsSampler.fps, _ex: engine },
     scene,
-    box, boxOpen, drone, worker, piggy, mailbox, trashbin,
-    benchProgress,
-    _boxSpawn: BOX_SPAWN,
-    _pulses: { box: boxPulse, bench: benchPulse, mailbox: mailboxPulse, trashbin: trashbinPulse },
-    get activeBoxSpawn() { return _slotSpawns[_activeSlotIndex] ?? BOX_SPAWN },
+    box, piggy, mailbox, trashbin, workbench,
+    stations,
+    player, playerRig, workerView, workerViews,
+    carrySlotActors,
+    arrow,
+    dwell: { bg: dwellBg, fill: dwellFill, width: DWELL_W },
+    slotSpawns,
+    boxSpawn: BOX_SPAWN,
+    _pulses: { box: boxPulse, mailbox: mailboxPulse, trashbin: trashbinPulse },
   }
 }
 
-// piggyInfo:        null | { show: boolean, lastAt: number|null }
-// droneSpriteKey:   string | null — spriteKey of the active kit
-// deliveries:       DeliveryEntry[] — [{id, kitId, slotIndex, readyAt, status}]; all pending deliveries
-// carryingSlotIndex: number — slotIndex of the delivery currently being carried (0 if none)
-// scrapAvailable:   boolean — pulse trash bin when true and phase is IDLE
-export function updateScene(refs, phase, piggyInfo = null, droneSpriteKey = null, deliveries = [], carryingSlotIndex = 0, scrapAvailable = false) {
-  if (!refs?.box) return
-
-  currentPhase = phase
-
-  const { box, boxOpen, drone, worker, piggy, _pulses } = refs
-
-  // Update module-level state read by slot preupdate closures every frame.
-  _activePhase     = phase
-  _activeSlotIndex = carryingSlotIndex ?? 0
-  _deliveries      = deliveries ?? []
-
-  const carryingDel = _deliveries.find(d => d.status === 'carrying')
-
-  // On carry-start: reposition carry box to the delivery's street slot.
-  // Guards against repeated repositioning every frame while carrying.
-  if (carryingDel && carryingDel.id !== _prevCarryingId) {
-    const slotPos = _slotSpawns[carryingDel.slotIndex]
-    if (slotPos) {
-      box.pos.x = slotPos.x
-      box.pos.y = slotPos.y
-    }
-  }
-  _prevCarryingId = carryingDel?.id ?? null
-
-  if (piggy && piggyInfo !== null) {
-    piggy.graphics.visible = piggyInfo.show
-    _piggyLastAt = piggyInfo.lastAt
-  }
-
-  // Swap drone sprite when kit changes (only when key is known and different)
-  if (droneSpriteKey && droneSpriteKey !== _lastDroneSpriteKey) {
-    applySprite(drone, droneSpriteKey)
-    _lastDroneSpriteKey = droneSpriteKey
-  }
-
-  const assembling = phase === Phase.ASSEMBLY || phase === Phase.READY
-
-  // Carry box: visible when a worker is carrying it to bench (before startAssembly).
-  box.graphics.visible     = !!carryingDel
-  boxOpen.graphics.visible = assembling
-  drone.graphics.visible   = assembling || phase === Phase.BURNT
-
-  // ── Pulse cues (D4.6) ─────────────────────────────────
-  if (_pulses) {
-    _pulses.box.stop()
-    _pulses.bench.stop()
-    _pulses.mailbox.stop()
-    _pulses.trashbin?.stop()
-
-    if (carryingDel)              _pulses.box.start()
-    if (phase === Phase.ASSEMBLY) _pulses.bench.start()
-    if (phase === Phase.READY) {
-      _pulses.bench.start()
-      _pulses.mailbox.start()
-    }
-    if (scrapAvailable && phase === Phase.IDLE) _pulses.trashbin?.start()
-  }
-
-  // Park carry box off-screen when not being carried — prevents invisible actor
-  // from intercepting pointer events (workbench at z=2, box at z=3).
-  if (!carryingDel) {
-    box.actions.clearActions()
-    box.pos.x = -9999
-    box.pos.y = -9999
-  }
-
-  // Return worker to idle between cycles — but not while actively carrying a delivery.
-  // Phase stays IDLE throughout the carry walk (only switches to ASSEMBLY on onBoxPicked),
-  // so guarding on !carryingDel prevents reset() from cancelling an in-progress delivery.
-  if (phase === Phase.IDLE && !carryingDel) worker?.reset()
-}
-
-// Apply location-specific visual theme (background colour, floor colour).
-// Safe to call any time after initScene.
+// Background colour only — the floor and everything on it come from the layout
+// now (C7). Kept for the boot path and for cheap re-tints.
 export function applyLocationTheme(sceneConfig) {
   if (!sceneConfig) return
   if (sceneConfig.bgColor && _engine)

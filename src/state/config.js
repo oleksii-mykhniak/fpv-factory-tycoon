@@ -1,3 +1,12 @@
+// ── Simulation loop (Стадія 3 / C0) ──────────────────────
+// The sim advances in fixed steps so behaviour is deterministic and testable
+// headless. 20 Hz is plenty for agents and cheap on low-end Android.
+export const TICK_MS = 50
+// Upper bound on catch-up steps per advance() call. Protects against a huge
+// elapsed time (app backgrounded for an hour) freezing the frame. The clock
+// still jumps to wall time — only the simulated work is capped.
+export const MAX_CATCHUP_STEPS = 40
+
 // ── Delivery ─────────────────────────────────────────────
 // Time from order placement to delivery arrival (ms).
 export const DELIVERY_DELAY_MS = 5000
@@ -29,26 +38,120 @@ export const BETTER_IRON_GREEN_HALF     = 0.22  // wider zone
 export const BETTER_IRON_OVERHEAT_CHANCE = 0.10  // 60% less overheat risk
 
 // ── Upgrade: Semi-auto / template (level 2) ──────────────
-export const SEMIAUTO_QUALITY_MIN    = 0.65
-export const SEMIAUTO_QUALITY_MAX    = 0.85
-export const SEMIAUTO_POINT_DELAY_MS = 800   // ms per auto-solder point (faster than full-auto)
+// C6: every level keeps hand-soldering parameters too — the track changes how
+// good and how fast the bench is, never whether the player may work it.
+export const SEMIAUTO_GREEN_HALF      = 0.24
+export const SEMIAUTO_OVERHEAT_CHANCE = 0.08
+export const SEMIAUTO_QUALITY_MIN    = 0.60
+export const SEMIAUTO_QUALITY_MAX    = 0.75
+export const SEMIAUTO_POINT_DELAY_MS = 1200
 
 // ── Upgrade: Auto-solder (level 3) ───────────────────────
-export const AUTO_QUALITY_MIN   = 0.55
-export const AUTO_QUALITY_MAX   = 0.75
-export const AUTO_POINT_DELAY_MS = 2000  // ms between auto-soldered points
+export const AUTO_GREEN_HALF      = 0.30
+export const AUTO_OVERHEAT_CHANCE = 0.04
+// C7 balance: level 3 used to be SLOWER and WORSE than level 2 (8.0 s @ 0.65 vs
+// 3.2 s @ 0.75). That made sense when level 2 still needed a tap per kit and
+// level 3 was the hands-off option — but C6 removed arming, so the most
+// expensive upgrade in the game was a strict downgrade. It now dominates.
+export const AUTO_QUALITY_MIN   = 0.75
+export const AUTO_QUALITY_MAX   = 0.88
+export const AUTO_POINT_DELAY_MS = 700
 
-// ── Camera zoom (dynamic, based on screen height) ────────
-// zoom = clamp(H / CAMERA_ZOOM_REF, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX)
-export const CAMERA_ZOOM_REF = 980   // reference height for zoom=1.0 feel
-export const CAMERA_ZOOM_MIN = 0.78  // floor for small phones (iPhone SE)
-export const CAMERA_ZOOM_MAX = 0.90  // ceiling for large phones (Pro Max)
+// ── Camera (C1) ──────────────────────────────────────────
+// The world is now larger than the screen and measured in fixed world units,
+// so zoom is chosen to show a constant slice of the world regardless of device:
+//   zoom = clamp(canvasHeight / VIEW_HEIGHT_UNITS, MIN, MAX)
+// A phone and a tablet then see the same amount of game, not the same pixels.
+export const VIEW_HEIGHT_UNITS = 980
+export const CAMERA_ZOOM_MIN   = 0.55
+export const CAMERA_ZOOM_MAX   = 1.60
+// Elastic follow — higher elasticity snaps harder, higher friction damps sooner.
+export const CAMERA_ELASTICITY = 0.20
+export const CAMERA_FRICTION   = 0.28
 
-// ── Scene object proportions (ratios relative to canvas dimensions) ──
-export const SCENE_ROOM_H_RATIO   = 0.70  // room fraction of game canvas height
-export const SCENE_WORKER_W_RATIO = 0.18  // worker size (square) fraction of canvas width
-export const SCENE_DRONE_W_RATIO  = 0.09  // drone width fraction (smaller than worker)
-export const SCENE_BOX_W_RATIO    = 0.12  // delivery box width fraction
+// ── Player movement (C1) ─────────────────────────────────
+export const PLAYER_SPEED  = 240   // world units per second
+// Collision box — deliberately smaller than the sprite and biased to the feet,
+// so the character's head can overlap furniture drawn behind it.
+export const PLAYER_HALF_W = 20
+export const PLAYER_HALF_H = 14
+// Longest displacement resolved in one collision substep. Must stay below the
+// thinnest obstacle (walls are 24) or a fast agent tunnels straight through it.
+export const MOVE_MAX_STEP = 8
+
+// ── Hired workers (C5) ───────────────────────────────────
+// Hiring the n-th worker of a role costs base × growth^n.
+export const HIRE_COST_BASE   = { courier: 260, tech: 420, seller: 320 }
+export const HIRE_COST_GROWTH = 1.85
+
+export const COURIER_SPEED_BY_LEVEL = [170, 205, 240]
+export const SELLER_SPEED_BY_LEVEL  = [170, 205, 240]
+// A tech's own pace and quality at a bench. Deliberately worse than a good
+// manual player and better than nothing — hiring buys time, not perfection.
+export const TECH_POINT_MS_BY_LEVEL = [2600, 2000, 1500]
+export const TECH_QUALITY_BY_LEVEL  = [0.55, 0.65, 0.75]
+
+// How much of a closed-app absence is ever paid out (C7).
+export const OFFLINE_CAP_MS = 4 * 60 * 60 * 1000
+
+// Idle behaviour: workers with no job drift around the rest area instead of
+// standing frozen, which is what makes the shop look alive.
+export const WANDER_RADIUS   = 120
+export const WANDER_PAUSE_MS = 2600
+
+// ── Navigation (C4) ──────────────────────────────────────
+// Grid cell size. Smaller = more accurate paths and a more expensive search;
+// 24 is about a third of a character, which is enough to find doorways.
+export const NAV_CELL = 24
+// Obstacles are grown by this much before rasterising, so a path planned for a
+// point never scrapes a character's shoulder along a wall. Should match the
+// agent's larger half-extent.
+export const NAV_INFLATE = 20
+// Hard ceiling on A* work per search — returns null instead of freezing a frame.
+export const ASTAR_MAX_NODES = 4000
+// How many searches may run in one tick. Pathfinding is the most expensive
+// thing in the sim on a low-end phone, so it gets a budget.
+export const PATHS_PER_TICK = 2
+export const PATH_CACHE_SIZE = 64
+
+// Distance at which a waypoint counts as reached.
+export const WAYPOINT_ARRIVE_R = 14
+// Soft separation between agents — deliberately NOT cell reservation, which
+// deadlocks crowds of this size (plan §6.6).
+export const AGENT_SEPARATION_R = 46
+export const AGENT_SEPARATION_W = 0.55
+// No progress for this long while following a path = re-plan.
+export const STUCK_TIMEOUT_MS = 700
+
+// ── Trigger zones (C2) ───────────────────────────────────
+// How long a character must stand in a zone before it fires. 0 = instant.
+// Longer dwell = the action reads as "work"; instant = "pick up".
+export const ZONE_DWELL_INSTANT_MS = 0
+export const ZONE_DWELL_BENCH_MS   = 1100
+export const ZONE_DWELL_MAILBOX_MS = 700
+export const ZONE_DWELL_TRASH_MS   = 900
+// Progress drains this many times faster than it fills when you step out, so
+// leaving is forgiving but not free.
+export const DWELL_DECAY_MULT = 2.5
+// Repeating zones fire again every N ms while occupied (item streams).
+export const ZONE_REPEAT_MS = 260
+
+// ── Carrying (C2) ────────────────────────────────────────
+// Items a character can hold at once. An upgrade track raises this in C5.
+export const CARRY_CAPACITY = 1
+// Vertical gap between stacked items floating above a character's head.
+export const CARRY_STACK_OFFSET_Y = 26
+
+// ── Input (C1) ───────────────────────────────────────────
+export const INPUT_DEADZONE = 0.18   // below this magnitude the stick reads as centred
+
+// ── Virtual joystick (C1) ────────────────────────────────
+export const JOYSTICK_RADIUS       = 62   // px from base centre to full deflection
+export const JOYSTICK_ZONE_H_RATIO = 1.0  // fraction of the game area that can start a drag
+
+// Scene object proportions used to live here as fractions of the canvas.
+// C1 replaced them with absolute world units in defs/layouts/<location>.js —
+// the world is bigger than the screen now, so screen fractions are meaningless.
 
 // ── Interaction pulse cues ────────────────────────────────
 export const PULSE_FREQ_HZ   = 1.5   // oscillations per second
@@ -138,7 +241,6 @@ export const DEFAULT_HAPTICS = true
 // Index = current level; value = cost to reach next level.
 // Max level is derived from this array's length (see upgrades.js trackMaxLevel).
 export const SOLDERING_UPGRADE_COSTS    = [150, 300, 600]
-export const WORKER_UPGRADE_COSTS       = [250, 500]
 export const CONSUMABLES_UPGRADE_COSTS  = [120, 280]
 
 // ── Upgrade: Consumables (flux & solder) ─────────────────
@@ -151,6 +253,11 @@ export const FLUX_QUALITY_BONUS  = [0,   0,   0.05]
 export const STORAGE_UPGRADE_COSTS  = [300, 700]
 // How many SECONDARY delivery slots are unlocked per level (primary is always 1).
 export const STORAGE_SLOTS_BY_LEVEL = [0, 1, 2]
+
+// ── Upgrade: Extra workbenches (C3) ──────────────────────
+// Each level builds one more station, up to the number of slots the location
+// layout provides.
+export const BENCH_UPGRADE_COSTS = [400, 1200]
 
 // ── Upgrade: Logistics (faster delivery) ─────────────────
 export const LOGISTICS_UPGRADE_COSTS  = [200, 500]

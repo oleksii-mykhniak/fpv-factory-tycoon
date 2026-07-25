@@ -8,16 +8,71 @@ import {
 import { UPGRADE_TRACKS } from './upgrades.js'
 import { KIT_TYPES } from './kits.js'
 import { capFor, canMoveToLocation, LOCATIONS } from './locations.js'
+import { hireCost, roleDef } from '../defs/roles.js'
 
 // Re-export so existing consumers keep importing kit data from gameState.js.
 export { KIT_TYPES }
 
+// Phase of ONE station, not of the game. Before C3 there was a single bench and
+// the two were the same thing; with several stations the game as a whole has no
+// phase, so every transition below names the station it acts on.
 export const Phase = Object.freeze({
   IDLE:     'IDLE',
   ASSEMBLY: 'ASSEMBLY',
   READY:    'READY',
   BURNT:    'BURNT',
 })
+
+export function createStation(id, defId = 'workbench') {
+  return {
+    id,
+    defId,
+    phase:        Phase.IDLE,
+    kitId:        null,   // kit on this station (ASSEMBLY/READY/BURNT)
+    solderPoints: [],
+    quality:      null,
+    coldPenalty:  0,
+  }
+}
+
+// ── Station lookup ────────────────────────────────────────
+
+export function getStation(state, stationId) {
+  const st = (state.stations ?? []).find(s => s.id === stationId)
+  if (!st) throw new Error(`getStation: станцію "${stationId}" не знайдено`)
+  return st
+}
+
+export const stationsOf   = (state) => state.stations ?? []
+export const idleStations = (state) => stationsOf(state).filter(s => s.phase === Phase.IDLE)
+export const busyStations = (state) => stationsOf(state).filter(s => s.phase !== Phase.IDLE)
+
+// The station a single-bench UI should talk about: the one doing something, or
+// else the first one. C7 gives the UI a real per-station view.
+export function focusStation(state) {
+  return busyStations(state)[0] ?? stationsOf(state)[0] ?? null
+}
+
+// Replaces one station, leaving the rest untouched.
+function withStation(state, stationId, fn) {
+  return {
+    ...state,
+    stations: stationsOf(state).map(s => (s.id === stationId ? fn(s) : s)),
+  }
+}
+
+// Grows or shrinks the station list to `count`, preserving existing progress.
+// Called when a new bench is bought and when a save is loaded.
+export function syncStations(state, count, defId = 'workbench') {
+  const current = stationsOf(state)
+  if (current.length === count) return state
+  if (current.length > count) return { ...state, stations: current.slice(0, count) }
+  const added = Array.from(
+    { length: count - current.length },
+    (_, i) => createStation(`station-${current.length + i}`, defId),
+  )
+  return { ...state, stations: [...current, ...added] }
+}
 
 // Per-delivery status — lives inside each deliveries[] entry.
 export const DeliveryStatus = Object.freeze({
@@ -28,11 +83,9 @@ export const DeliveryStatus = Object.freeze({
 export function createState() {
   return {
     money:             STARTING_MONEY,
-    phase:             Phase.IDLE,
-    activeKit:         null,  // kit currently on bench (ASSEMBLY/READY/BURNT)
-    solderPoints:      [],
-    assemblyQuality:   null,
-    coldSolderPenalty: 0,
+    stations:          [createStation('station-0')],
+    // Hired workers (C5): [{ id, role, level, hiredAt }]
+    workers:           [],
     lastPiggyAt:       null,
     locationId:        'apartment',
     onboarded:         false,
@@ -44,10 +97,10 @@ export function createState() {
     upgrades: {
       priceMultiplier:  1,
       solderingLevel:   0,
-      workerLevel:      0,
       consumablesLevel: 0,
       storageLevel:     0,
       logisticsLevel:   0,
+      benchLevel:       0,
     },
   }
 }
@@ -78,17 +131,18 @@ function _nextFreeSlotIndex(state) {
   throw new Error('_nextFreeSlotIndex: всі слоти зайняті')
 }
 
-// Total occupied delivery slots = pending deliveries + bench (if kit is being assembled).
+// Occupied delivery slots = pending deliveries. Before C3 a busy bench also
+// counted, which with several benches would have made the extra ones
+// unreachable. Stations now gate themselves: an ordered box may wait in the
+// street while every bench is working.
 function _usedSlots(state) {
-  const pending = (state.deliveries ?? []).length
-  const bench   = (state.phase !== Phase.IDLE) ? 1 : 0
-  return pending + bench
+  return (state.deliveries ?? []).length
 }
 
-export function orderKit(state, kitTypeId, now = Date.now()) {
-  if (state.phase === Phase.BURNT)
-    throw new Error(`orderKit: недозволено у фазі ${state.phase}`)
-
+// makeId lets the caller supply a deterministic id source. The sim passes a
+// monotonic counter so a headless run is reproducible; the default keeps the
+// standalone behaviour for direct callers and tests.
+export function orderKit(state, kitTypeId, now = Date.now(), makeId = null) {
   const kit = KIT_TYPES[kitTypeId]
   if (!kit)
     throw new Error(`orderKit: невідомий тип комплекту "${kitTypeId}"`)
@@ -103,7 +157,7 @@ export function orderKit(state, kitTypeId, now = Date.now()) {
   const logMult    = LOGISTICS_DELIVERY_MULT[state.upgrades.logisticsLevel ?? 0] ?? 1.0
   const deliveryMs = Math.round(kit.deliveryMs * logMult)
   const slotIndex  = _nextFreeSlotIndex(state)
-  const id         = `${now}-${Math.random().toString(36).slice(2, 7)}`
+  const id         = makeId ? makeId() : `${now}-${Math.random().toString(36).slice(2, 7)}`
 
   return {
     ...state,
@@ -115,11 +169,11 @@ export function orderKit(state, kitTypeId, now = Date.now()) {
   }
 }
 
-// Worker picks up an arrived delivery: TRANSIT → CARRYING.
+// Someone picks up an arrived delivery: TRANSIT → CARRYING.
 // Bench must be IDLE and no other delivery currently being carried.
-export function pickupDelivery(state, deliveryId, now = Date.now()) {
-  if (state.phase !== Phase.IDLE)
-    throw new Error(`pickupDelivery: недозволено у фазі ${state.phase}`)
+// carriedBy identifies the agent (C2): the player and the worker puppet both
+// haul boxes, and each must ignore the one the other has in hand.
+export function pickupDelivery(state, deliveryId, now = Date.now(), carriedBy = 'worker') {
   if ((state.deliveries ?? []).some(d => d.status === DeliveryStatus.CARRYING))
     throw new Error('pickupDelivery: інша доставка вже несеться')
   const d = (state.deliveries ?? []).find(d => d.id === deliveryId)
@@ -130,120 +184,149 @@ export function pickupDelivery(state, deliveryId, now = Date.now()) {
   return {
     ...state,
     deliveries: (state.deliveries ?? []).map(d2 =>
-      d2.id === deliveryId ? { ...d2, status: DeliveryStatus.CARRYING } : d2
+      d2.id === deliveryId ? { ...d2, status: DeliveryStatus.CARRYING, carriedBy } : d2
     ),
   }
 }
 
-// Worker arrives at bench with box: removes carrying delivery, puts kit on bench.
-export function startAssembly(state) {
-  if (state.phase !== Phase.IDLE)
-    throw new Error(`startAssembly: недозволено у фазі ${state.phase}`)
+// A carried box is put down on `stationId`: the delivery is consumed and that
+// station starts assembling. Other stations and other deliveries are untouched.
+export function startAssembly(state, stationId) {
+  const station = getStation(state, stationId)
+  if (station.phase !== Phase.IDLE)
+    throw new Error(`startAssembly: станція ${stationId} у фазі ${station.phase}`)
   const carrying = (state.deliveries ?? []).find(d => d.status === DeliveryStatus.CARRYING)
   if (!carrying)
     throw new Error('startAssembly: немає активної доставки (статус carrying)')
   return {
-    ...state,
-    phase:      Phase.ASSEMBLY,
-    activeKit:  carrying.kitId,
+    ...withStation(state, stationId, s => ({
+      ...s, phase: Phase.ASSEMBLY, kitId: carrying.kitId,
+    })),
     deliveries: (state.deliveries ?? []).filter(d => d.id !== carrying.id),
   }
 }
 
-export function recordSolderPoint(state, quality) {
-  if (state.phase !== Phase.ASSEMBLY)
-    throw new Error(`recordSolderPoint: недозволено у фазі ${state.phase}`)
+export function recordSolderPoint(state, stationId, quality) {
+  const station = getStation(state, stationId)
+  if (station.phase !== Phase.ASSEMBLY)
+    throw new Error(`recordSolderPoint: станція ${stationId} у фазі ${station.phase}`)
   if (quality < 0 || quality > 1)
     throw new Error(`recordSolderPoint: якість має бути від 0 до 1, отримано ${quality}`)
-  const kit = KIT_TYPES[state.activeKit]
-  if (state.solderPoints.length >= kit.solderPointCount)
+  const kit = KIT_TYPES[station.kitId]
+  if (station.solderPoints.length >= kit.solderPointCount)
     throw new Error(`recordSolderPoint: всі ${kit.solderPointCount} точки вже запаяно`)
-  return { ...state, solderPoints: [...state.solderPoints, quality] }
+  return withStation(state, stationId, s => ({
+    ...s, solderPoints: [...s.solderPoints, quality],
+  }))
 }
 
-export function applyColdSolderPenalty(state, amount) {
-  if (state.phase !== Phase.ASSEMBLY)
-    throw new Error(`applyColdSolderPenalty: недозволено у фазі ${state.phase}`)
+export function applyColdSolderPenalty(state, stationId, amount) {
+  const station = getStation(state, stationId)
+  if (station.phase !== Phase.ASSEMBLY)
+    throw new Error(`applyColdSolderPenalty: станція ${stationId} у фазі ${station.phase}`)
+  return withStation(state, stationId, s => ({
+    ...s, coldPenalty: Math.min(1, s.coldPenalty + amount),
+  }))
+}
+
+export function finishAssembly(state, stationId) {
+  const station = getStation(state, stationId)
+  if (station.phase !== Phase.ASSEMBLY)
+    throw new Error(`finishAssembly: станція ${stationId} у фазі ${station.phase}`)
+  const kit = KIT_TYPES[station.kitId]
+  if (station.solderPoints.length < kit.solderPointCount)
+    throw new Error(
+      `finishAssembly: потрібно ${kit.solderPointCount} точок, є ${station.solderPoints.length}`
+    )
+  const raw     = calcQuality(station.solderPoints)
+  const quality = Math.max(0, raw - station.coldPenalty)
+  return withStation(state, stationId, s => ({ ...s, phase: Phase.READY, quality }))
+}
+
+export function burnKit(state, stationId) {
+  const station = getStation(state, stationId)
+  if (station.phase !== Phase.ASSEMBLY)
+    throw new Error(`burnKit: станція ${stationId} у фазі ${station.phase}`)
+  return withStation(state, stationId, s => ({ ...s, phase: Phase.BURNT }))
+}
+
+export function abandonBurntDrone(state, stationId, salvageRate = 0) {
+  const station = getStation(state, stationId)
+  if (station.phase !== Phase.BURNT)
+    throw new Error(`abandonBurntDrone: станція ${stationId} у фазі ${station.phase}`)
+  const salvage = KIT_TYPES[station.kitId].cost * salvageRate
+  return _afterStationClear(state, stationId, state.money + salvage)
+}
+
+export function sell(state, stationId) {
+  const station = getStation(state, stationId)
+  if (station.phase !== Phase.READY)
+    throw new Error(`sell: станція ${stationId} у фазі ${station.phase}`)
+  const kit   = KIT_TYPES[station.kitId]
+  const price = calcPrice(kit.basePrice, station.quality, state.upgrades.priceMultiplier)
+  return _afterStationClear(state, stationId, state.money + price)
+}
+
+// After a station is cleared (sold or abandoned) it returns to IDLE. Deliveries
+// stay intact — they were already decoupled from the bench in D6, which is why
+// parallel stations need no extra bookkeeping here.
+function _afterStationClear(state, stationId, newMoney) {
   return {
-    ...state,
-    coldSolderPenalty: Math.min(1, state.coldSolderPenalty + amount),
+    ...withStation(state, stationId, () => createStation(stationId, getStation(state, stationId).defId)),
+    money: newMoney,
   }
 }
 
-export function finishAssembly(state) {
-  if (state.phase !== Phase.ASSEMBLY)
-    throw new Error(`finishAssembly: недозволено у фазі ${state.phase}`)
-  const kit = KIT_TYPES[state.activeKit]
-  if (state.solderPoints.length < kit.solderPointCount)
-    throw new Error(
-      `finishAssembly: потрібно ${kit.solderPointCount} точок, є ${state.solderPoints.length}`
-    )
-  const raw     = calcQuality(state.solderPoints)
-  const quality = Math.max(0, raw - state.coldSolderPenalty)
-  return { ...state, phase: Phase.READY, assemblyQuality: quality }
+// ── Hiring (C5) ───────────────────────────────────────────
+
+export const workersOf = (state) => state.workers ?? []
+
+export function workersInRole(state, roleId) {
+  return workersOf(state).filter(w => w.role === roleId)
 }
 
-export function burnKit(state) {
-  if (state.phase !== Phase.ASSEMBLY)
-    throw new Error(`burnKit: недозволено у фазі ${state.phase}`)
-  return { ...state, phase: Phase.BURNT }
+// Cost of the next worker of this role — the curve is per-role, so hiring a
+// second courier does not make the first technician more expensive.
+export function nextHireCost(state, roleId) {
+  return hireCost(roleId, workersInRole(state, roleId).length)
 }
 
-export function abandonBurntDrone(state, salvageRate = 0) {
-  if (state.phase !== Phase.BURNT)
-    throw new Error(`abandonBurntDrone: недозволено у фазі ${state.phase}`)
-  const kit     = KIT_TYPES[state.activeKit]
-  const salvage = kit.cost * salvageRate
-  return _afterBenchClear(state, state.money + salvage)
-}
+export function hireWorker(state, roleId, now = Date.now(), makeId = null) {
+  roleDef(roleId)   // throws on an unknown role
+  const cost = nextHireCost(state, roleId)
+  if (state.money < cost)
+    throw new Error(`hireWorker: недостатньо грошей (є ${Math.floor(state.money)}, потрібно ${cost})`)
 
-export function sell(state) {
-  if (state.phase !== Phase.READY)
-    throw new Error(`sell: недозволено у фазі ${state.phase}`)
-  const kit   = KIT_TYPES[state.activeKit]
-  const price = calcPrice(kit.basePrice, state.assemblyQuality, state.upgrades.priceMultiplier)
-  return _afterBenchClear(state, state.money + price)
-}
-
-// After bench is cleared (sell or abandon): return to IDLE.
-// deliveries (transit/carrying) stay intact — any worker independently picks up
-// an arrived delivery via pickupDelivery(). This fully decouples bench state
-// from per-delivery state and enables parallel multi-worker operation.
-function _afterBenchClear(state, newMoney) {
+  const id = makeId ? makeId() : `${roleId}-${now}-${workersOf(state).length}`
   return {
     ...state,
-    money:             newMoney,
-    solderPoints:      [],
-    assemblyQuality:   null,
-    coldSolderPenalty: 0,
-    activeKit:         null,
-    phase:             Phase.IDLE,
-    // deliveries intentionally preserved
+    money:   state.money - cost,
+    workers: [...workersOf(state), { id, role: roleId, level: 0, hiredAt: now }],
   }
 }
 
 // ── Scrap (Tinder mini-game → free drone assembly) ───────
 
 export function startScrap(state) {
-  if (state.phase !== Phase.IDLE)
-    throw new Error('startScrap: недозволено поза фазою IDLE')
+  if (!idleStations(state).length)
+    throw new Error('startScrap: немає вільної станції')
   if (state.scrapAvailable)
     throw new Error('startScrap: вже активовано')
   return { ...state, scrapAvailable: true }
 }
 
-// Called after successful Tinder game — worker returns to bench, assembly begins.
-export function startScrapAssembly(state) {
-  if (state.phase !== Phase.IDLE)
-    throw new Error('startScrapAssembly: phase must be IDLE')
+// Salvaged parts are put down on a station: a free drone starts assembling.
+export function startScrapAssembly(state, stationId) {
+  const station = getStation(state, stationId)
+  if (station.phase !== Phase.IDLE)
+    throw new Error(`startScrapAssembly: станція ${stationId} у фазі ${station.phase}`)
   return {
-    ...state,
-    phase:             Phase.ASSEMBLY,
-    activeKit:         'scrap_drone',
-    scrapAvailable:    false,
-    solderPoints:      [],
-    assemblyQuality:   null,
-    coldSolderPenalty: 0,
+    ...withStation(state, stationId, () => ({
+      ...createStation(stationId, station.defId),
+      phase: Phase.ASSEMBLY,
+      kitId: 'scrap_drone',
+    })),
+    scrapAvailable: false,
   }
 }
 
