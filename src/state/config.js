@@ -69,6 +69,30 @@ export const PLAYER_HALF_H = 14
 // thinnest obstacle (walls are 24) or a fast agent tunnels straight through it.
 export const MOVE_MAX_STEP = 8
 
+// ── Navigation (C4) ──────────────────────────────────────
+// Grid cell size. Smaller = more accurate paths and a more expensive search;
+// 24 is about a third of a character, which is enough to find doorways.
+export const NAV_CELL = 24
+// Obstacles are grown by this much before rasterising, so a path planned for a
+// point never scrapes a character's shoulder along a wall. Should match the
+// agent's larger half-extent.
+export const NAV_INFLATE = 20
+// Hard ceiling on A* work per search — returns null instead of freezing a frame.
+export const ASTAR_MAX_NODES = 4000
+// How many searches may run in one tick. Pathfinding is the most expensive
+// thing in the sim on a low-end phone, so it gets a budget.
+export const PATHS_PER_TICK = 2
+export const PATH_CACHE_SIZE = 64
+
+// Distance at which a waypoint counts as reached.
+export const WAYPOINT_ARRIVE_R = 14
+// Soft separation between agents — deliberately NOT cell reservation, which
+// deadlocks crowds of this size (plan §6.6).
+export const AGENT_SEPARATION_R = 46
+export const AGENT_SEPARATION_W = 0.55
+// No progress for this long while following a path = re-plan.
+export const STUCK_TIMEOUT_MS = 700
+
 // ── Trigger zones (C2) ───────────────────────────────────
 // How long a character must stand in a zone before it fires. 0 = instant.
 // Longer dwell = the action reads as "work"; instant = "pick up".

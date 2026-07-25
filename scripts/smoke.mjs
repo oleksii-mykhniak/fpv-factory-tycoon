@@ -168,6 +168,39 @@ const dBoth = await log('second kit on station-1')
 await page.waitForTimeout(14000)
 const dDone = await log('both benches worked')
 
+// ── E. Navigation (C4) ────────────────────────────────────
+console.log('\n### E. A* navigation')
+await boot(seedState({ benchLevel: 1 }))
+const eGrid = await page.evaluate(() => {
+  const g = globalThis.__world.navGrid
+  const blocked = g.data.reduce((n, v) => n + v, 0)
+  return { cols: g.cols, rows: g.rows, cell: g.cell, blocked }
+})
+console.log(`  grid ${eGrid.cols}×${eGrid.rows} @${eGrid.cell}px, ${eGrid.blocked} blocked cells`)
+
+// Walk the player from the flat, through the door, to the mailbox — a route
+// that has to round two benches and thread the doorway.
+await page.evaluate(() => {
+  const w = globalThis.__world
+  const a = w.agents.find(x => x.kind === 'player')
+  a.x = 500; a.y = 150            // above the top bench
+  a.pathTarget = { x: 170, y: 1300 }
+})
+const eStart = Date.now()
+await page.waitForFunction(() => {
+  const a = globalThis.__world.agents.find(x => x.kind === 'player')
+  return Math.hypot(a.x - 170, a.y - 1300) < 45
+}, null, { timeout: 40000 }).catch(() => {})
+const eArrived = await page.evaluate(() => {
+  const w = globalThis.__world
+  const a = w.agents.find(x => x.kind === 'player')
+  const stuck = (w.obstacles ?? []).some(b =>
+    Math.abs(a.x - b.cx) < a.halfW + b.w / 2 && Math.abs(a.y - b.cy) < a.halfH + b.h / 2)
+  return { x: Math.round(a.x), y: Math.round(a.y), stuck, cached: w.pathCache.size }
+})
+console.log(`  arrived at (${eArrived.x},${eArrived.y}) in ${((Date.now() - eStart) / 1000).toFixed(1)}s, ` +
+            `inside obstacle: ${eArrived.stuck}, cached routes: ${eArrived.cached}`)
+
 // ── C. Movement, collisions, camera (C1 regression) ───────
 console.log('\n### C. Movement (WASD)')
 await boot(seedState({}))
@@ -235,6 +268,10 @@ const checks = [
   ['D: box picked up from a street slot',  dCarry.carrying.includes('kit_box')],
   ['D: both stations busy at once',       dBoth.stations === 'ASSEMBLY/ASSEMBLY'],
   ['D: both finished independently',      dDone.stations === 'READY/READY'],
+  ['E: nav grid rasterised the world',    eGrid.blocked > 0 && eGrid.cols > 30],
+  ['E: pathed across the flat and out',   Math.hypot(eArrived.x - 170, eArrived.y - 1300) < 60],
+  ['E: never ended inside geometry',      eArrived.stuck === false],
+  ['E: routes were cached',               eArrived.cached > 0],
   ['no console errors',                   errors.length === 0],
 ]
 console.log('\n=== checks ===')

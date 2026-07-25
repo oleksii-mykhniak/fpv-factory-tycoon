@@ -15,6 +15,7 @@ import { PLAYER_SPEED, PLAYER_HALF_W, PLAYER_HALF_H } from '../state/config.js'
 import { stationDef } from '../defs/stations.js'
 import { levelData } from '../state/upgrades.js'
 import { rect } from '../defs/layouts/apartment.js'
+import { buildGrid } from '../nav/navGrid.js'
 
 // An agent is anything that occupies space and moves under its own velocity.
 // C1 has exactly one (the player); C5 adds hired workers with the same shape,
@@ -29,6 +30,12 @@ export function createAgent({ id, kind, x, y, speed = PLAYER_SPEED }) {
     speed,
     facing: 1,      // 1 = right, -1 = left
     moving: false,
+    // Navigation (C4): set pathTarget and pathSystem fills in `path`.
+    pathTarget: null,
+    path:       null,
+    pathIndex:  0,
+    pathFailed: false,
+    arrived:    false,
     carrying: [],   // [{ type: 'kit_box' | 'drone' | 'burnt' | 'scrap', kitId?, deliveryId? }]
   }
 }
@@ -70,6 +77,12 @@ export function rebuildStationGeometry(world) {
   world.placedStations = placed
   world.obstacles = [...layout.obstacles, ...placed.map(p => p.body)]
   world.zones     = [...layout.zones, ...placed.map(p => p.zone)]
+
+  // The nav grid is a rasterisation of exactly these obstacles, so it is
+  // rebuilt here and nowhere else — a station added without a matching grid
+  // would let workers path straight through it (C4).
+  world.navGrid   = buildGrid(world.bounds, world.obstacles)
+  world.pathCache = new Map()
   return world
 }
 
@@ -101,6 +114,10 @@ export function createWorld({ state, salesLog = [] } = {}, { now = Date.now(), r
 
     // Movement vector published by the view each frame (already deadzoned).
     input: { x: 0, y: 0 },
+
+    // Navigation (C4): grid rasterised from `obstacles`, plus a route cache.
+    navGrid:   null,
+    pathCache: new Map(),
 
     // ── Simulated clock ────────────────────────────────────
     // Authoritative "now" for the sim. Advanced by loop.advance(); every

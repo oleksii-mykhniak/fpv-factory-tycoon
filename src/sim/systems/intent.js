@@ -12,6 +12,8 @@ export function intentSystem(world) {
 
   for (const agent of world.agents ?? []) {
     if (agent.kind !== 'player') continue
+    // A path takes over only when the player is not steering (C4/C5).
+    if (agent.path && input.x === 0 && input.y === 0) continue
     agent.vx = input.x * agent.speed
     agent.vy = input.y * agent.speed
     if (input.x !== 0) agent.facing = input.x > 0 ? 1 : -1
