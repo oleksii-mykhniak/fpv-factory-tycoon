@@ -1,4 +1,4 @@
-import { Phase, KIT_TYPES } from '../state/gameState.js'
+import { Phase, KIT_TYPES, getStation, focusStation } from '../state/gameState.js'
 import { levelData } from '../state/upgrades.js'
 import { SALVAGE_RATE, COLD_SOLDER_QUALITY_PENALTY } from '../state/config.js'
 import { createSolderGame } from './solderGame.js'
@@ -21,8 +21,17 @@ export function createSolderModal(root, { onSolderResult, onAbandon }) {
   let activeGame   = null
   let lastGameIdx  = -1
   let lastPhase    = null
+  // C3: the modal belongs to one station. With several benches in ASSEMBLY,
+  // guessing would solder the wrong one.
+  let stationId    = null
 
-  function open(state) {
+  function stationOf(state) {
+    try { return stationId ? getStation(state, stationId) : focusStation(state) }
+    catch { return focusStation(state) }
+  }
+
+  function open(state, id = null) {
+    stationId   = id
     lastGameIdx = -1
     lastPhase   = null
     overlay.removeAttribute('hidden')
@@ -43,7 +52,8 @@ export function createSolderModal(root, { onSolderResult, onAbandon }) {
   function update(state, warning) {
     if (overlay.hasAttribute('hidden')) return
 
-    const { phase } = state
+    const station = stationOf(state)
+    const phase   = station?.phase ?? Phase.IDLE
 
     // Auto-close when cycle ends
     if (phase === Phase.READY || phase === Phase.IDLE) {
@@ -52,25 +62,25 @@ export function createSolderModal(root, { onSolderResult, onAbandon }) {
     }
 
     if (phase === Phase.BURNT) {
-      if (lastPhase !== Phase.BURNT) renderBurnt(state)
+      if (lastPhase !== Phase.BURNT) renderBurnt(station)
       lastPhase = phase
       return
     }
 
     if (phase === Phase.ASSEMBLY) {
       lastPhase = phase
-      renderAssembly(state, warning)
+      renderAssembly(state, station, warning)
     }
   }
 
-  function renderAssembly(state, warning) {
-    const kit   = KIT_TYPES[state.activeKit]
-    const done  = state.solderPoints.length
+  function renderAssembly(state, station, warning) {
+    const kit   = KIT_TYPES[station.kitId]
+    const done  = station.solderPoints.length
     const total = kit?.solderPointCount ?? 0
     const body  = overlay.querySelector('#solder-body')
 
     const dotsHTML = Array.from({ length: total }, (_, i) => {
-      const q   = state.solderPoints[i]
+      const q   = station.solderPoints[i]
       const cls = q !== undefined ? `solder-dot--${dotQuality(q)}` : ''
       return `<div class="solder-dot ${cls}"></div>`
     }).join('')
@@ -99,7 +109,7 @@ export function createSolderModal(root, { onSolderResult, onAbandon }) {
         activeGame = createSolderGame(body.querySelector('#sg-host-modal'), {
           pointIndex: done,
           greenHalf,
-          onResult: onSolderResult,
+          onResult: (q) => onSolderResult(q, stationId),
           tapArea: document,
         })
       }
@@ -118,9 +128,9 @@ export function createSolderModal(root, { onSolderResult, onAbandon }) {
     }
   }
 
-  function renderBurnt(state) {
+  function renderBurnt(station) {
     destroyGame()
-    const kit    = KIT_TYPES[state.activeKit]
+    const kit    = KIT_TYPES[station.kitId]
     const salvage = (kit.cost * SALVAGE_RATE).toFixed(2)
     const loss    = (kit.cost * (1 - SALVAGE_RATE)).toFixed(2)
     overlay.querySelector('#solder-body').innerHTML = `
@@ -135,7 +145,7 @@ export function createSolderModal(root, { onSolderResult, onAbandon }) {
     `
     overlay.querySelector('#btn-abandon-modal').addEventListener('click', () => {
       close()
-      onAbandon()
+      onAbandon(stationId)
     })
   }
 
@@ -145,5 +155,5 @@ export function createSolderModal(root, { onSolderResult, onAbandon }) {
     return 'low'
   }
 
-  return { open, close, update }
+  return { open, close, update, currentStation: () => stationId }
 }

@@ -201,6 +201,11 @@ export const STORAGE_UPGRADE_COSTS  = [300, 700]
 // How many SECONDARY delivery slots are unlocked per level (primary is always 1).
 export const STORAGE_SLOTS_BY_LEVEL = [0, 1, 2]
 
+// ── Upgrade: Extra workbenches (C3) ──────────────────────
+// Each level builds one more station, up to the number of slots the location
+// layout provides.
+export const BENCH_UPGRADE_COSTS = [400, 1200]
+
 // ── Upgrade: Logistics (faster delivery) ─────────────────
 export const LOGISTICS_UPGRADE_COSTS  = [200, 500]
 // Delivery time multiplier per level: 1.0 = standard, 0.7 = 30% faster, 0.5 = 50% faster.

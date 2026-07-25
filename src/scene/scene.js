@@ -117,11 +117,6 @@ function buildRoom(scene, layout) {
   }
 
   // Small hand-placed details that read better than a flat rectangle.
-  const bench = props.workbench
-  colorRect(scene, {
-    x: bench.cx, y: bench.cy + bench.h * 0.44, w: bench.w, h: bench.h * 0.12,
-    hex: '#4a2a18', z: 2,
-  })
   const mb = props.mailbox
   colorRect(scene, { x: mb.cx, y: mb.cy - mb.h * 0.34, w: mb.w, h: 5, hex: '#2244a0', z: 4 })
   const tb = props.trashbin
@@ -337,7 +332,7 @@ function createBenchProgress(scene, benchActor) {
 
 // ── Scene entry point ─────────────────────────────────────
 
-export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, layout }) {
+export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, layout, world }) {
   const engine = new ex.Engine({
     canvasElement: canvas,
     backgroundColor: BG,
@@ -358,8 +353,56 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
     Math.min(CAMERA_ZOOM_MAX, engine.drawHeight / VIEW_HEIGHT_UNITS),
   )
 
-  const { floor, workbench, mailbox, trashbin, piggy } = buildRoom(scene, layout)
+  const { floor, mailbox, trashbin, piggy } = buildRoom(scene, layout)
   _floorActor = floor
+
+  // ── Stations (C3) ──────────────────────────────────────
+  // One actor + one progress card per built station, placed from the world's
+  // geometry. Buying a bench adds an entry and everything else follows.
+  const stations = world.placedStations.map(placed => {
+    const actor = new ex.Actor({
+      pos:    ex.vec(placed.body.cx, placed.body.cy),
+      width:  placed.body.w,
+      height: placed.body.h,
+      z: 2,
+      color:  ex.Color.fromHex(placed.def.color),
+    })
+    scene.add(actor)
+    applySprite(actor, placed.def.sprite)
+    // Front edge, so the surface reads as a table rather than a slab.
+    colorRect(scene, {
+      x: placed.body.cx, y: placed.body.cy + placed.body.h * 0.44,
+      w: placed.body.w, h: placed.body.h * 0.12, hex: '#4a2a18', z: 2,
+    })
+
+    // Opened box + drone that sit on this station's surface.
+    const boxOpen = new ex.Actor({
+      pos: ex.vec(placed.surface.x, placed.surface.y),
+      width: layout.sizes.box.w * 1.3, height: layout.sizes.box.h * 0.5,
+      z: 3, color: ex.Color.fromHex('#e8c870'),
+    })
+    boxOpen.graphics.visible = false
+    scene.add(boxOpen)
+
+    const drone = new ex.Actor({
+      pos: ex.vec(placed.surface.x, placed.surface.y),
+      width: layout.sizes.drone.w, height: layout.sizes.drone.h,
+      z: 4, color: ex.Color.fromHex('#2a2a3e'),
+    })
+    drone.graphics.visible = false
+    scene.add(drone)
+
+    return {
+      id: placed.id,
+      actor, boxOpen, drone,
+      pulse:    addPulse(actor),
+      progress: createBenchProgress(scene, actor),
+      workSpot: placed.workSpot,
+      surface:  placed.surface,
+      spriteKey: null,
+    }
+  })
+  const workbench = stations[0].actor
 
   const { spawns, sizes } = layout
 
@@ -446,28 +489,6 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
     })
   })
 
-  // Opened box on workbench (flat, lighter — visible during ASSEMBLY/READY)
-  const boxOpen = new ex.Actor({
-    pos:    TABLE.clone(),
-    width:  sizes.box.w * 1.3,
-    height: sizes.box.h * 0.5,
-    z: 3,
-    color:  ex.Color.fromHex('#e8c870'),
-  })
-  boxOpen.graphics.visible = false
-  scene.add(boxOpen)
-
-  // Drone silhouette on the workbench (smaller than a character — real proportion)
-  const drone = new ex.Actor({
-    pos:    TABLE.clone(),
-    width:  sizes.drone.w,
-    height: sizes.drone.h,
-    z: 4,
-    color:  ex.Color.fromHex('#2a2a3e'),
-  })
-  drone.graphics.visible = false
-  scene.add(drone)
-
   // ── Piggy bank (built from the layout; only its behaviour lives here) ──
   piggy.graphics.visible = false
 
@@ -512,7 +533,7 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
     trashbinPos:  TRASHBIN_POS,
     box,
     tablePos:     TABLE,
-    droneRef:     drone,
+    droneRef:     stations[0].drone,
     onBoxPicked:           () => onIntent('worker.atBench'),
     onSolderRequested:     () => onIntent('worker.readyToSolder'),
     onSellRequested:       () => onIntent('worker.atMailbox'),
@@ -577,24 +598,20 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
 
   // ── Pulse controllers ──────────────────────────────────
   const boxPulse      = addPulse(box)
-  const benchPulse    = addPulse(workbench)
   const mailboxPulse  = addPulse(mailbox)
   const trashbinPulse = addPulse(trashbin)
-
-  // ── Bench progress (auto / semi soldering) ────────────
-  const benchProgress = createBenchProgress(scene, workbench)
 
   return {
     engine: { getFps: () => engine.clock.fpsSampler.fps, _ex: engine },
     scene,
-    box, boxOpen, drone, worker, piggy, mailbox, trashbin, workbench,
+    box, worker, piggy, mailbox, trashbin, workbench,
+    stations,
     player, playerRig,
     carrySlotActors,
     dwell: { bg: dwellBg, fill: dwellFill, width: DWELL_W },
-    benchProgress,
     slotSpawns,
     boxSpawn: BOX_SPAWN,
-    _pulses: { box: boxPulse, bench: benchPulse, mailbox: mailboxPulse, trashbin: trashbinPulse },
+    _pulses: { box: boxPulse, mailbox: mailboxPulse, trashbin: trashbinPulse },
   }
 }
 

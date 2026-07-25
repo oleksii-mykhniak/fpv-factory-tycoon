@@ -1,82 +1,101 @@
-// Station system — the workbench's own state loop.
+// Station system — each machine's own state loop.
 //
-// Replaces main.js scheduleAutoPoint()/autoTimer: instead of a setTimeout chain
-// that only one bench in the whole game could own, progress is an accumulator
-// on world.station advanced by the tick. C3 turns `world.station` into an array
-// and this function into a per-station loop; the stage logic below does not
-// change when that happens.
+// C0 replaced main.js's single setTimeout chain with an accumulator; C3 turned
+// that accumulator into one per station, so N benches advance independently in
+// the same tick. The stage logic below did not change when that happened —
+// which was the point of the split.
 //
 // Modes:
 //   MANUAL — the mini-game drives progress; this system stays out of the way.
-//   SEMI   — armed by the player's solder command, then runs on its own.
-//   AUTO   — arms itself as soon as a kit is on the bench.
+//   SEMI   — armed by whoever works the station, then runs on its own.
+//   AUTO   — arms itself as soon as a kit is on it.
 
-import { Phase, KIT_TYPES, recordSolderPoint, finishAssembly, calcPrice } from '../../state/gameState.js'
+import { Phase, KIT_TYPES, recordSolderPoint, finishAssembly, calcPrice, stationsOf } from '../../state/gameState.js'
 import { levelData, SOLDER_MODE } from '../../state/upgrades.js'
 import { EV, emit } from '../events.js'
 
-function idle(station) {
-  station.armed      = false
-  station.running    = false
-  station.elapsedMs  = 0
-  station.durationMs = 0
+// Per-station runtime: how far into the current stage it is. Not persisted —
+// a reload restarts the current stage, which is a fair trade for a save file
+// that only holds game state.
+export function stationRuntime(world, stationId) {
+  return (world.stationRuntime ??= {})[stationId] ??= {
+    armed: false, running: false, elapsedMs: 0, durationMs: 0,
+  }
 }
 
-function startStage(world, kit, data, events) {
-  const done  = world.game.solderPoints.length
+function idle(rt) {
+  rt.armed = false
+  rt.running = false
+  rt.elapsedMs = 0
+  rt.durationMs = 0
+}
+
+function startStage(world, station, rt, kit, data, events) {
+  const done  = station.solderPoints.length
   const total = kit.solderPointCount
   const label = kit.assemblySteps?.[done]?.label ?? `Крок ${done + 1}`
 
-  world.station.running    = true
-  world.station.elapsedMs  = 0
-  world.station.durationMs = data.pointDelayMs
+  rt.running    = true
+  rt.elapsedMs  = 0
+  rt.durationMs = data.pointDelayMs
 
-  emit(events, EV.STAGE_STARTED, { label, total, done, durationMs: data.pointDelayMs })
+  emit(events, EV.STAGE_STARTED, {
+    stationId: station.id, label, total, done, durationMs: data.pointDelayMs,
+  })
 }
 
 export function stationSystem(world, dt, events) {
-  const game = world.game
-  const data = levelData('soldering', game.upgrades.solderingLevel)
+  const data = levelData('soldering', world.game.upgrades.solderingLevel)
 
-  if (game.phase !== Phase.ASSEMBLY || data.mode === SOLDER_MODE.MANUAL) {
-    idle(world.station)
-    return
-  }
+  // Snapshot: world.game is replaced by each transition below, so iterate over
+  // ids rather than over objects that go stale mid-loop.
+  const ids = stationsOf(world.game).map(s => s.id)
 
-  const kit = KIT_TYPES[game.activeKit]
-  if (!kit) { idle(world.station); return }
+  for (const stationId of ids) {
+    const rt = stationRuntime(world, stationId)
+    const station = stationsOf(world.game).find(s => s.id === stationId)
+    if (!station) { idle(rt); continue }
 
-  // AUTO needs no player input to get going; SEMI waits to be armed.
-  if (data.mode === SOLDER_MODE.AUTO) world.station.armed = true
-  if (!world.station.armed) return
+    if (station.phase !== Phase.ASSEMBLY || data.mode === SOLDER_MODE.MANUAL) {
+      idle(rt)
+      continue
+    }
 
-  if (!world.station.running) {
-    startStage(world, kit, data, events)
-    return
-  }
+    const kit = KIT_TYPES[station.kitId]
+    if (!kit) { idle(rt); continue }
 
-  world.station.elapsedMs += dt
-  if (world.station.elapsedMs < world.station.durationMs) return
+    if (data.mode === SOLDER_MODE.AUTO) rt.armed = true
+    if (!rt.armed) continue
 
-  const quality = data.qualityMin + world.rng() * (data.qualityMax - data.qualityMin)
-  world.game = recordSolderPoint(world.game, quality)
+    if (!rt.running) {
+      startStage(world, station, rt, kit, data, events)
+      continue
+    }
 
-  const done  = world.game.solderPoints.length
-  const total = kit.solderPointCount
+    rt.elapsedMs += dt
+    if (rt.elapsedMs < rt.durationMs) continue
 
-  if (done < total) {
-    emit(events, EV.STAGE_DONE, { total, done, quality })
-    startStage(world, kit, data, events)
+    const quality = data.qualityMin + world.rng() * (data.qualityMax - data.qualityMin)
+    world.game = recordSolderPoint(world.game, stationId, quality)
+
+    const updated = stationsOf(world.game).find(s => s.id === stationId)
+    const done    = updated.solderPoints.length
+    const total   = kit.solderPointCount
+
+    if (done < total) {
+      emit(events, EV.STAGE_DONE, { stationId, total, done, quality })
+      startStage(world, updated, rt, kit, data, events)
+      emit(events, EV.STATE_DIRTY)
+      continue
+    }
+
+    world.game = finishAssembly(world.game, stationId)
+    const finished = stationsOf(world.game).find(s => s.id === stationId)
+    const price = calcPrice(kit.basePrice, finished.quality, world.game.upgrades.priceMultiplier)
+
+    idle(rt)
+    emit(events, EV.STAGE_DONE, { stationId, total, done, quality })
+    emit(events, EV.ASSEMBLY_DONE, { stationId, quality: finished.quality, price })
     emit(events, EV.STATE_DIRTY)
-    return
   }
-
-  world.game = finishAssembly(world.game)
-  const finalQuality = world.game.assemblyQuality
-  const price = calcPrice(kit.basePrice, finalQuality, world.game.upgrades.priceMultiplier)
-
-  idle(world.station)
-  emit(events, EV.STAGE_DONE, { total, done, quality })
-  emit(events, EV.ASSEMBLY_DONE, { quality: finalQuality, price })
-  emit(events, EV.STATE_DIRTY)
 }

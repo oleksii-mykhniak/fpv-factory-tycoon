@@ -10,8 +10,11 @@
 // Everything here is plain data: no Excalibur, no DOM, no timers. `rng` is the
 // single injection point for randomness so headless tests are deterministic.
 
-import { createState } from '../state/gameState.js'
+import { createState, stationsOf, syncStations } from '../state/gameState.js'
 import { PLAYER_SPEED, PLAYER_HALF_W, PLAYER_HALF_H } from '../state/config.js'
+import { stationDef } from '../defs/stations.js'
+import { levelData } from '../state/upgrades.js'
+import { rect } from '../defs/layouts/apartment.js'
 
 // An agent is anything that occupies space and moves under its own velocity.
 // C1 has exactly one (the player); C5 adds hired workers with the same shape,
@@ -30,10 +33,54 @@ export function createAgent({ id, kind, x, y, speed = PLAYER_SPEED }) {
   }
 }
 
+// How many stations this save should have: the `benches` upgrade level, capped
+// by the slots the location actually provides.
+export function stationCountFor(game, layout) {
+  const level = game.upgrades?.benchLevel ?? 0
+  const want  = levelData('benches', level)?.count ?? 1
+  return Math.min(want, layout?.stationSlots?.length ?? 1)
+}
+
+// Rebuilds everything derived from the station list: their footprints (solid),
+// their interaction zones, and where the view should draw them. Called at
+// startup and whenever a bench is bought — nothing else has to know.
+export function rebuildStationGeometry(world) {
+  const layout = world.layout
+  if (!layout) return world
+
+  const placed = stationsOf(world.game).map((station, i) => {
+    const def  = stationDef(station.defId)
+    const slot = layout.stationSlots[i] ?? layout.stationSlots[layout.stationSlots.length - 1]
+    return {
+      id:   station.id,
+      def,
+      body: rect(slot.x, slot.y, def.size.w, def.size.h),
+      zone: {
+        id:   `zone-${station.id}`,
+        kind: 'bench',
+        ...rect(slot.x, slot.y + def.zone.offsetY, def.zone.w, def.zone.h),
+        meta: { stationId: station.id },
+      },
+      // Where a character stands to work, and where items sit on the surface.
+      workSpot: { x: slot.x, y: slot.y + def.size.h / 2 + 46 },
+      surface:  { x: slot.x, y: slot.y },
+    }
+  })
+
+  world.placedStations = placed
+  world.obstacles = [...layout.obstacles, ...placed.map(p => p.body)]
+  world.zones     = [...layout.zones, ...placed.map(p => p.zone)]
+  return world
+}
+
 export function createWorld({ state, salesLog = [] } = {}, { now = Date.now(), rng = Math.random, layout = null } = {}) {
-  return {
+  const game = layout
+    ? syncStations(state ?? createState(), stationCountFor(state ?? createState(), layout))
+    : (state ?? createState())
+
+  const world = {
     // ── Persisted ──────────────────────────────────────────
-    game:     state ?? createState(),
+    game,
     salesLog,
 
     // ── Space (C1) ─────────────────────────────────────────
@@ -44,11 +91,13 @@ export function createWorld({ state, salesLog = [] } = {}, { now = Date.now(), r
     obstacles: layout?.obstacles ?? [],
     agents:    layout ? [createAgent({ id: 'player', kind: 'player', ...layout.spawns.player })] : [],
 
-    // Trigger zones (C2): definitions from the layout, per-zone dwell state
-    // here. `triggers` is the hand-off from zoneSystem to interactionSystem.
-    zones:     layout?.zones ?? [],
-    zoneState: {},
-    triggers:  [],
+    // Trigger zones (C2): the layout's fixed ones plus one per built station
+    // (C3), filled in by rebuildStationGeometry below. `triggers` is the
+    // hand-off from zoneSystem to interactionSystem.
+    zones:          layout?.zones ?? [],
+    placedStations: [],
+    zoneState:      {},
+    triggers:       [],
 
     // Movement vector published by the view each frame (already deadzoned).
     input: { x: 0, y: 0 },
@@ -88,6 +137,8 @@ export function createWorld({ state, salesLog = [] } = {}, { now = Date.now(), r
     // ── Non-serialised ─────────────────────────────────────
     rng,
   }
+
+  return layout ? rebuildStationGeometry(world) : world
 }
 
 // What goes to save/storage.js — deliberately only the persisted slice.

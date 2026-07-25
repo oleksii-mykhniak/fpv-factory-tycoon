@@ -42,7 +42,9 @@ async function hold(key, ms) {
 
 const status = async () => ({
   money: (await page.textContent('#hud-money').catch(() => '?')).trim(),
-  phase: await page.evaluate(() => globalThis.__world?.game?.phase ?? '?'),
+  phase: await page.evaluate(() => globalThis.__world?.game?.stations?.[0]?.phase ?? '?'),
+  stations: await page.evaluate(() =>
+    (globalThis.__world?.game?.stations ?? []).map(s => s.phase).join('/')),
   solderOpen: await page.locator('#solder-modal').isVisible().catch(() => false),
   trashOpen:  await page.locator('.tinder-overlay').isVisible().catch(() => false),
   piggyOpen:  await page.locator('.piggy-overlay').isVisible().catch(() => false),
@@ -52,7 +54,7 @@ const status = async () => ({
 const log = async (label) => {
   const s = await status()
   console.log(`— ${label.padEnd(30)} money=${s.money.padEnd(9)} phase=${String(s.phase).padEnd(8)} ` +
-              `carry=[${s.carrying}] solder=${s.solderOpen} trash=${s.trashOpen} piggy=${s.piggyOpen}`)
+              `carry=[${s.carrying}] stations=${s.stations} solder=${s.solderOpen} trash=${s.trashOpen} piggy=${s.piggyOpen}`)
   return s
 }
 
@@ -79,12 +81,13 @@ const seedState = (upgrades, extra = {}) => ({
   version: 1,
   savedAt: Date.now(),
   state: {
-    money: 1000, phase: 'IDLE', activeKit: null, solderPoints: [], assemblyQuality: null,
-    coldSolderPenalty: 0, lastPiggyAt: null, locationId: 'workshop', onboarded: true,
+    money: 1000, lastPiggyAt: null, locationId: 'workshop', onboarded: true,
     scrapAvailable: false, deliveries: [],
+    stations: [{ id: 'station-0', defId: 'workbench', phase: 'IDLE', kitId: null,
+                 solderPoints: [], quality: null, coldPenalty: 0 }],
     upgrades: {
       priceMultiplier: 1, solderingLevel: 0, workerLevel: 0,
-      consumablesLevel: 0, storageLevel: 0, logisticsLevel: 0, ...upgrades,
+      consumablesLevel: 0, storageLevel: 0, logisticsLevel: 0, benchLevel: 0, ...upgrades,
     },
     ...extra,
   },
@@ -104,7 +107,7 @@ await goTo('slot0')
 await page.waitForTimeout(700)
 const aPick = await log('stood in the street slot')
 
-await goTo('bench')
+await goTo('zone-station-0')
 await page.waitForTimeout(2000)
 const aDrop = await log('stood at the bench')
 
@@ -112,7 +115,7 @@ await page.waitForTimeout(12000)
 const aReady = await log('bench finished on its own')
 
 await goAway(); await page.waitForTimeout(600)
-await goTo('bench')
+await goTo('zone-station-0')
 await page.waitForTimeout(2000)
 const aTake = await log('collected the drone')
 
@@ -126,7 +129,7 @@ await boot(seedState({}))          // manual iron
 await orderFirstKit()
 await page.waitForTimeout(5000)
 await goTo('slot0'); await page.waitForTimeout(600)
-await goTo('bench'); await page.waitForTimeout(3500)
+await goTo('zone-station-0'); await page.waitForTimeout(3500)
 const bSolder = await log('bench zone, manual iron')
 
 await boot(seedState({}, { money: 5 }))
@@ -137,6 +140,34 @@ await boot(seedState({}, { scrapAvailable: true }))
 await goTo('trashbin'); await page.waitForTimeout(2000)
 const bTrash = await log('trash zone with salvage ordered')
 
+// ── D. Two stations at once (C3) ──────────────────────────
+console.log('\n### D. Two benches in parallel')
+await boot(seedState({ solderingLevel: 3, benchLevel: 1, storageLevel: 1 }))
+const dCount = await page.evaluate(() => globalThis.__world.game.stations.length)
+const dZones = await page.evaluate(() =>
+  globalThis.__world.zones.filter(z => z.kind === 'bench').map(z => z.id))
+console.log(`  stations built: ${dCount}; bench zones: ${dZones.join(', ')}`)
+
+// Two orders before either is collected: with storage level 1 they occupy
+// slot 0 and slot 1 simultaneously.
+await orderFirstKit()
+await orderFirstKit()
+await page.waitForTimeout(5600)
+await log('two couriers arrived')
+
+await goTo('slot0'); await page.waitForTimeout(700)
+const dCarry = await log('first box picked up')
+await goTo('zone-station-0'); await page.waitForTimeout(1800)
+await log('first kit on station-0')
+
+await goTo('slot1'); await page.waitForTimeout(700)
+await log('second box picked up')
+await goTo('zone-station-1'); await page.waitForTimeout(1800)
+const dBoth = await log('second kit on station-1')
+
+await page.waitForTimeout(14000)
+const dDone = await log('both benches worked')
+
 // ── C. Movement, collisions, camera (C1 regression) ───────
 console.log('\n### C. Movement (WASD)')
 await boot(seedState({}))
@@ -146,10 +177,23 @@ await hold('KeyA', 900); const cBack  = await player()
 await hold('KeyA', 4000); const cWall = await player()
 console.log(`  spawn ${c0.x} → right ${cRight.x} → back ${cBack.x} → wall ${cWall.x}`)
 
+// Stations sit at x≈500 (C3), so line up with them before walking north.
 await boot(seedState({}))
+await page.evaluate(() => {
+  const a = globalThis.__world.agents.find(x => x.kind === 'player')
+  a.x = 500; a.y = 950
+})
 await hold('KeyW', 4000); const cBench = await player()
+
+// Camera follow, measured well away from the world's clamped edges.
+await page.evaluate(() => {
+  const a = globalThis.__world.agents.find(x => x.kind === 'player')
+  a.x = 500; a.y = 300
+})
+await page.waitForTimeout(700)
 const camBefore = await page.evaluate(() => globalThis.__refs.scene.camera.pos.y)
-await hold('KeyS', 1200)
+await hold('KeyS', 1500)
+await page.waitForTimeout(400)
 const camAfter = await page.evaluate(() => globalThis.__refs.scene.camera.pos.y)
 console.log(`  bench stop y=${cBench.y}; camera ${camBefore.toFixed(0)} → ${camAfter.toFixed(0)}`)
 
@@ -183,9 +227,14 @@ const checks = [
   ['C: moves right on D',                 cRight.x > c0.x + 100],
   ['C: moves back left on A',             cBack.x < cRight.x - 100],
   ['C: stopped by the left wall',         cWall.x >= 24 && cWall.x <= 60],
-  ['C: stopped by the workbench',         cBench.y > 420 && cBench.y < 500],
-  ['C: camera follows the player',        camAfter > camBefore + 100],
+  ['C: stopped by a workbench',           cBench.y > 260 && cBench.y < 300],
+  ['C: camera follows the player',        camAfter > camBefore + 150],
   ['C: walked out and grabbed the box',   cWalked.y > 1050 && cWalked.carrying.includes('kit_box')],
+  ['D: two stations were built',          dCount === 2],
+  ['D: each station got its own zone',    dZones.length === 2],
+  ['D: box picked up from a street slot',  dCarry.carrying.includes('kit_box')],
+  ['D: both stations busy at once',       dBoth.stations === 'ASSEMBLY/ASSEMBLY'],
+  ['D: both finished independently',      dDone.stations === 'READY/READY'],
   ['no console errors',                   errors.length === 0],
 ]
 console.log('\n=== checks ===')

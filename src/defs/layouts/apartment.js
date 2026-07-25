@@ -25,8 +25,6 @@ const WALL_HORIZ = 28
 const DOOR_X     = 420   // centre of the door gap
 const DOOR_W     = 170   // wide enough for a character (half-width 20) plus slack
 
-const workbench = rect(500, 380, 300, 80)
-
 // Named so the renderer can draw them and the physics can collide with them
 // from the same source — an index into a flat obstacle list would drift.
 const walls = [
@@ -54,8 +52,17 @@ export const apartment = {
   walls,
 
   // Solid geometry: blocks movement (C1) and will be rasterised into the nav
-  // grid (C4). The street is open on all sides except the building wall.
-  obstacles: [...walls, workbench],
+  // grid (C4). Stations are NOT listed here — they are built from stationSlots
+  // at runtime, so buying a second bench adds its footprint automatically.
+  obstacles: [...walls],
+
+  // Where stations may stand. How many are actually built comes from the
+  // `benches` upgrade; the rest of the slots stay empty (C3).
+  stationSlots: [
+    { def: 'workbench', x: 500, y: 220 },
+    { def: 'workbench', x: 500, y: 480 },
+    { def: 'workbench', x: 500, y: 740 },
+  ],
 
   // Door void — drawn dark so the gap reads as an opening, not missing wall.
   doorVoid: rect(DOOR_X, ROOM_H - WALL_HORIZ / 2, DOOR_W, WALL_HORIZ),
@@ -63,22 +70,22 @@ export const apartment = {
   // Drawn objects. `sprite` is looked up in the sprite manifest; a missing
   // sprite falls back to the flat colour (loader.js is graceful).
   props: {
-    workbench: { ...workbench, sprite: 'workbench', color: '#6b4226', z: 2 },
     lamp:      { ...rect(500, 150, 40, 40),  sprite: 'lamp',     color: '#d4c060', z: 2 },
-    piggy:     { ...rect(150, 700, 46, 46),  sprite: 'piggy',    color: '#d4607a', z: 3 },
+    piggy:     { ...rect(150, 880, 46, 46),  sprite: 'piggy',    color: '#d4607a', z: 3 },
     mailbox:   { ...rect(170, 1300, 42, 34), sprite: 'mailbox',  color: '#3a5db8', z: 3 },
     trashbin:  { ...rect(860, 1300, 42, 46), sprite: 'trashbin', color: '#4a6a3a', z: 3 },
   },
 
   // Named positions the sim and the puppet navigate to.
   spawns: {
-    player:      { x: 500, y: 800 },
-    workerIdle:  { x: 720, y: 760 },
+    player:      { x: 720, y: 900 },
+    workerIdle:  { x: 760, y: 900 },
     // Just inside the door — the puppet's waypoint when crossing the threshold.
     door:        { x: DOOR_X, y: ROOM_H - WALL_HORIZ - 30 },
-    // Where a character stands to work at the bench (below it, facing up).
-    bench:       { x: workbench.cx, y: workbench.cy + workbench.h / 2 + 46 },
-    benchTop:    { x: workbench.cx, y: workbench.cy },
+    // Where the worker puppet stands to serve the first station, and where a
+    // box lands on it. Derived from stationSlots[0] so the two cannot drift.
+    bench:       { x: 500, y: 220 + 40 + 46 },
+    benchTop:    { x: 500, y: 220 },
     // Street slots for arriving deliveries, indexed by delivery.slotIndex.
     deliverySlots: [
       { x: DOOR_X, y: 1180 },
@@ -94,11 +101,9 @@ export const apartment = {
     { id: 'slot0',    kind: 'delivery_slot', ...rect(DOOR_X, 1180, 150, 140), meta: { slotIndex: 0 } },
     { id: 'slot1',    kind: 'delivery_slot', ...rect(640,   1180, 150, 140), meta: { slotIndex: 1 } },
     { id: 'slot2',    kind: 'delivery_slot', ...rect(830,   1180, 150, 140), meta: { slotIndex: 2 } },
-    // In front of the bench, not on it — the bench itself is solid.
-    { id: 'bench',    kind: 'bench',    ...rect(workbench.cx, workbench.cy + 100, 330, 120) },
     { id: 'mailbox',  kind: 'mailbox',  ...rect(170, 1300, 150, 150) },
     { id: 'trashbin', kind: 'trashbin', ...rect(860, 1300, 150, 150) },
-    { id: 'piggy',    kind: 'piggy',    ...rect(150, 700,  140, 140) },
+    { id: 'piggy',    kind: 'piggy',    ...rect(150, 880,  140, 140) },
   ],
 
   // Sizes of the entities that live in this world (world units, not fractions).

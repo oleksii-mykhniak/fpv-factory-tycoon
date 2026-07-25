@@ -1,4 +1,4 @@
-import { Phase } from '../state/gameState.js'
+import { Phase, busyStations } from '../state/gameState.js'
 import { UPGRADE_TRACKS } from '../state/upgrades.js'
 import { currentLocation, LOCATIONS, LOCATION_ORDER, capFor, canMoveToLocation } from '../state/locations.js'
 
@@ -46,7 +46,7 @@ export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation }) {
       const nextInfo     = level < effectiveMax ? track.levels[level + 1] : null
       const nextCost     = level < effectiveMax ? track.costs[level]      : null
       const capLocked    = level >= cap && cap < maxLevel  // hit location cap before absolute max
-      const canBuy       = nextCost !== null && state.phase === Phase.IDLE && state.money >= nextCost
+      const canBuy       = nextCost !== null && busyStations(state).length === 0 && state.money >= nextCost
 
       let footer = ''
       if (nextInfo) {
@@ -55,7 +55,7 @@ export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation }) {
             → ${nextInfo.name} — $${nextCost}
           </button>
           <p class="upgrade-effect-hint">${nextInfo.effect}</p>
-          ${!canBuy && state.phase !== Phase.IDLE
+          ${!canBuy && busyStations(state).length > 0
             ? '<p class="upgrade-effect-hint">Купівля між циклами</p>' : ''}
         `
       } else if (capLocked) {
@@ -84,7 +84,7 @@ export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation }) {
     if (nextLocId) {
       const nextLoc        = LOCATIONS[nextLocId]
       const { can, reasons } = canMoveToLocation(state, nextLocId)
-      const moveEnabled    = can && state.phase === Phase.IDLE
+      const moveEnabled    = can && busyStations(state).length === 0
       locationHTML = `
         <div class="shop-section shop-section--location">
           <div class="shop-section__title">Локація: ${loc.emoji} ${loc.name}</div>
@@ -99,7 +99,7 @@ export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation }) {
                 ? '<p class="upgrade-effect-hint">Умови виконані — готово до переїзду!</p>'
                 : ''
             }
-            ${!moveEnabled && state.phase !== Phase.IDLE && can
+            ${!moveEnabled && busyStations(state).length > 0 && can
               ? '<p class="upgrade-effect-hint">Переїзд між циклами</p>' : ''}
           </div>
         </div>

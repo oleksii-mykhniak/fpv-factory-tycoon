@@ -6,7 +6,7 @@
 // scrap kit's cost of 0 dragged the minimum kit cost to zero, so the rescue
 // mini-game never appeared).
 
-import { Phase, KIT_TYPES } from '../state/gameState.js'
+import { KIT_TYPES, busyStations } from '../state/gameState.js'
 
 // Cheapest kit the player could actually buy. Free kits (scrap) are not
 // purchases and must not count.
@@ -17,6 +17,6 @@ export const cheapestKitCost = Math.min(
 // The piggy bank is a rescue: it shows only when the player is stuck — too poor
 // for any kit, with nothing already in flight.
 export function piggyShouldShow(game) {
-  const busy = (game.deliveries ?? []).length > 0 || game.phase !== Phase.IDLE
+  const busy = (game.deliveries ?? []).length > 0 || busyStations(game).length > 0
   return game.money < cheapestKitCost && !busy
 }

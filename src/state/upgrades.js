@@ -12,6 +12,7 @@ import {
   SOLDERING_UPGRADE_COSTS, WORKER_UPGRADE_COSTS,
   CONSUMABLES_UPGRADE_COSTS, FLUX_OVERHEAT_MULT, FLUX_QUALITY_BONUS,
   STORAGE_UPGRADE_COSTS, STORAGE_SLOTS_BY_LEVEL,
+  BENCH_UPGRADE_COSTS,
   LOGISTICS_UPGRADE_COSTS, LOGISTICS_DELIVERY_MULT,
 } from './config.js'
 
@@ -85,6 +86,18 @@ export const UPGRADE_TRACKS = Object.freeze({
       { name: 'Без складу',   effect: '1 доставка за раз',        extraSlots: STORAGE_SLOTS_BY_LEVEL[0] },
       { name: 'Мале сховище', effect: '2 паралельних доставки',   extraSlots: STORAGE_SLOTS_BY_LEVEL[1] },
       { name: 'Повний склад', effect: '3 паралельних доставки',   extraSlots: STORAGE_SLOTS_BY_LEVEL[2] },
+    ],
+  },
+
+  benches: {
+    id:       'benches',
+    name:     'Верстаки',
+    stateKey: 'benchLevel',
+    costs:    BENCH_UPGRADE_COSTS,
+    levels: [
+      { name: 'Один верстак',  effect: 'Одна збірка за раз',        count: 1 },
+      { name: 'Два верстаки',  effect: 'Дві паралельні збірки',     count: 2 },
+      { name: 'Три верстаки',  effect: 'Три паралельні збірки',     count: 3 },
     ],
   },
 

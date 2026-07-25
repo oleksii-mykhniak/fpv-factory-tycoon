@@ -10,12 +10,20 @@ import { Phase, KIT_TYPES, createState } from '../../state/gameState.js'
 import { TICK_MS, MAX_CATCHUP_STEPS, ZONE_DWELL_BENCH_MS } from '../../state/config.js'
 
 const T0 = 1_000_000
-const zone = (id) => apartment.zones.find(z => z.id === id)
+// Bench zones are generated from the built stations (C3), so look them up on
+// the world rather than in the static layout.
+const BENCH_ZONE = 'zone-station-0'
+let _w = null
+const zone = (id) => _w.zones.find(z => z.id === id)
 
 function world(overrides = {}) {
-  const state = { ...createState(), money: 5000, ...overrides }
-  return createWorld({ state, salesLog: [] }, { now: T0, rng: () => 0.5, layout: apartment })
+  const base  = createState()
+  const state = { ...base, money: 5000, ...overrides }
+  _w = createWorld({ state, salesLog: [] }, { now: T0, rng: () => 0.5, layout: apartment })
+  return _w
 }
+
+const bench = (w) => w.game.stations[0]
 
 const player = (w) => w.agents.find(a => a.kind === 'player')
 
@@ -63,7 +71,7 @@ describe('sim/zoneSystem — occupancy', () => {
 
   it('holds no progress in a zone with nothing to do', () => {
     const w = world()   // bench is idle and the player carries nothing
-    standAt(w, zone('bench'))
+    standAt(w, zone(BENCH_ZONE))
     run(w, ZONE_DWELL_BENCH_MS * 2)
     expect(dwellProgress(w, 'player')).toBe(0)
   })
@@ -74,7 +82,7 @@ describe('sim/zoneSystem — dwell', () => {
     const w = withArrivedBox(world())
     standAt(w, zone('slot0'))
     run(w, TICK_MS)                 // instant pickup
-    standAt(w, zone('bench'))
+    standAt(w, zone(BENCH_ZONE))
     return w
   }
 
@@ -89,14 +97,14 @@ describe('sim/zoneSystem — dwell', () => {
   it('does not fire before the dwell time is up', () => {
     const w = benchWithBoxInHand()
     run(w, ZONE_DWELL_BENCH_MS - 200)
-    expect(w.game.phase).toBe(Phase.IDLE)
+    expect(bench(w).phase).toBe(Phase.IDLE)
   })
 
   it('fires once the dwell time is up', () => {
     const w = benchWithBoxInHand()
     const events = run(w, ZONE_DWELL_BENCH_MS + 200)
     expect(types(events)).toContain(EV.ZONE_FIRED)
-    expect(w.game.phase).toBe(Phase.ASSEMBLY)
+    expect(bench(w).phase).toBe(Phase.ASSEMBLY)
   })
 
   it('drains progress on leaving instead of snapping to zero', () => {
@@ -124,7 +132,7 @@ describe('sim/zoneSystem — dwell', () => {
     // without making the player step out and back in.
     const w = benchWithBoxInHand()
     const events = run(w, ZONE_DWELL_BENCH_MS * 2 + 400)
-    expect(w.game.phase).toBe(Phase.ASSEMBLY)
+    expect(bench(w).phase).toBe(Phase.ASSEMBLY)
     expect(types(events)).toContain(EV.WORK_REQUESTED)
   })
 })
@@ -142,18 +150,18 @@ describe('sim/interactions — the full loop without a single tap', () => {
     expect(carrying(w)).toEqual(['kit_box'])
 
     // 2. Stand at the bench: the box goes down, assembly starts and completes.
-    standAt(w, zone('bench'))
+    standAt(w, zone(BENCH_ZONE))
     run(w, ZONE_DWELL_BENCH_MS + 200)
     expect(carrying(w)).toEqual([])
-    expect(w.game.phase).toBe(Phase.ASSEMBLY)
+    expect(bench(w).phase).toBe(Phase.ASSEMBLY)
 
     run(w, 60_000)
-    expect(w.game.phase).toBe(Phase.READY)
+    expect(bench(w).phase).toBe(Phase.READY)
 
     // 3. Back to the bench to collect the finished drone.
     standAt(w, { cx: 800, cy: 700 })
     run(w, 3000)                       // clear the zone so it can fire again
-    standAt(w, zone('bench'))
+    standAt(w, zone(BENCH_ZONE))
     run(w, ZONE_DWELL_BENCH_MS + 200)
     expect(carrying(w)).toEqual(['drone'])
 
@@ -165,16 +173,16 @@ describe('sim/interactions — the full loop without a single tap', () => {
 
     dispatch(w, 'sell')
     expect(w.game.money).toBeGreaterThan(startMoney)
-    expect(w.game.phase).toBe(Phase.IDLE)
+    expect(bench(w).phase).toBe(Phase.IDLE)
   })
 
   it('refuses to hand over a box while the bench is busy', () => {
     const w = withArrivedBox(world())
     standAt(w, zone('slot0'))
     run(w, TICK_MS * 2)
-    w.game = { ...w.game, phase: Phase.ASSEMBLY, activeKit: 'mini_drone' }
+    w.game = { ...w.game, stations: [{ ...bench(w), phase: Phase.ASSEMBLY, kitId: 'mini_drone' }] }
 
-    standAt(w, zone('bench'))
+    standAt(w, zone(BENCH_ZONE))
     run(w, ZONE_DWELL_BENCH_MS + 500)
     expect(carrying(w)).toEqual(['kit_box'])   // still in hand
   })
@@ -193,7 +201,8 @@ describe('sim/interactions — the full loop without a single tap', () => {
   })
 
   it('the mailbox ignores a character with empty hands', () => {
-    const w = world({ phase: Phase.READY, activeKit: 'mini_drone', assemblyQuality: 0.8 })
+    const w = world()
+    w.game = { ...w.game, stations: [{ ...bench(w), phase: Phase.READY, kitId: 'mini_drone', quality: 0.8 }] }
     standAt(w, zone('mailbox'))
     expect(types(run(w, 3000))).not.toContain(EV.SELL_REQUESTED)
   })
@@ -223,12 +232,12 @@ describe('sim/interactions — the full loop without a single tap', () => {
     dispatch(w, 'startScrap')
     dispatch(w, 'scrapCollected', { agentId: 'player' })
     expect(carrying(w)).toEqual(['scrap'])
-    expect(w.game.phase).toBe(Phase.IDLE)
+    expect(bench(w).phase).toBe(Phase.IDLE)
 
-    standAt(w, zone('bench'))
+    standAt(w, zone(BENCH_ZONE))
     run(w, ZONE_DWELL_BENCH_MS + 200)
-    expect(w.game.phase).toBe(Phase.ASSEMBLY)
-    expect(w.game.activeKit).toBe('scrap_drone')
+    expect(bench(w).phase).toBe(Phase.ASSEMBLY)
+    expect(bench(w).kitId).toBe('scrap_drone')
     expect(carrying(w)).toEqual([])
   })
 })

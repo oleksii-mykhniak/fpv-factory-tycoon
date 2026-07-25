@@ -1,4 +1,4 @@
-import { Phase } from '../state/gameState.js'
+import { idleStations, busyStations } from '../state/gameState.js'
 import { UPGRADE_TRACKS } from '../state/upgrades.js'
 import { LOCATION_ORDER, canMoveToLocation } from '../state/locations.js'
 
@@ -33,7 +33,8 @@ export function createActionBar(root, { onShopOpen, onUpgradeOpen, onSettingsOpe
   el.querySelector('#ab-settings').addEventListener('click', onSettingsOpen)
 
   function update(state) {
-    const idle = state.phase === Phase.IDLE
+    // "Idle" for the UI means there is somewhere to put a new kit.
+    const idle = idleStations(state).length > 0
 
     // "!" on Shop when idle (prompt to order next kit).
     badge.hidden = !idle
@@ -43,7 +44,7 @@ export function createActionBar(root, { onShopOpen, onUpgradeOpen, onSettingsOpe
     const currentIdx  = LOCATION_ORDER.indexOf(state.locationId ?? 'apartment')
     const nextLocId   = LOCATION_ORDER[currentIdx + 1]
     const canMove     = nextLocId ? canMoveToLocation(state, nextLocId).can : false
-    const canUpgrade  = idle && (canMove || Object.values(UPGRADE_TRACKS).some(track => {
+    const canUpgrade  = busyStations(state).length === 0 && (canMove || Object.values(UPGRADE_TRACKS).some(track => {
       const level    = state.upgrades[track.stateKey] ?? 0
       const nextCost = level < track.costs.length ? track.costs[level] : null
       return nextCost !== null && state.money >= nextCost

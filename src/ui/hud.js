@@ -1,4 +1,4 @@
-import { Phase, DeliveryStatus, KIT_TYPES, calcPrice } from '../state/gameState.js'
+import { Phase, DeliveryStatus, KIT_TYPES, calcPrice, focusStation, idleStations } from '../state/gameState.js'
 import { levelData, SOLDER_MODE } from '../state/upgrades.js'
 
 export function createHUD(root) {
@@ -29,7 +29,9 @@ function hint(state, carrying) {
   if (holding('drone'))   return 'Неси дрон до поштової скриньки'
   if (holding('scrap'))   return 'Неси деталі до верстака'
 
-  switch (state.phase) {
+  const station = focusStation(state)
+
+  switch (station?.phase ?? Phase.IDLE) {
     case Phase.IDLE: {
       if (state.scrapAvailable) return 'Іди до смітника — там є деталі'
       const deliveries = state.deliveries ?? []
@@ -40,8 +42,8 @@ function hint(state, carrying) {
       return ''
     }
     case Phase.ASSEMBLY: {
-      const kit   = KIT_TYPES[state.activeKit]
-      const done  = state.solderPoints.length
+      const kit   = KIT_TYPES[station.kitId]
+      const done  = station.solderPoints.length
       const total = kit?.solderPointCount ?? 0
       const mode  = levelData('soldering', state.upgrades.solderingLevel ?? 0).mode
       return mode === SOLDER_MODE.MANUAL
@@ -49,8 +51,8 @@ function hint(state, carrying) {
         : `Паяємо… (${done}/${total})`
     }
     case Phase.READY: {
-      const kit   = KIT_TYPES[state.activeKit]
-      const price = calcPrice(kit.basePrice, state.assemblyQuality, state.upgrades.priceMultiplier)
+      const kit   = KIT_TYPES[station.kitId]
+      const price = calcPrice(kit.basePrice, station.quality, state.upgrades.priceMultiplier)
       return `Готово! Забери з верстака → $${price.toFixed(2)}`
     }
     case Phase.BURNT: return 'Деталь перегріта!'

@@ -8,7 +8,7 @@
 // This module may read the world and drive actors. It must never write to the
 // world — player intent goes through sim/commands.js dispatch().
 
-import { Phase, DeliveryStatus, KIT_TYPES } from '../state/gameState.js'
+import { Phase, DeliveryStatus, KIT_TYPES, stationsOf } from '../state/gameState.js'
 import { getSprite } from '../scene/loader.js'
 import { INTERACTIONS, carrySpriteKey } from '../defs/interactions.js'
 import { dwellProgress } from '../sim/systems/zone.js'
@@ -39,7 +39,7 @@ export function syncScene(refs, world) {
   if (!refs?.box) return
 
   const game = world.game
-  const { box, boxOpen, drone, worker, piggy, _pulses } = refs
+  const { box, worker, piggy, _pulses } = refs
   const carrying = (game.deliveries ?? []).find(d => d.status === DeliveryStatus.CARRYING)
 
   // ── Carry box position ─────────────────────────────────
@@ -58,23 +58,30 @@ export function syncScene(refs, world) {
   // walk into (sim/derive.js).
   if (piggy) piggy.graphics.visible = piggyShouldShow(game)
 
-  // ── Drone sprite ───────────────────────────────────────
-  const droneSpriteKey = game.activeKit ? (KIT_TYPES[game.activeKit]?.spriteKey ?? null) : null
-  if (droneSpriteKey && droneSpriteKey !== _lastDroneSpriteKey) {
-    applySprite(drone, droneSpriteKey)
-    _lastDroneSpriteKey = droneSpriteKey
+  // ── Stations (C3) ──────────────────────────────────────
+  const player = (world.agents ?? []).find(a => a.kind === 'player')
+  const inHand = player?.carrying ?? []
+
+  for (const view of refs.stations ?? []) {
+    const station = stationsOf(game).find(s => s.id === view.id)
+    if (!station) continue
+
+    const assembling = station.phase === Phase.ASSEMBLY || station.phase === Phase.READY
+    view.boxOpen.graphics.visible = assembling
+
+    const spriteKey = station.kitId ? (KIT_TYPES[station.kitId]?.spriteKey ?? null) : null
+    if (spriteKey && spriteKey !== view.spriteKey) {
+      applySprite(view.drone, spriteKey)
+      view.spriteKey = spriteKey
+    }
+
+    // A drone carried away from this station must not also lie on it.
+    const carriedFromHere = inHand.some(i => i.type === 'drone' && i.stationId === station.id)
+    view.drone.graphics.visible =
+      (assembling || station.phase === Phase.BURNT) && !carriedFromHere
   }
 
-  // ── Visibility ─────────────────────────────────────────
-  const player     = (world.agents ?? []).find(a => a.kind === 'player')
-  const inHand     = player?.carrying ?? []
-  const assembling = game.phase === Phase.ASSEMBLY || game.phase === Phase.READY
-
-  box.graphics.visible     = !!carrying && carrying.carriedBy === 'worker'
-  boxOpen.graphics.visible = assembling
-  // A drone in the player's hands must not also be lying on the bench.
-  drone.graphics.visible   = (assembling || game.phase === Phase.BURNT) &&
-                             !inHand.some(i => i.type === 'drone')
+  box.graphics.visible = !!carrying && carrying.carriedBy === 'worker'
 
   // ── Attention pulses ───────────────────────────────────
   // Driven by the zones themselves now: whatever the character could act on if
@@ -82,16 +89,18 @@ export function syncScene(refs, world) {
   // turn out to be a dead end.
   if (_pulses && player) {
     _pulses.box.stop()
-    _pulses.bench.stop()
     _pulses.mailbox.stop()
     _pulses.trashbin?.stop()
+    for (const view of refs.stations ?? []) view.pulse.stop()
 
     if (carrying && carrying.carriedBy === 'worker') _pulses.box.start()
 
     for (const zone of world.zones ?? []) {
-      const pulse = _pulses[ZONE_PULSE[zone.id]]
-      if (!pulse) continue
-      if (INTERACTIONS[zone.kind]?.enabled(world, zone, player)) pulse.start()
+      if (!INTERACTIONS[zone.kind]?.enabled(world, zone, player)) continue
+      // A station zone pulses its own station; fixed zones use a named pulse.
+      const stationView = (refs.stations ?? []).find(v => v.id === zone.meta?.stationId)
+      if (stationView) { stationView.pulse.start(); continue }
+      _pulses[ZONE_PULSE[zone.id]]?.start()
     }
   }
 
@@ -119,7 +128,7 @@ export function syncScene(refs, world) {
   // Send the worker home between cycles — but never mid-carry: the phase stays
   // IDLE for the whole walk (it only flips on worker.atBench), so resetting on
   // phase alone would cancel an in-progress delivery.
-  if (game.phase === Phase.IDLE && !carrying && !world.worker.desired) worker?.reset()
+  if (!carrying && !world.worker.desired) worker?.reset()
 }
 
 // The sim publishes what the worker *should* do; every command below is

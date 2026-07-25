@@ -1,6 +1,9 @@
 import './style.css'
 import { saveGame, loadGame, clearSave } from './save/storage.js'
-import { createState, Phase, DeliveryStatus } from './state/gameState.js'
+import {
+  createState, Phase, DeliveryStatus,
+  createStation, busyStations, stationsOf,
+} from './state/gameState.js'
 import { ADS_ENABLED, SCRAP_CONSOLATION, INPUT_DEADZONE } from './state/config.js'
 import { levelData, SOLDER_MODE } from './state/upgrades.js'
 import { currentLocation } from './state/locations.js'
@@ -64,6 +67,22 @@ function migrateState(raw) {
       activeKit:  null,
       deliveries: [primary, ...s.deliveries.filter(d => d.slotIndex !== primary.slotIndex)],
     }
+  }
+
+  // C3: the bench's own fields became stations[]. An old save carries them at
+  // the top level; move them onto the first station rather than dropping the
+  // drone the player was in the middle of building.
+  if (!s.stations) {
+    const station = {
+      ...createStation('station-0'),
+      phase:        s.phase ?? Phase.IDLE,
+      kitId:        s.activeKit ?? null,
+      solderPoints: s.solderPoints ?? [],
+      quality:      s.assemblyQuality ?? null,
+      coldPenalty:  s.coldSolderPenalty ?? 0,
+    }
+    const { phase, activeKit, solderPoints, assemblyQuality, coldSolderPenalty, ...rest } = s
+    s = { ...rest, stations: [station] }
   }
 
   return s
@@ -136,8 +155,8 @@ const effects = createEffects({
   onStateDirty: () => { saveQueued = true },
   onColdSolder: (missMsg) => { coldWarning = missMsg ?? 'cold'; uiDirty = true },
   // Trigger zones ask; the view decides how to answer (C2).
-  onWorkRequested: () => workAtBench(),
-  onSellRequested: () => sellDrone(),
+  onWorkRequested: (e) => workAtBench(e?.stationId),
+  onSellRequested: (e) => sellDrone(e?.stationId),
   onMinigame:      ({ game, agentId }) => openMinigame(game, agentId),
 })
 
@@ -200,12 +219,12 @@ const settingsModal = createSettingsModal(uiRoot, {
 }
 
 const solderModal = createSolderModal(uiRoot, {
-  onSolderResult: (quality) => send('solderResult', { quality }),
+  onSolderResult: (quality, stationId) => send('solderResult', { quality, stationId }),
   // The burnt drone is carried out first; the state change lands when the
   // worker reaches the bin (worker.droppedBurnt).
-  onAbandon: () => {
+  onAbandon: (stationId) => {
     if (sceneRefs?.worker) sceneRefs.worker.commandTrash()
-    else send('abandon')
+    else send('abandon', { stationId })
   },
 })
 
@@ -258,11 +277,14 @@ function renderUI() {
   solderModal.update(world.game, coldWarning ? 'cold' : null)
   coldWarning = null
 
-  // Bench progress belongs to the sim's assembly stages; hide it whenever the
-  // bench is not running one.
+  // Progress cards belong to the sim's assembly stages; hide the ones whose
+  // station is not running one.
   const mode = levelData('soldering', world.game.upgrades.solderingLevel).mode
-  if (world.game.phase !== Phase.ASSEMBLY || mode === SOLDER_MODE.MANUAL) {
-    sceneRefs?.benchProgress?.hide()
+  for (const view of sceneRefs?.stations ?? []) {
+    const station = stationsOf(world.game).find(s => s.id === view.id)
+    if (!station || station.phase !== Phase.ASSEMBLY || mode === SOLDER_MODE.MANUAL) {
+      view.progress.hide()
+    }
   }
 }
 
@@ -330,7 +352,7 @@ const INTENTS = {
   // its animation and the simulation have to agree. C5 replaces the puppet.
   'worker.atBench': () => send('benchArrived'),
 
-  'worker.readyToSolder': () => workAtBench(),
+  'worker.readyToSolder': () => workAtBench(busyStations(world.game)[0]?.id),
 
   'worker.atMailbox': () => sellDrone(),
 
@@ -352,18 +374,17 @@ function onIntent(type, payload = {}) {
 // Which agent asked for the salvage mini-game; null = the puppet did.
 let scrapAgent = null
 
-function workAtBench() {
+function workAtBench(stationId) {
   const { mode } = levelData('soldering', world.game.upgrades.solderingLevel)
-  if (mode === SOLDER_MODE.MANUAL) solderModal.open(world.game)
-  else send('armSolder')
+  if (mode === SOLDER_MODE.MANUAL) solderModal.open(world.game, stationId)
+  else send('armSolder', { stationId })
 }
 
-async function sellDrone() {
-  if (world.game.phase !== Phase.READY) return
+async function sellDrone(stationId) {
   // D8.2: rewarded ×2 sale hook (hidden while ADS_ENABLED is false).
   let priceMultBonus = 1
   if (ADS_ENABLED && await showRewarded(PLACEMENTS.REWARD_DOUBLE_SALE)) priceMultBonus = 2
-  send('sell', { priceMultBonus })
+  send('sell', { priceMultBonus, stationId })
 }
 
 function openMinigame(game, agentId) {
@@ -383,6 +404,7 @@ initScene(canvas, {
   getWorld: () => world,
   onIntent,
   layout: apartment,
+  world,
   onLoadProgress: (loaded, total) => {
     if (loadBar) loadBar.style.width = `${Math.round((loaded / total) * 100)}%`
   },

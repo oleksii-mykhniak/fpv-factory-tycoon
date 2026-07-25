@@ -8,7 +8,7 @@
 // C5 replaces this with the job-board driven AI. The view contract
 // (`desired` + `targetSlotIndex`) is what stays.
 
-import { Phase, DeliveryStatus, pickupDelivery } from '../../state/gameState.js'
+import { Phase, DeliveryStatus, pickupDelivery, idleStations, stationsOf } from '../../state/gameState.js'
 import { levelData, WORKER_MODE } from '../../state/upgrades.js'
 import { EV, emit } from '../events.js'
 
@@ -29,7 +29,9 @@ export function workerSystem(world, _dt, events) {
     return
   }
 
-  if (game.phase === Phase.IDLE && mode !== WORKER_MODE.MANUAL) {
+  const hasIdleStation = idleStations(game).length > 0
+
+  if (hasIdleStation && mode !== WORKER_MODE.MANUAL) {
     const arrived = deliveries.find(
       d => d.status === DeliveryStatus.TRANSIT && d.readyAt <= world.now
     )
@@ -43,14 +45,14 @@ export function workerSystem(world, _dt, events) {
     }
   }
 
-  if (game.phase === Phase.ASSEMBLY && mode === WORKER_MODE.AUTO) {
+  if (mode === WORKER_MODE.AUTO && stationsOf(game).some(s => s.phase === Phase.ASSEMBLY)) {
     world.worker.desired = 'solder'
     return
   }
 
   // Scrap runs are automation too: at MANUAL the player walks to the bin
   // themselves and the trigger zone opens the mini-game.
-  if (game.phase === Phase.IDLE && game.scrapAvailable && mode !== WORKER_MODE.MANUAL) {
+  if (hasIdleStation && game.scrapAvailable && mode !== WORKER_MODE.MANUAL) {
     world.worker.desired = 'scrap'
   }
 }

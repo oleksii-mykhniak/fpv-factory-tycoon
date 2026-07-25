@@ -16,10 +16,28 @@ function seq(values) {
 
 const T0 = 1_000_000
 
+// C3: phase/activeKit/assemblyQuality live on a station now. These tests were
+// written for one bench, so the factory keeps accepting the old field names and
+// puts them where they belong.
+const BENCH_FIELDS = { phase: 'phase', activeKit: 'kitId', assemblyQuality: 'quality' }
+
 function world(overrides = {}, opts = {}) {
-  const state = { ...createState(), money: 5000, ...overrides }
+  const stationPatch = {}
+  const statePatch   = {}
+  for (const [k, v] of Object.entries(overrides)) {
+    if (BENCH_FIELDS[k]) stationPatch[BENCH_FIELDS[k]] = v
+    else statePatch[k] = v
+  }
+  const base  = createState()
+  const state = {
+    ...base, money: 5000, ...statePatch,
+    stations: base.stations.map((st, i) => (i === 0 ? { ...st, ...stationPatch } : st)),
+  }
   return createWorld({ state, salesLog: [] }, { now: T0, rng: opts.rng ?? seq([0.5]) })
 }
+
+// The single bench these tests talk about.
+const bench = (w) => w.game.stations[0]
 
 // Runs the sim forward by `ms` in real-sized chunks, collecting every event.
 function run(w, ms) {
@@ -128,7 +146,7 @@ describe('sim/workerSystem', () => {
     run(w, KIT_TYPES.mini_drone.deliveryMs + 500)
     dispatch(w, 'benchArrived')
     run(w, TICK_MS)
-    expect(w.game.phase).toBe(Phase.ASSEMBLY)
+    expect(bench(w).phase).toBe(Phase.ASSEMBLY)
     expect(w.worker.desired).toBe('solder')
   })
 
@@ -175,7 +193,7 @@ describe('sim/stationSystem', () => {
     expect(types(events).filter(t => t === EV.STAGE_STARTED)).toHaveLength(kit.solderPointCount)
     expect(types(events).filter(t => t === EV.STAGE_DONE)).toHaveLength(kit.solderPointCount)
     expect(types(events)).toContain(EV.ASSEMBLY_DONE)
-    expect(w.game.phase).toBe(Phase.READY)
+    expect(bench(w).phase).toBe(Phase.READY)
   })
 
   it('reports stage labels from the kit definition', () => {
@@ -199,14 +217,15 @@ describe('sim/stationSystem', () => {
     const manual = { ...createState().upgrades, solderingLevel: 0, workerLevel: 2 }
     const w = benchWithKit('mini_drone', manual)
     expect(types(run(w, 30_000))).not.toContain(EV.STAGE_STARTED)
-    expect(w.game.phase).toBe(Phase.ASSEMBLY)
+    expect(bench(w).phase).toBe(Phase.ASSEMBLY)
   })
 
   it('disarms after the assembly finishes', () => {
     const w = benchWithKit()
     run(w, 60_000)
-    expect(w.station.armed).toBe(false)
-    expect(w.station.running).toBe(false)
+    const rt = w.stationRuntime['station-0']
+    expect(rt.armed).toBe(false)
+    expect(rt.running).toBe(false)
   })
 })
 
@@ -239,15 +258,15 @@ describe('sim/commands', () => {
     const w = world({ phase: Phase.ASSEMBLY, activeKit: 'mini_drone' }, { rng: seq([0.99]) })
     const events = dispatch(w, 'solderResult', { quality: 0.1 })
     expect(types(events)).toContain(EV.STAGE_COLD)
-    expect(w.game.solderPoints).toHaveLength(0)
-    expect(w.game.coldSolderPenalty).toBeGreaterThan(0)
+    expect(bench(w).solderPoints).toHaveLength(0)
+    expect(bench(w).coldPenalty).toBeGreaterThan(0)
   })
 
   it('a cold solder point can overheat and burn the kit', () => {
     const w = world({ phase: Phase.ASSEMBLY, activeKit: 'mini_drone' }, { rng: seq([0.0]) })
     const events = dispatch(w, 'solderResult', { quality: 0.1 })
     expect(types(events)).toContain(EV.KIT_BURNT)
-    expect(w.game.phase).toBe(Phase.BURNT)
+    expect(bench(w).phase).toBe(Phase.BURNT)
   })
 
   it('sell pays out, logs the sale and clears the bench', () => {
@@ -256,7 +275,7 @@ describe('sim/commands', () => {
     const sale = events.find(e => e.t === EV.SALE_MADE)
     expect(sale.price).toBeGreaterThan(0)
     expect(w.game.money).toBeCloseTo(sale.price)
-    expect(w.game.phase).toBe(Phase.IDLE)
+    expect(bench(w).phase).toBe(Phase.IDLE)
     expect(w.salesLog).toHaveLength(1)
   })
 
@@ -292,10 +311,10 @@ describe('sim — full cycle, headless', () => {
     const events = run(w, 60_000)                    // bench solders every point
 
     expect(types(events)).toContain(EV.ASSEMBLY_DONE)
-    expect(w.game.phase).toBe(Phase.READY)
+    expect(bench(w).phase).toBe(Phase.READY)
 
     dispatch(w, 'sell')
-    expect(w.game.phase).toBe(Phase.IDLE)
+    expect(bench(w).phase).toBe(Phase.IDLE)
     expect(w.game.money).toBeGreaterThan(startMoney)
     expect(w.game.deliveries).toEqual([])
   })
@@ -323,7 +342,7 @@ describe('sim — full cycle, headless', () => {
     expect(Object.keys(saved).sort()).toEqual(['salesLog', 'state'])
     expect(saved.state.deliveries).toHaveLength(1)
     // Runtime-only fields must not leak into the save file.
-    expect(saved.state).not.toHaveProperty('station')
+    expect(saved.state).not.toHaveProperty('stationRuntime')
     expect(saved.state).not.toHaveProperty('rng')
   })
 })

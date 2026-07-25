@@ -15,13 +15,20 @@ import {
   buyUpgrade as buyUpgradeState, moveToLocation as moveToLocationState,
   canOpenPiggy, collectPiggy as collectPiggyState,
   startScrap as startScrapState, startScrapAssembly, cancelScrap,
-  calcPrice,
+  calcPrice, getStation, focusStation, idleStations, syncStations,
 } from '../state/gameState.js'
 import { levelData, UPGRADE_TRACKS } from '../state/upgrades.js'
 import {
   COLD_SOLDER_THRESHOLD, COLD_SOLDER_QUALITY_PENALTY, SALVAGE_RATE,
 } from '../state/config.js'
 import { EV, emit } from './events.js'
+import { rebuildStationGeometry, stationCountFor } from './world.js'
+import { stationRuntime } from './systems/station.js'
+
+// Commands that come from a UI button rather than a zone have no station in
+// hand; they act on the one the player is most likely looking at.
+const targetStation = (world, stationId) =>
+  stationId ?? focusStation(world.game)?.id
 
 // ── Command handlers ──────────────────────────────────────
 // Each: (world, payload, events) => void
@@ -34,10 +41,11 @@ const HANDLERS = {
     emit(events, EV.DELIVERY_ORDERED, { kitId })
   },
 
-  // Player tapped an arrived delivery (MANUAL worker mode).
+  // Claim an arrived delivery without walking to it. The trigger zone is the
+  // normal route (C2); this stays as the scriptable entry point.
   pickup(world, { deliveryId }, events) {
     const d = (world.game.deliveries ?? []).find(x => x.id === deliveryId)
-    if (!d || d.readyAt > world.now || world.game.phase !== Phase.IDLE) {
+    if (!d || d.readyAt > world.now) {
       emit(events, EV.COMMAND_REJECTED, { type: 'pickup', reason: 'not ready' })
       return
     }
@@ -46,24 +54,28 @@ const HANDLERS = {
     emit(events, EV.DELIVERY_PICKED, { id: d.id, kitId: d.kitId, slotIndex: d.slotIndex })
   },
 
-  // The worker put the box down on the bench.
+  // The worker puppet put the box down. It always serves the first station.
   benchArrived(world, _p, events) {
-    if (world.game.phase !== Phase.IDLE) return
+    const station = idleStations(world.game)[0]
+    if (!station) return
     if (!(world.game.deliveries ?? []).some(d => d.status === DeliveryStatus.CARRYING)) return
-    world.game = startAssembly(world.game)
+    world.game = startAssembly(world.game, station.id)
     emit(events, EV.STATE_DIRTY)
   },
 
-  // Player asked the bench to start (SEMI mode). AUTO arms itself in the system;
-  // MANUAL opens the mini-game in the view and never reaches here.
-  armSolder(world) {
-    if (world.game.phase !== Phase.ASSEMBLY) return
-    world.station.armed = true
+  // Someone asked a station to start (SEMI mode). AUTO arms itself in the
+  // system; MANUAL opens the mini-game in the view and never reaches here.
+  armSolder(world, { stationId } = {}) {
+    const id = targetStation(world, stationId)
+    if (!id) return
+    if (getStation(world.game, id).phase !== Phase.ASSEMBLY) return
+    stationRuntime(world, id).armed = true
   },
 
   // Result of one point of the manual soldering mini-game.
-  solderResult(world, { quality }, events) {
-    if (world.game.phase !== Phase.ASSEMBLY) return
+  solderResult(world, { quality, stationId }, events) {
+    const id = targetStation(world, stationId)
+    if (!id || getStation(world.game, id).phase !== Phase.ASSEMBLY) return
 
     const solder = levelData('soldering', world.game.upgrades.solderingLevel)
     const flux   = levelData('consumables', world.game.upgrades.consumablesLevel ?? 0)
@@ -71,45 +83,52 @@ const HANDLERS = {
     const boosted = Math.min(1, quality + flux.qualityBonus)
 
     if (boosted < COLD_SOLDER_THRESHOLD) {
+      const station = getStation(world.game, id)
       if (world.rng() < effectiveOverheat) {
-        const kitId = world.game.activeKit
-        world.game = burnKit(world.game)
-        emit(events, EV.KIT_BURNT, { kitId })
+        world.game = burnKit(world.game, id)
+        emit(events, EV.KIT_BURNT, { stationId: id, kitId: station.kitId })
       } else {
-        const kit  = KIT_TYPES[world.game.activeKit]
-        const step = kit?.assemblySteps?.[world.game.solderPoints.length]
-        world.game = applyColdSolderPenalty(world.game, COLD_SOLDER_QUALITY_PENALTY)
-        emit(events, EV.STAGE_COLD, { missMsg: step?.missMsg })
+        const step = KIT_TYPES[station.kitId]?.assemblySteps?.[station.solderPoints.length]
+        world.game = applyColdSolderPenalty(world.game, id, COLD_SOLDER_QUALITY_PENALTY)
+        emit(events, EV.STAGE_COLD, { stationId: id, missMsg: step?.missMsg })
       }
       return
     }
 
-    world.game = recordSolderPoint(world.game, boosted)
-    const kit   = KIT_TYPES[world.game.activeKit]
-    const done  = world.game.solderPoints.length
-    const total = kit.solderPointCount
-    emit(events, EV.STAGE_DONE, { total, done, quality: boosted })
+    world.game = recordSolderPoint(world.game, id, boosted)
+    const station = getStation(world.game, id)
+    const kit     = KIT_TYPES[station.kitId]
+    const done    = station.solderPoints.length
+    const total   = kit.solderPointCount
+    emit(events, EV.STAGE_DONE, { stationId: id, total, done, quality: boosted })
 
     if (done >= total) {
-      world.game = finishAssembly(world.game)
-      const finalQuality = world.game.assemblyQuality
+      world.game = finishAssembly(world.game, id)
+      const finished = getStation(world.game, id)
       emit(events, EV.ASSEMBLY_DONE, {
-        quality: finalQuality,
-        price:   calcPrice(kit.basePrice, finalQuality, world.game.upgrades.priceMultiplier),
+        stationId: id,
+        quality:   finished.quality,
+        price:     calcPrice(kit.basePrice, finished.quality, world.game.upgrades.priceMultiplier),
       })
     }
   },
 
   // priceMultBonus > 1 comes from the rewarded-ad hook (D8).
-  sell(world, { priceMultBonus = 1 } = {}, events) {
-    if (world.game.phase !== Phase.READY) return
-    const kit       = KIT_TYPES[world.game.activeKit]
-    const quality   = world.game.assemblyQuality
+  sell(world, { priceMultBonus = 1, stationId } = {}, events) {
+    // Prefer the station the drone came from; fall back to any that is READY.
+    const id = stationId && getStation(world.game, stationId).phase === Phase.READY
+      ? stationId
+      : (world.game.stations ?? []).find(s => s.phase === Phase.READY)?.id
+    if (!id) return
+
+    const station   = getStation(world.game, id)
+    const kit       = KIT_TYPES[station.kitId]
+    const quality   = station.quality
     const basePrice = calcPrice(kit.basePrice, quality, world.game.upgrades.priceMultiplier)
     const price     = basePrice * priceMultBonus
 
     world.salesLog.push({ quality, price })
-    world.game = sellKit(world.game)
+    world.game = sellKit(world.game, id)
     if (priceMultBonus > 1) {
       world.game = { ...world.game, money: world.game.money + (price - basePrice) }
     }
@@ -119,11 +138,12 @@ const HANDLERS = {
     emit(events, EV.BENCH_CLEARED, { reason: 'sold' })
   },
 
-  abandon(world, _p, events) {
-    if (world.game.phase !== Phase.BURNT) return
-    const kit     = KIT_TYPES[world.game.activeKit]
+  abandon(world, { stationId } = {}, events) {
+    const id = stationId ?? (world.game.stations ?? []).find(s => s.phase === Phase.BURNT)?.id
+    if (!id) return
+    const kit     = KIT_TYPES[getStation(world.game, id).kitId]
     const salvage = kit.cost * SALVAGE_RATE
-    world.game = abandonBurntDrone(world.game, SALVAGE_RATE)
+    world.game = abandonBurntDrone(world.game, id, SALVAGE_RATE)
     emit(events, EV.MONEY_GAINED, { amount: salvage, reason: 'salvage' })
     emit(events, EV.BENCH_CLEARED, { reason: 'abandoned' })
   },
@@ -131,6 +151,12 @@ const HANDLERS = {
   buyUpgrade(world, { trackId }, events) {
     world.game = buyUpgradeState(world.game, trackId)
     const level = world.game.upgrades[UPGRADE_TRACKS[trackId].stateKey]
+    // Buying a bench has to actually build it: the station list, its footprint
+    // and its trigger zone all follow from the upgrade level.
+    if (trackId === 'benches') {
+      world.game = syncStations(world.game, stationCountFor(world.game, world.layout))
+      rebuildStationGeometry(world)
+    }
     emit(events, EV.UPGRADE_BOUGHT, { trackId, level })
   },
 
@@ -151,10 +177,12 @@ const HANDLERS = {
     emit(events, EV.SCRAP_REQUESTED)
   },
 
-  // Worker got back to the bench with the salvaged parts.
+  // The worker puppet got back to a bench with the salvaged parts.
   scrapDelivered(world, _p, events) {
-    world.game = startScrapAssembly(world.game)
-    emit(events, EV.SCRAP_STARTED)
+    const station = idleStations(world.game)[0]
+    if (!station) return
+    world.game = startScrapAssembly(world.game, station.id)
+    emit(events, EV.SCRAP_STARTED, { stationId: station.id })
   },
 
   scrapFailed(world, { consolation = 0 }, events) {

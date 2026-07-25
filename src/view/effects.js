@@ -13,15 +13,19 @@ export function createEffects({
   getRefs, haptic, onStateDirty, onColdSolder,
   onWorkRequested, onSellRequested, onMinigame,
 }) {
+  // Each station draws its own progress card (C3).
+  const progressOf = (stationId) =>
+    (getRefs()?.stations ?? []).find(v => v.id === stationId)?.progress
+
   const HANDLERS = {
     [EV.DELIVERY_ORDERED]: () => { playSfx('order'); haptic('medium') },
 
-    [EV.STAGE_STARTED]: ({ label, total, done, durationMs }) => {
-      getRefs()?.benchProgress?.startStep(label, total, done, durationMs)
+    [EV.STAGE_STARTED]: ({ stationId, label, total, done, durationMs }) => {
+      progressOf(stationId)?.startStep(label, total, done, durationMs)
     },
 
-    [EV.STAGE_DONE]: ({ total, done }) => {
-      getRefs()?.benchProgress?.advanceDots(total, done)
+    [EV.STAGE_DONE]: ({ stationId, total, done }) => {
+      progressOf(stationId)?.advanceDots(total, done)
       playSfx('solder_good')
       haptic('light')
     },
@@ -32,9 +36,9 @@ export function createEffects({
       onColdSolder(missMsg)
     },
 
-    [EV.ASSEMBLY_DONE]: ({ quality, price }) => {
+    [EV.ASSEMBLY_DONE]: ({ stationId, quality, price }) => {
       const pct = Math.round(quality * 100)
-      getRefs()?.benchProgress?.showResult(`✓ Зібрано! ${pct}% → $${price.toFixed(0)}`)
+      progressOf(stationId)?.showResult(`✓ Зібрано! ${pct}% → $${price.toFixed(0)}`)
       getRefs()?.worker?.notifySolderDone()
     },
 
@@ -53,8 +57,10 @@ export function createEffects({
     [EV.ITEM_DROPPED]: () => haptic('light'),
     [EV.ZONE_FIRED]:   () => onStateDirty(),
 
-    [EV.WORK_REQUESTED]:     () => onWorkRequested?.(),
-    [EV.SELL_REQUESTED]:     () => onSellRequested?.(),
+    // Pass the event through: C3 added stationId to both, and dropping it here
+    // crashed the whole tick (the sim runs inside Excalibur's preupdate).
+    [EV.WORK_REQUESTED]:     (e) => onWorkRequested?.(e),
+    [EV.SELL_REQUESTED]:     (e) => onSellRequested?.(e),
     [EV.MINIGAME_REQUESTED]: (e) => onMinigame?.(e),
 
     [EV.STATE_DIRTY]: () => onStateDirty(),

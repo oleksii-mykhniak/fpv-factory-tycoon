@@ -15,7 +15,7 @@
 
 import {
   Phase, DeliveryStatus, KIT_TYPES,
-  pickupDelivery, startAssembly, startScrapAssembly,
+  pickupDelivery, startAssembly, startScrapAssembly, getStation,
 } from '../state/gameState.js'
 import {
   ZONE_DWELL_INSTANT_MS, ZONE_DWELL_BENCH_MS,
@@ -56,7 +56,6 @@ export const INTERACTIONS = {
     accepts:  'any',
     enabled(world, zone, agent) {
       if (carryFull(agent) || someoneCarrying(world)) return false
-      if (world.game.phase !== Phase.IDLE) return false
       return !!arrivedIn(world, zone)
     },
     run(world, zone, agent, events) {
@@ -75,38 +74,45 @@ export const INTERACTIONS = {
     dwellMs:  ZONE_DWELL_BENCH_MS,
     repeatMs: 0,
     accepts:  'any',
-    enabled(world, _zone, agent) {
-      const { phase } = world.game
-      if (carriedType(agent, 'kit_box')) return phase === Phase.IDLE
-      if (carriedType(agent, 'scrap'))   return phase === Phase.IDLE
-      if (phase === Phase.READY)         return !carriedType(agent, 'drone') && !carryFull(agent)
-      if (phase === Phase.ASSEMBLY)      return carryEmpty(agent)
+    enabled(world, zone, agent) {
+      const station = stationOf(world, zone)
+      if (!station) return false
+      const { phase } = station
+      const hasBox = carriedType(agent, 'kit_box')
+      // A box can only be put down where there is a delivery to consume.
+      if (hasBox) return phase === Phase.IDLE
+      if (carriedType(agent, 'scrap')) return phase === Phase.IDLE
+      if (phase === Phase.READY)       return !carryFull(agent)
+      if (phase === Phase.ASSEMBLY)    return carryEmpty(agent)
       return false
     },
-    run(world, _zone, agent, events) {
+    run(world, zone, agent, events) {
+      const station   = stationOf(world, zone)
+      const stationId = station.id
+
       if (carriedType(agent, 'kit_box')) {
         drop(agent, 'kit_box')
-        world.game = startAssembly(world.game)
-        emit(events, EV.ITEM_DROPPED, { agentId: agent.id, item: 'kit_box' })
+        world.game = startAssembly(world.game, stationId)
+        emit(events, EV.ITEM_DROPPED, { agentId: agent.id, item: 'kit_box', stationId })
         emit(events, EV.STATE_DIRTY)
         return
       }
       if (carriedType(agent, 'scrap')) {
         drop(agent, 'scrap')
-        world.game = startScrapAssembly(world.game)
-        emit(events, EV.SCRAP_STARTED)
+        world.game = startScrapAssembly(world.game, stationId)
+        emit(events, EV.SCRAP_STARTED, { stationId })
         emit(events, EV.STATE_DIRTY)
         return
       }
-      if (world.game.phase === Phase.READY) {
-        take(agent, { type: 'drone', kitId: world.game.activeKit })
-        emit(events, EV.ITEM_PICKED, { agentId: agent.id, item: 'drone' })
+      if (station.phase === Phase.READY) {
+        take(agent, { type: 'drone', kitId: station.kitId, stationId })
+        emit(events, EV.ITEM_PICKED, { agentId: agent.id, item: 'drone', stationId })
         return
       }
-      if (world.game.phase === Phase.ASSEMBLY) {
-        // The view decides what "work at the bench" means for the current
-        // soldering level: open the mini-game, or arm the automatic bench.
-        emit(events, EV.WORK_REQUESTED, { agentId: agent.id, station: 'bench' })
+      if (station.phase === Phase.ASSEMBLY) {
+        // The view decides what "work here" means for the current soldering
+        // level: open the mini-game, or arm the automatic bench.
+        emit(events, EV.WORK_REQUESTED, { agentId: agent.id, stationId })
       }
     },
   },
@@ -116,13 +122,13 @@ export const INTERACTIONS = {
     dwellMs:  ZONE_DWELL_MAILBOX_MS,
     repeatMs: 0,
     accepts:  'any',
-    enabled: (world, _zone, agent) =>
-      !!carriedType(agent, 'drone') && world.game.phase === Phase.READY,
+    enabled: (_world, _zone, agent) => !!carriedType(agent, 'drone'),
     run(world, _zone, agent, events) {
-      drop(agent, 'drone')
+      const drone = drop(agent, 'drone')
       emit(events, EV.ITEM_DROPPED, { agentId: agent.id, item: 'drone' })
-      // The sale itself is a command, because it has an ad hook attached.
-      emit(events, EV.SELL_REQUESTED, { agentId: agent.id })
+      // The sale itself is a command, because it has an ad hook attached. The
+      // drone remembers which station built it, so the right one is cleared.
+      emit(events, EV.SELL_REQUESTED, { agentId: agent.id, stationId: drone?.stationId })
     },
   },
 
@@ -131,8 +137,7 @@ export const INTERACTIONS = {
     dwellMs:  ZONE_DWELL_TRASH_MS,
     repeatMs: 0,
     accepts:  'any',
-    enabled: (world, _zone, agent) =>
-      world.game.scrapAvailable && world.game.phase === Phase.IDLE && carryEmpty(agent),
+    enabled: (world, _zone, agent) => world.game.scrapAvailable && carryEmpty(agent),
     run: (_world, _zone, agent, events) =>
       emit(events, EV.MINIGAME_REQUESTED, { agentId: agent.id, game: 'scrap' }),
   },
@@ -146,6 +151,11 @@ export const INTERACTIONS = {
     run: (_world, _zone, agent, events) =>
       emit(events, EV.MINIGAME_REQUESTED, { agentId: agent.id, game: 'piggy' }),
   },
+}
+
+// The station a bench zone belongs to.
+function stationOf(world, zone) {
+  try { return getStation(world.game, zone.meta?.stationId) } catch { return null }
 }
 
 // The arrived, unclaimed delivery sitting in this zone's slot, if any.
