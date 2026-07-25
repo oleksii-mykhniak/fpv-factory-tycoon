@@ -69,6 +69,23 @@ export const PLAYER_HALF_H = 14
 // thinnest obstacle (walls are 24) or a fast agent tunnels straight through it.
 export const MOVE_MAX_STEP = 8
 
+// ── Hired workers (C5) ───────────────────────────────────
+// Hiring the n-th worker of a role costs base × growth^n.
+export const HIRE_COST_BASE   = { courier: 260, tech: 420, seller: 320 }
+export const HIRE_COST_GROWTH = 1.85
+
+export const COURIER_SPEED_BY_LEVEL = [170, 205, 240]
+export const SELLER_SPEED_BY_LEVEL  = [170, 205, 240]
+// A tech's own pace and quality at a bench. Deliberately worse than a good
+// manual player and better than nothing — hiring buys time, not perfection.
+export const TECH_POINT_MS_BY_LEVEL = [2600, 2000, 1500]
+export const TECH_QUALITY_BY_LEVEL  = [0.55, 0.65, 0.75]
+
+// Idle behaviour: workers with no job drift around the rest area instead of
+// standing frozen, which is what makes the shop look alive.
+export const WANDER_RADIUS   = 120
+export const WANDER_PAUSE_MS = 2600
+
 // ── Navigation (C4) ──────────────────────────────────────
 // Grid cell size. Smaller = more accurate paths and a more expensive search;
 // 24 is about a third of a character, which is enough to find doorways.

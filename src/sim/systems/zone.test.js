@@ -165,13 +165,11 @@ describe('sim/interactions — the full loop without a single tap', () => {
     run(w, ZONE_DWELL_BENCH_MS + 200)
     expect(carrying(w)).toEqual(['drone'])
 
-    // 4. The mailbox asks for the sale; the command does the rest.
+    // 4. The mailbox completes the sale on the spot — no view required.
     standAt(w, zone('mailbox'))
     const events = run(w, 2000)
-    expect(types(events)).toContain(EV.SELL_REQUESTED)
+    expect(types(events)).toContain(EV.SALE_MADE)
     expect(carrying(w)).toEqual([])
-
-    dispatch(w, 'sell')
     expect(w.game.money).toBeGreaterThan(startMoney)
     expect(bench(w).phase).toBe(Phase.IDLE)
   })
@@ -204,7 +202,7 @@ describe('sim/interactions — the full loop without a single tap', () => {
     const w = world()
     w.game = { ...w.game, stations: [{ ...bench(w), phase: Phase.READY, kitId: 'mini_drone', quality: 0.8 }] }
     standAt(w, zone('mailbox'))
-    expect(types(run(w, 3000))).not.toContain(EV.SELL_REQUESTED)
+    expect(types(run(w, 3000))).not.toContain(EV.SALE_MADE)
   })
 
   it('the piggy zone only opens the game when the player is actually broke', () => {

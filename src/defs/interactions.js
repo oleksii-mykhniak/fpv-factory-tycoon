@@ -16,6 +16,7 @@
 import {
   Phase, DeliveryStatus, KIT_TYPES,
   pickupDelivery, startAssembly, startScrapAssembly, getStation,
+  sell as sellStation, calcPrice,
 } from '../state/gameState.js'
 import {
   ZONE_DWELL_INSTANT_MS, ZONE_DWELL_BENCH_MS,
@@ -126,9 +127,26 @@ export const INTERACTIONS = {
     run(world, _zone, agent, events) {
       const drone = drop(agent, 'drone')
       emit(events, EV.ITEM_DROPPED, { agentId: agent.id, item: 'drone' })
-      // The sale itself is a command, because it has an ad hook attached. The
-      // drone remembers which station built it, so the right one is cleared.
-      emit(events, EV.SELL_REQUESTED, { agentId: agent.id, stationId: drone?.stationId })
+
+      // The drone remembers which station built it, so the right one clears.
+      const stationId = drone?.stationId ??
+        (world.game.stations ?? []).find(s => s.phase === Phase.READY)?.id
+      if (!stationId) return
+
+      const station = getStation(world.game, stationId)
+      if (station.phase !== Phase.READY) return
+
+      const kit     = KIT_TYPES[station.kitId]
+      const quality = station.quality
+      const price   = calcPrice(kit.basePrice, quality, world.game.upgrades.priceMultiplier)
+
+      world.salesLog.push({ quality, price })
+      world.game = sellStation(world.game, stationId)
+
+      emit(events, EV.SALE_MADE, { kitId: kit.id, quality, price, stationId, agentId: agent.id })
+      emit(events, EV.MONEY_GAINED, { amount: price, reason: 'sale' })
+      emit(events, EV.BENCH_CLEARED, { reason: 'sold' })
+      emit(events, EV.STATE_DIRTY)
     },
   },
 

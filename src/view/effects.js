@@ -11,7 +11,7 @@ import { playSfx } from '../audio/sfx.js'
 
 export function createEffects({
   getRefs, haptic, onStateDirty, onColdSolder,
-  onWorkRequested, onSellRequested, onMinigame,
+  onWorkRequested, onSaleMade, onMinigame,
 }) {
   // Each station draws its own progress card (C3).
   const progressOf = (stationId) =>
@@ -44,7 +44,7 @@ export function createEffects({
 
     [EV.KIT_BURNT]: () => { playSfx('overheat'); haptic('heavy') },
 
-    [EV.SALE_MADE]: () => { playSfx('sell'); haptic('heavy') },
+    [EV.SALE_MADE]: (e) => { playSfx('sell'); haptic('heavy'); onSaleMade?.(e) },
 
     [EV.BENCH_CLEARED]: ({ reason }) => {
       if (reason === 'abandoned') { playSfx('sell'); haptic('medium') }
@@ -60,7 +60,6 @@ export function createEffects({
     // Pass the event through: C3 added stationId to both, and dropping it here
     // crashed the whole tick (the sim runs inside Excalibur's preupdate).
     [EV.WORK_REQUESTED]:     (e) => onWorkRequested?.(e),
-    [EV.SELL_REQUESTED]:     (e) => onSellRequested?.(e),
     [EV.MINIGAME_REQUESTED]: (e) => onMinigame?.(e),
 
     [EV.STATE_DIRTY]: () => onStateDirty(),

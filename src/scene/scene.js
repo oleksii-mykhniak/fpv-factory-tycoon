@@ -7,7 +7,6 @@ import {
   PULSE_FREQ_HZ, PULSE_SCALE_AMP,
 } from '../state/config.js'
 import { loadSprites, getSprite } from './loader.js'
-import { createWorker } from './worker.js'
 import { createCharacterSprite } from './character.js'
 
 // How many carried items the stack can show at once. The gameplay limit is
@@ -520,43 +519,48 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
     }
   })
 
-  // ── Worker ─────────────────────────────────────────────
-  // The puppet reports animation milestones back as intents; the sim decides
-  // what they mean. C1 replaces this actor with a vel-driven agent.
-  const worker = createWorker(scene, {
-    size:         sizes.character,
-    doorPos:      DOOR,
-    boxSpawnPos:  BOX_SPAWN,
-    benchPos:     BENCH_POS,
-    idlePos:      IDLE_POS,
-    mailboxPos:   MAILBOX_POS,
-    trashbinPos:  TRASHBIN_POS,
-    box,
-    tablePos:     TABLE,
-    droneRef:     stations[0].drone,
-    onBoxPicked:           () => onIntent('worker.atBench'),
-    onSolderRequested:     () => onIntent('worker.readyToSolder'),
-    onSellRequested:       () => onIntent('worker.atMailbox'),
-    onTrashRequested:      () => onIntent('worker.droppedBurnt'),
-    onScrapArrivedAtTrash: () => onIntent('worker.atScrapBin'),
-    onScrapDelivered:      () => onIntent('worker.scrapDelivered'),
-  })
-  worker.setupSprite(getSprite('worker_walk'))
+  // ── Characters (C1 player, C5 hired workers) ───────────
+  // Position is owned by the sim (world.agents); these actors only render it.
+  // One factory for both, because a worker is now an agent exactly like the
+  // player — the difference is who writes its velocity.
+  function makeCharacter(spriteKey, color) {
+    const actor = new ex.Actor({
+      pos:    ex.vec(spawns.player.x, spawns.player.y),
+      width:  sizes.character,
+      height: sizes.character,
+      z: 6,
+      color:  ex.Color.fromHex(color),
+    })
+    scene.add(actor)
+    const rig = createCharacterSprite(actor, getSprite(spriteKey))
+    // Y-sort: whoever stands lower on screen draws in front.
+    actor.on('preupdate', () => { actor.z = actor.pos.y * 0.01 })
+    return { actor, rig }
+  }
 
-  // ── Player character (C1) ──────────────────────────────
-  // Position is owned by the sim (world.agents); this actor only renders it.
-  const player = new ex.Actor({
-    pos:    ex.vec(spawns.player.x, spawns.player.y),
-    width:  sizes.character,
-    height: sizes.character,
-    z: 6,
-    color:  ex.Color.fromHex('#1f9e92'),
-  })
-  scene.add(player)
-  const playerRig = createCharacterSprite(player, getSprite('player_walk'))
+  const { actor: player, rig: playerRig } = makeCharacter('player_walk', '#1f9e92')
 
-  // Y-sort: whoever stands lower on screen draws in front.
-  player.on('preupdate', () => { player.z = player.pos.y * 0.01 })
+  // Worker actors are created on demand — hiring happens mid-game.
+  const workerViews = new Map()
+  function workerView(agentId) {
+    let view = workerViews.get(agentId)
+    if (!view) {
+      view = makeCharacter('worker_walk', '#f0a030')
+      // Carried items ride above the head, same rig as the player's stack.
+      view.carrySlots = Array.from({ length: 2 }, () => {
+        const a = new ex.Actor({
+          pos: ex.vec(-9999, -9999),
+          width: sizes.box.w * 0.8, height: sizes.box.h * 0.8,
+          z: 20, color: ex.Color.fromHex('#c49a3c'),
+        })
+        a.graphics.visible = false
+        scene.add(a)
+        return a
+      })
+      workerViews.set(agentId, view)
+    }
+    return view
+  }
 
   // ── Carried items ──────────────────────────────────────
   // A small stack of actors floating above the head. Kept as scene-level actors
@@ -604,9 +608,9 @@ export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, la
   return {
     engine: { getFps: () => engine.clock.fpsSampler.fps, _ex: engine },
     scene,
-    box, worker, piggy, mailbox, trashbin, workbench,
+    box, piggy, mailbox, trashbin, workbench,
     stations,
-    player, playerRig,
+    player, playerRig, workerView, workerViews,
     carrySlotActors,
     dwell: { bg: dwellBg, fill: dwellFill, width: DWELL_W },
     slotSpawns,

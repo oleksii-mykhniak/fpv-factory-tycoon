@@ -8,6 +8,7 @@ import {
 import { UPGRADE_TRACKS } from './upgrades.js'
 import { KIT_TYPES } from './kits.js'
 import { capFor, canMoveToLocation, LOCATIONS } from './locations.js'
+import { hireCost, roleDef } from '../defs/roles.js'
 
 // Re-export so existing consumers keep importing kit data from gameState.js.
 export { KIT_TYPES }
@@ -83,6 +84,8 @@ export function createState() {
   return {
     money:             STARTING_MONEY,
     stations:          [createStation('station-0')],
+    // Hired workers (C5): [{ id, role, level, hiredAt }]
+    workers:           [],
     lastPiggyAt:       null,
     locationId:        'apartment',
     onboarded:         false,
@@ -272,6 +275,34 @@ function _afterStationClear(state, stationId, newMoney) {
   return {
     ...withStation(state, stationId, () => createStation(stationId, getStation(state, stationId).defId)),
     money: newMoney,
+  }
+}
+
+// ── Hiring (C5) ───────────────────────────────────────────
+
+export const workersOf = (state) => state.workers ?? []
+
+export function workersInRole(state, roleId) {
+  return workersOf(state).filter(w => w.role === roleId)
+}
+
+// Cost of the next worker of this role — the curve is per-role, so hiring a
+// second courier does not make the first technician more expensive.
+export function nextHireCost(state, roleId) {
+  return hireCost(roleId, workersInRole(state, roleId).length)
+}
+
+export function hireWorker(state, roleId, now = Date.now(), makeId = null) {
+  roleDef(roleId)   // throws on an unknown role
+  const cost = nextHireCost(state, roleId)
+  if (state.money < cost)
+    throw new Error(`hireWorker: недостатньо грошей (є ${Math.floor(state.money)}, потрібно ${cost})`)
+
+  const id = makeId ? makeId() : `${roleId}-${now}-${workersOf(state).length}`
+  return {
+    ...state,
+    money:   state.money - cost,
+    workers: [...workersOf(state), { id, role: roleId, level: 0, hiredAt: now }],
   }
 }
 

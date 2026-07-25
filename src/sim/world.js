@@ -10,10 +10,11 @@
 // Everything here is plain data: no Excalibur, no DOM, no timers. `rng` is the
 // single injection point for randomness so headless tests are deterministic.
 
-import { createState, stationsOf, syncStations } from '../state/gameState.js'
+import { createState, stationsOf, syncStations, workersOf } from '../state/gameState.js'
 import { PLAYER_SPEED, PLAYER_HALF_W, PLAYER_HALF_H } from '../state/config.js'
 import { stationDef } from '../defs/stations.js'
 import { levelData } from '../state/upgrades.js'
+import { roleLevelData } from '../defs/roles.js'
 import { rect } from '../defs/layouts/apartment.js'
 import { buildGrid } from '../nav/navGrid.js'
 
@@ -28,6 +29,9 @@ export function createAgent({ id, kind, x, y, speed = PLAYER_SPEED }) {
     halfW: PLAYER_HALF_W,
     halfH: PLAYER_HALF_H,
     speed,
+    role:   null,   // 'courier' | 'tech' | 'seller' for hired workers (C5)
+    level:  0,
+    task:   null,   // { jobId, stepIndex, waited } while working
     facing: 1,      // 1 = right, -1 = left
     moving: false,
     // Navigation (C4): set pathTarget and pathSystem fills in `path`.
@@ -104,6 +108,9 @@ export function createWorld({ state, salesLog = [] } = {}, { now = Date.now(), r
     obstacles: layout?.obstacles ?? [],
     agents:    layout ? [createAgent({ id: 'player', kind: 'player', ...layout.spawns.player })] : [],
 
+    // Job board (C5): derived from the world every tick, never persisted.
+    jobs: [],
+
     // Trigger zones (C2): the layout's fixed ones plus one per built station
     // (C3), filled in by rebuildStationGeometry below. `triggers` is the
     // hand-off from zoneSystem to interactionSystem.
@@ -124,24 +131,6 @@ export function createWorld({ state, salesLog = [] } = {}, { now = Date.now(), r
     // timestamp comparison in a system reads this, never Date.now().
     now,
 
-    // ── Station runtime (replaces main.js autoTimer) ───────
-    // armed: the bench should be working. AUTO arms itself; SEMI is armed by
-    // the player's solder command; MANUAL never arms (mini-game drives it).
-    station: {
-      armed:       false,
-      running:     false,
-      elapsedMs:   0,
-      durationMs:  0,
-    },
-
-    // ── Worker intent (replaces the command calls in draw()) ──
-    // The view reads `desired` every frame and drives the puppet idempotently.
-    // C5 replaces this with a real AI agent; the view contract stays the same.
-    worker: {
-      desired:     null,   // null | 'haul' | 'solder' | 'scrap'
-      targetSlotIndex: 0,
-    },
-
     // Monotonic counter behind entity ids. Deterministic (unlike Math.random)
     // and collision-free within a session; ids also carry `now`, so they stay
     // unique across reloads.
@@ -155,7 +144,42 @@ export function createWorld({ state, salesLog = [] } = {}, { now = Date.now(), r
     rng,
   }
 
-  return layout ? rebuildStationGeometry(world) : world
+  if (layout) {
+    rebuildStationGeometry(world)
+    syncWorkerAgents(world)
+  }
+  return world
+}
+
+// Gives every hired worker an agent, and removes agents for workers that are
+// gone. Called at startup and after a hire — the roster is state, the agents
+// are the sim's view of it.
+export function syncWorkerAgents(world) {
+  const hired = workersOf(world.game)
+  const spawn = world.layout?.spawns?.workerIdle ?? { x: 0, y: 0 }
+
+  const existing = new Map(
+    (world.agents ?? []).filter(a => a.kind === 'worker').map(a => [a.id, a])
+  )
+  const players = (world.agents ?? []).filter(a => a.kind !== 'worker')
+
+  const workers = hired.map((w, i) => {
+    const agent = existing.get(w.id) ?? createAgent({
+      id:   w.id,
+      kind: 'worker',
+      // Fan out slightly so a fresh hire does not spawn inside a colleague.
+      x:    spawn.x + (i % 3) * 40 - 40,
+      y:    spawn.y + Math.floor(i / 3) * 40,
+      speed: roleLevelData(w.role, w.level).speed,
+    })
+    agent.role  = w.role
+    agent.level = w.level
+    agent.speed = roleLevelData(w.role, w.level).speed
+    return agent
+  })
+
+  world.agents = [...players, ...workers]
+  return world
 }
 
 // What goes to save/storage.js — deliberately only the persisted slice.

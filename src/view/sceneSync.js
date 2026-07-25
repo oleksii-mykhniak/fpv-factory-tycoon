@@ -39,19 +39,8 @@ export function syncScene(refs, world) {
   if (!refs?.box) return
 
   const game = world.game
-  const { box, worker, piggy, _pulses } = refs
+  const { box, piggy, _pulses } = refs
   const carrying = (game.deliveries ?? []).find(d => d.status === DeliveryStatus.CARRYING)
-
-  // ── Carry box position ─────────────────────────────────
-  // On carry-start, move the box to the street slot it is being fetched from.
-  if (carrying && carrying.id !== _prevCarryingId) {
-    const slotPos = refs.slotSpawns[carrying.slotIndex]
-    if (slotPos) {
-      box.pos.x = slotPos.x
-      box.pos.y = slotPos.y
-    }
-  }
-  _prevCarryingId = carrying?.id ?? null
 
   // ── Piggy bank ─────────────────────────────────────────
   // Same predicate the piggy trigger zone uses, so what you see is what you can
@@ -81,7 +70,9 @@ export function syncScene(refs, world) {
       (assembling || station.phase === Phase.BURNT) && !carriedFromHere
   }
 
-  box.graphics.visible = !!carrying && carrying.carriedBy === 'worker'
+  // Nobody carries the loose box actor any more — every character has its own
+  // stack. Kept parked so nothing stale shows through.
+  box.graphics.visible = false
 
   // ── Attention pulses ───────────────────────────────────
   // Driven by the zones themselves now: whatever the character could act on if
@@ -93,8 +84,6 @@ export function syncScene(refs, world) {
     _pulses.trashbin?.stop()
     for (const view of refs.stations ?? []) view.pulse.stop()
 
-    if (carrying && carrying.carriedBy === 'worker') _pulses.box.start()
-
     for (const zone of world.zones ?? []) {
       if (!INTERACTIONS[zone.kind]?.enabled(world, zone, player)) continue
       // A station zone pulses its own station; fixed zones use a named pulse.
@@ -104,13 +93,8 @@ export function syncScene(refs, world) {
     }
   }
 
-  // Park the carry box off-screen when idle so an invisible actor cannot
-  // intercept pointer events meant for the slot indicators below it.
-  if (!carrying) {
-    box.actions.clearActions()
-    box.pos.x = -9999
-    box.pos.y = -9999
-  }
+  box.pos.x = -9999
+  box.pos.y = -9999
 
   // ── Player character (C1) ──────────────────────────────
   // The sim owns the position; the actor is told where it ended up.
@@ -118,36 +102,36 @@ export function syncScene(refs, world) {
     refs.player.pos.x = player.x
     refs.player.pos.y = player.y
     refs.playerRig?.setMoving(player.moving, player.facing > 0)
-    syncCarryStack(refs, player)
+    syncCarryStack(refs.carrySlotActors, refs.player, player)
     syncDwell(refs, world, player)
   }
 
-  // ── Worker intent ──────────────────────────────────────
-  applyWorkerIntent(refs, world)
-
-  // Send the worker home between cycles — but never mid-carry: the phase stays
-  // IDLE for the whole walk (it only flips on worker.atBench), so resetting on
-  // phase alone would cancel an in-progress delivery.
-  if (!carrying && !world.worker.desired) worker?.reset()
+  // ── Hired workers (C5) ─────────────────────────────────
+  // Same projection as the player: the sim moved them, the actors follow.
+  syncWorkers(refs, world)
 }
 
-// The sim publishes what the worker *should* do; every command below is
-// FSM-guarded inside worker.js, so re-applying the same intent each frame is a
-// no-op. C5 swaps the producer for real AI without touching this function.
-function applyWorkerIntent(refs, world) {
-  const { worker } = refs
-  if (!worker) return
+function syncWorkers(refs, world) {
+  if (!refs.workerView) return
+  const seen = new Set()
 
-  switch (world.worker.desired) {
-    case 'haul':
-      worker.commandDeliver(refs.slotSpawns[world.worker.targetSlotIndex] ?? refs.boxSpawn)
-      break
-    case 'solder':
-      worker.commandSolder()
-      break
-    case 'scrap':
-      if (!worker.isDoingScrap()) worker.commandScrapPickup()
-      break
+  for (const agent of world.agents ?? []) {
+    if (agent.kind !== 'worker') continue
+    seen.add(agent.id)
+    const view = refs.workerView(agent.id)
+    view.actor.pos.x = agent.x
+    view.actor.pos.y = agent.y
+    view.actor.graphics.visible = true
+    view.rig?.setMoving(agent.moving, agent.facing > 0)
+    syncCarryStack(view.carrySlots, view.actor, agent)
+  }
+
+  // A worker that no longer exists (a future firing / a reload) must not leave
+  // a ghost standing in the shop.
+  for (const [id, view] of refs.workerViews ?? []) {
+    if (seen.has(id)) continue
+    view.actor.graphics.visible = false
+    view.carrySlots?.forEach(a => { a.graphics.visible = false })
   }
 }
 
@@ -159,12 +143,12 @@ const ZONE_PULSE = {
   trashbin: 'trashbin',
 }
 
-// Items float above the head, stacked upward in pickup order.
-function syncCarryStack(refs, player) {
-  const slots = refs.carrySlotActors ?? []
-  const items = player.carrying ?? []
+// Items float above the head, stacked upward in pickup order. Shared by the
+// player and every hired worker.
+function syncCarryStack(slots, bodyActor, agent) {
+  const items = agent.carrying ?? []
 
-  slots.forEach((actor, i) => {
+  ;(slots ?? []).forEach((actor, i) => {
     const item = items[i]
     if (!item) {
       actor.graphics.visible = false
@@ -177,9 +161,9 @@ function syncCarryStack(refs, player) {
       applySprite(actor, key)
       actor._carryKey = key
     }
-    actor.pos.x = player.x
-    actor.pos.y = player.y - refs.player.height * 0.55 - i * CARRY_STACK_OFFSET_Y
-    actor.z = player.y * 0.01 + 1 + i * 0.01
+    actor.pos.x = agent.x
+    actor.pos.y = agent.y - bodyActor.height * 0.55 - i * CARRY_STACK_OFFSET_Y
+    actor.z = agent.y * 0.01 + 1 + i * 0.01
     actor.graphics.visible = true
   })
 }

@@ -4,7 +4,9 @@ import { advance } from './loop.js'
 import { dispatch } from './commands.js'
 import { SYSTEMS } from './systems/index.js'
 import { EV } from './events.js'
-import { Phase, DeliveryStatus, KIT_TYPES, createState } from '../state/gameState.js'
+import {
+  Phase, DeliveryStatus, KIT_TYPES, createState, startAssembly,
+} from '../state/gameState.js'
 import { TICK_MS, MAX_CATCHUP_STEPS } from '../state/config.js'
 
 // Deterministic rng: cycles through a fixed sequence so quality outcomes and
@@ -38,6 +40,12 @@ function world(overrides = {}, opts = {}) {
 
 // The single bench these tests talk about.
 const bench = (w) => w.game.stations[0]
+
+// Puts the carried delivery onto the default station. C2's bench zone does this
+// in the game; here it keeps the setup of these older tests to one line.
+function putOnBench(w) {
+  w.game = startAssembly(w.game, 'station-0')
+}
 
 // Runs the sim forward by `ms` in real-sized chunks, collecting every event.
 function run(w, ms) {
@@ -105,72 +113,13 @@ describe('sim/deliverySystem', () => {
   })
 
   it('prunes arrival markers once the delivery is consumed', () => {
-    const w = world({ upgrades: { ...createState().upgrades, workerLevel: 1 } })
+    const w = world()
     dispatch(w, 'order', { kitId: 'mini_drone' })
-    run(w, KIT_TYPES.mini_drone.deliveryMs + 500)   // arrives → worker picks it up
-    dispatch(w, 'benchArrived')                      // box lands on the bench
+    run(w, KIT_TYPES.mini_drone.deliveryMs + 500)
+    dispatch(w, 'pickup', { deliveryId: w.game.deliveries[0].id })
+    putOnBench(w)                                     // box lands on the bench
     run(w, 500)
     expect(w.announcedArrivals).toEqual([])
-  })
-})
-
-describe('sim/workerSystem', () => {
-  it('MANUAL mode never auto-picks a delivery', () => {
-    const w = world()   // workerLevel 0 = MANUAL
-    dispatch(w, 'order', { kitId: 'mini_drone' })
-    run(w, KIT_TYPES.mini_drone.deliveryMs + 2000)
-    expect(w.game.deliveries[0].status).toBe(DeliveryStatus.TRANSIT)
-    expect(w.worker.desired).toBeNull()
-  })
-
-  it('SEMI mode claims an arrived delivery and asks the worker to haul', () => {
-    const w = world({ upgrades: { ...createState().upgrades, workerLevel: 1 } })
-    dispatch(w, 'order', { kitId: 'mini_drone' })
-    const events = run(w, KIT_TYPES.mini_drone.deliveryMs + 500)
-    expect(types(events)).toContain(EV.DELIVERY_PICKED)
-    expect(w.game.deliveries[0].status).toBe(DeliveryStatus.CARRYING)
-    expect(w.worker.desired).toBe('haul')
-  })
-
-  it('keeps hauling while a box is in hand, whatever the phase', () => {
-    const w = world({ upgrades: { ...createState().upgrades, workerLevel: 1 } })
-    dispatch(w, 'order', { kitId: 'mini_drone' })
-    run(w, KIT_TYPES.mini_drone.deliveryMs + 500)
-    run(w, 5000)
-    expect(w.worker.desired).toBe('haul')   // must not be reset mid-carry
-  })
-
-  it('AUTO mode asks the worker to solder once a kit is on the bench', () => {
-    const w = world({ upgrades: { ...createState().upgrades, workerLevel: 2 } })
-    dispatch(w, 'order', { kitId: 'mini_drone' })
-    run(w, KIT_TYPES.mini_drone.deliveryMs + 500)
-    dispatch(w, 'benchArrived')
-    run(w, TICK_MS)
-    expect(bench(w).phase).toBe(Phase.ASSEMBLY)
-    expect(w.worker.desired).toBe('solder')
-  })
-
-  it('sends an automated worker to the trash when scrap is requested', () => {
-    const w = world({ upgrades: { ...createState().upgrades, workerLevel: 1 } })
-    dispatch(w, 'startScrap')
-    run(w, TICK_MS)
-    expect(w.worker.desired).toBe('scrap')
-  })
-
-  it('leaves the scrap run to the player at MANUAL (C2 — the bin is a zone)', () => {
-    const w = world()   // workerLevel 0
-    dispatch(w, 'startScrap')
-    run(w, TICK_MS)
-    expect(w.worker.desired).toBeNull()
-  })
-
-  it('keeps out of a delivery the player picked up', () => {
-    const w = world({ upgrades: { ...createState().upgrades, workerLevel: 2 } })
-    dispatch(w, 'order', { kitId: 'mini_drone' })
-    run(w, KIT_TYPES.mini_drone.deliveryMs + 500)
-    w.game.deliveries[0].carriedBy = 'player'
-    run(w, TICK_MS)
-    expect(w.worker.desired).toBeNull()
   })
 })
 
@@ -181,7 +130,8 @@ describe('sim/stationSystem', () => {
     const w = world({ upgrades })
     dispatch(w, 'order', { kitId })
     run(w, KIT_TYPES[kitId].deliveryMs + 500)
-    dispatch(w, 'benchArrived')
+    dispatch(w, 'pickup', { deliveryId: w.game.deliveries[0].id })
+    putOnBench(w)
     return w
   }
 
@@ -269,22 +219,20 @@ describe('sim/commands', () => {
     expect(bench(w).phase).toBe(Phase.BURNT)
   })
 
-  it('sell pays out, logs the sale and clears the bench', () => {
-    const w = world({ phase: Phase.READY, activeKit: 'mini_drone', assemblyQuality: 1, money: 0 })
-    const events = dispatch(w, 'sell')
-    const sale = events.find(e => e.t === EV.SALE_MADE)
-    expect(sale.price).toBeGreaterThan(0)
-    expect(w.game.money).toBeCloseTo(sale.price)
-    expect(bench(w).phase).toBe(Phase.IDLE)
-    expect(w.salesLog).toHaveLength(1)
+  it('the rewarded ×2 hook tops up a sale that already happened', () => {
+    const w = world({ money: 0 })
+    w.salesLog.push({ quality: 1, price: 100 })
+    dispatch(w, 'grantSaleBonus', { multiplier: 2 })
+    expect(w.game.money).toBeCloseTo(100)
+    expect(w.salesLog[0].price).toBeCloseTo(200)
   })
 
-  it('the rewarded ×2 hook doubles the payout', () => {
-    const plain = world({ phase: Phase.READY, activeKit: 'mini_drone', assemblyQuality: 1, money: 0 })
-    dispatch(plain, 'sell')
-    const doubled = world({ phase: Phase.READY, activeKit: 'mini_drone', assemblyQuality: 1, money: 0 })
-    dispatch(doubled, 'sell', { priceMultBonus: 2 })
-    expect(doubled.game.money).toBeCloseTo(plain.game.money * 2)
+  it('the ×2 bonus cannot be claimed twice for one sale', () => {
+    const w = world({ money: 0 })
+    w.salesLog.push({ quality: 1, price: 100 })
+    dispatch(w, 'grantSaleBonus')
+    dispatch(w, 'grantSaleBonus')
+    expect(w.game.money).toBeCloseTo(100)
   })
 
   it('every command marks the state dirty so persistence has one hook', () => {
@@ -306,33 +254,40 @@ describe('sim — full cycle, headless', () => {
     const startMoney = w.game.money
 
     dispatch(w, 'order', { kitId: 'mini_drone' })
-    run(w, KIT_TYPES.mini_drone.deliveryMs + 500)   // courier arrives, worker claims it
-    dispatch(w, 'benchArrived')                      // worker drops the box (view-driven)
+    run(w, KIT_TYPES.mini_drone.deliveryMs + 500)   // courier arrives
+    dispatch(w, 'pickup', { deliveryId: w.game.deliveries[0].id })
+    putOnBench(w)                                     // carried to the bench
     const events = run(w, 60_000)                    // bench solders every point
 
     expect(types(events)).toContain(EV.ASSEMBLY_DONE)
     expect(bench(w).phase).toBe(Phase.READY)
 
-    dispatch(w, 'sell')
-    expect(bench(w).phase).toBe(Phase.IDLE)
-    expect(w.game.money).toBeGreaterThan(startMoney)
+    // Selling happens at the mailbox zone now (C5), which has its own tests in
+    // zone.test.js; here it is enough that the bench produced a sellable drone.
+    expect(bench(w).quality).toBeGreaterThan(0)
     expect(w.game.deliveries).toEqual([])
+    expect(startMoney).toBeGreaterThan(0)
   })
 
   it('runs two deliveries in parallel without losing one', () => {
     const w = world({
       money: 1000,
-      upgrades: { ...createState().upgrades, storageLevel: 1, workerLevel: 1 },
+      upgrades: { ...createState().upgrades, storageLevel: 1 },
     })
     dispatch(w, 'order', { kitId: 'mini_drone' })
     dispatch(w, 'order', { kitId: 'racing_drone' })
     expect(w.game.deliveries).toHaveLength(2)
 
     run(w, 20_000)
-    // Exactly one is being carried; the other waits its turn in its own slot.
+    // Both arrive and wait in their own slots. Nobody is hired, so nothing
+    // claims them — C5's couriers do that, and have their own tests.
+    expect(w.game.deliveries).toHaveLength(2)
+    expect(w.game.deliveries.every(d => d.status === DeliveryStatus.TRANSIT)).toBe(true)
+
+    // One of them can then be claimed without disturbing the other.
+    dispatch(w, 'pickup', { deliveryId: w.game.deliveries[0].id })
     const carrying = w.game.deliveries.filter(d => d.status === DeliveryStatus.CARRYING)
     expect(carrying).toHaveLength(1)
-    expect(w.game.deliveries).toHaveLength(2)
   })
 
   it('serialises to exactly what save/storage.js expects', () => {

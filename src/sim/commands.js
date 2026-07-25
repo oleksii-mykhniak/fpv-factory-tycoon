@@ -11,18 +11,19 @@ import {
   Phase, DeliveryStatus, KIT_TYPES,
   orderKit, pickupDelivery, startAssembly,
   recordSolderPoint, finishAssembly, applyColdSolderPenalty,
-  burnKit, abandonBurntDrone, sell as sellKit,
+  burnKit, abandonBurntDrone,
   buyUpgrade as buyUpgradeState, moveToLocation as moveToLocationState,
   canOpenPiggy, collectPiggy as collectPiggyState,
-  startScrap as startScrapState, startScrapAssembly, cancelScrap,
+  startScrap as startScrapState, cancelScrap,
   calcPrice, getStation, focusStation, idleStations, syncStations,
+  hireWorker as hireWorkerState, nextHireCost,
 } from '../state/gameState.js'
 import { levelData, UPGRADE_TRACKS } from '../state/upgrades.js'
 import {
   COLD_SOLDER_THRESHOLD, COLD_SOLDER_QUALITY_PENALTY, SALVAGE_RATE,
 } from '../state/config.js'
 import { EV, emit } from './events.js'
-import { rebuildStationGeometry, stationCountFor } from './world.js'
+import { rebuildStationGeometry, stationCountFor, syncWorkerAgents } from './world.js'
 import { stationRuntime } from './systems/station.js'
 
 // Commands that come from a UI button rather than a zone have no station in
@@ -49,18 +50,8 @@ const HANDLERS = {
       emit(events, EV.COMMAND_REJECTED, { type: 'pickup', reason: 'not ready' })
       return
     }
-    world.game = pickupDelivery(world.game, deliveryId, world.now)
-    world.worker.targetSlotIndex = d.slotIndex
+    world.game = pickupDelivery(world.game, deliveryId, world.now, 'player')
     emit(events, EV.DELIVERY_PICKED, { id: d.id, kitId: d.kitId, slotIndex: d.slotIndex })
-  },
-
-  // The worker puppet put the box down. It always serves the first station.
-  benchArrived(world, _p, events) {
-    const station = idleStations(world.game)[0]
-    if (!station) return
-    if (!(world.game.deliveries ?? []).some(d => d.status === DeliveryStatus.CARRYING)) return
-    world.game = startAssembly(world.game, station.id)
-    emit(events, EV.STATE_DIRTY)
   },
 
   // Someone asked a station to start (SEMI mode). AUTO arms itself in the
@@ -113,29 +104,17 @@ const HANDLERS = {
     }
   },
 
-  // priceMultBonus > 1 comes from the rewarded-ad hook (D8).
-  sell(world, { priceMultBonus = 1, stationId } = {}, events) {
-    // Prefer the station the drone came from; fall back to any that is READY.
-    const id = stationId && getStation(world.game, stationId).phase === Phase.READY
-      ? stationId
-      : (world.game.stations ?? []).find(s => s.phase === Phase.READY)?.id
-    if (!id) return
-
-    const station   = getStation(world.game, id)
-    const kit       = KIT_TYPES[station.kitId]
-    const quality   = station.quality
-    const basePrice = calcPrice(kit.basePrice, quality, world.game.upgrades.priceMultiplier)
-    const price     = basePrice * priceMultBonus
-
-    world.salesLog.push({ quality, price })
-    world.game = sellKit(world.game, id)
-    if (priceMultBonus > 1) {
-      world.game = { ...world.game, money: world.game.money + (price - basePrice) }
-    }
-
-    emit(events, EV.SALE_MADE, { kitId: kit.id, quality, price })
-    emit(events, EV.MONEY_GAINED, { amount: price, reason: 'sale' })
-    emit(events, EV.BENCH_CLEARED, { reason: 'sold' })
+  // D8.2 rewarded ×2: the sale itself already happened at the mailbox, so this
+  // only tops it up. Keeping it separate is what lets the simulation finish a
+  // sale on its own, with or without a view attached.
+  grantSaleBonus(world, { multiplier = 2 } = {}, events) {
+    const last = world.salesLog[world.salesLog.length - 1]
+    if (!last || last.bonusApplied) return
+    const extra = last.price * (multiplier - 1)
+    last.price += extra
+    last.bonusApplied = true
+    world.game = { ...world.game, money: world.game.money + extra }
+    emit(events, EV.MONEY_GAINED, { amount: extra, reason: 'ad-bonus' })
   },
 
   abandon(world, { stationId } = {}, events) {
@@ -177,14 +156,6 @@ const HANDLERS = {
     emit(events, EV.SCRAP_REQUESTED)
   },
 
-  // The worker puppet got back to a bench with the salvaged parts.
-  scrapDelivered(world, _p, events) {
-    const station = idleStations(world.game)[0]
-    if (!station) return
-    world.game = startScrapAssembly(world.game, station.id)
-    emit(events, EV.SCRAP_STARTED, { stationId: station.id })
-  },
-
   scrapFailed(world, { consolation = 0 }, events) {
     world.game = cancelScrap(world.game, consolation)
     emit(events, EV.SCRAP_FAILED, { consolation })
@@ -198,6 +169,16 @@ const HANDLERS = {
     if (!agent) return
     agent.carrying = [...(agent.carrying ?? []), { type: 'scrap' }]
     emit(events, EV.ITEM_PICKED, { agentId, item: 'scrap' })
+  },
+
+  // Hire a worker (C5): the roster is game state, the agent that walks around
+  // is derived from it.
+  hireWorker(world, { role }, events) {
+    const cost = nextHireCost(world.game, role)
+    world.game = hireWorkerState(world.game, role, world.now, () => `${role}-${world.seq++}`)
+    syncWorkerAgents(world)
+    emit(events, EV.MONEY_SPENT, { amount: cost, reason: 'hire' })
+    emit(events, EV.WORKER_HIRED, { role })
   },
 
   addMoney(world, { amount }, events) {

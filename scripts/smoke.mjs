@@ -201,6 +201,52 @@ const eArrived = await page.evaluate(() => {
 console.log(`  arrived at (${eArrived.x},${eArrived.y}) in ${((Date.now() - eStart) / 1000).toFixed(1)}s, ` +
             `inside obstacle: ${eArrived.stuck}, cached routes: ${eArrived.cached}`)
 
+// ── F. Hired workers run the shop (C5) ────────────────────
+console.log('\n### F. The shop runs without the player')
+await boot(seedState({}, { money: 20000 }))
+// Hire all three through the real UI, not by seeding state.
+await page.click('#ab-upgrade'); await page.waitForTimeout(500)
+for (const role of ['courier', 'tech', 'seller']) {
+  await page.click(`[data-hire="${role}"]`)
+  await page.waitForTimeout(400)
+}
+await page.click('#upgrade-close'); await page.waitForTimeout(300)
+const fHired = await page.evaluate(() => ({
+  roster: globalThis.__world.game.workers.map(w => w.role),
+  agents: globalThis.__world.agents.filter(a => a.kind === 'worker').length,
+}))
+console.log(`  hired: ${fHired.roster.join(', ')} (${fHired.agents} agents in the world)`)
+
+// Park the player in a corner: nothing below is the player's doing.
+await page.evaluate(() => {
+  const a = globalThis.__world.agents.find(x => x.kind === 'player')
+  a.x = 900; a.y = 500
+})
+
+const fBefore = await page.evaluate(() => globalThis.__world.game.money)
+for (let i = 0; i < 3; i++) {
+  await orderFirstKit()
+  await page.waitForTimeout(22000)
+  const st = await page.evaluate(() => ({
+    sales: globalThis.__world.salesLog.length,
+    money: Math.round(globalThis.__world.game.money),
+    station: globalThis.__world.game.stations[0].phase,
+    jobs: globalThis.__world.jobs.length,
+  }))
+  console.log(`  order ${i + 1}: sales=${st.sales} money=${st.money} station=${st.station} jobs=${st.jobs}`)
+}
+await page.waitForTimeout(8000)
+const fDone = await page.evaluate(() => {
+  const w = globalThis.__world
+  const p = w.agents.find(a => a.kind === 'player')
+  return {
+    sales: w.salesLog.length,
+    money: Math.round(w.game.money),
+    playerMoved: Math.hypot(p.x - 900, p.y - 500) > 30,
+  }
+})
+console.log(`  final: ${fDone.sales} sales, money ${fBefore} → ${fDone.money}, player moved: ${fDone.playerMoved}`)
+
 // ── C. Movement, collisions, camera (C1 regression) ───────
 console.log('\n### C. Movement (WASD)')
 await boot(seedState({}))
@@ -272,6 +318,9 @@ const checks = [
   ['E: pathed across the flat and out',   Math.hypot(eArrived.x - 170, eArrived.y - 1300) < 60],
   ['E: never ended inside geometry',      eArrived.stuck === false],
   ['E: routes were cached',               eArrived.cached > 0],
+  ['F: hired three workers via the UI',   fHired.roster.length === 3 && fHired.agents === 3],
+  ['F: workers sold drones on their own', fDone.sales >= 2],
+  ['F: the player never moved',           fDone.playerMoved === false],
   ['no console errors',                   errors.length === 0],
 ]
 console.log('\n=== checks ===')

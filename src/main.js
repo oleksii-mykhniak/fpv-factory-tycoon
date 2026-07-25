@@ -2,7 +2,7 @@ import './style.css'
 import { saveGame, loadGame, clearSave } from './save/storage.js'
 import {
   createState, Phase, DeliveryStatus,
-  createStation, busyStations, stationsOf,
+  createStation, stationsOf,
 } from './state/gameState.js'
 import { ADS_ENABLED, SCRAP_CONSOLATION, INPUT_DEADZONE } from './state/config.js'
 import { levelData, SOLDER_MODE } from './state/upgrades.js'
@@ -156,7 +156,7 @@ const effects = createEffects({
   onColdSolder: (missMsg) => { coldWarning = missMsg ?? 'cold'; uiDirty = true },
   // Trigger zones ask; the view decides how to answer (C2).
   onWorkRequested: (e) => workAtBench(e?.stationId),
-  onSellRequested: (e) => sellDrone(e?.stationId),
+  onSaleMade:      () => offerSaleBonus(),
   onMinigame:      ({ game, agentId }) => openMinigame(game, agentId),
 })
 
@@ -199,6 +199,7 @@ const shopModal = createShopModal(uiRoot, {
 
 const upgradeModal = createUpgradeModal(uiRoot, {
   onBuyUpgrade:     (id) => send('buyUpgrade', { trackId: id }),
+  onHire:           (role) => send('hireWorker', { role }),
   onMoveToLocation: (id) => {
     send('moveToLocation', { locationId: id })
     applyLocationTheme(currentLocation(world.game).sceneConfig)
@@ -222,10 +223,9 @@ const solderModal = createSolderModal(uiRoot, {
   onSolderResult: (quality, stationId) => send('solderResult', { quality, stationId }),
   // The burnt drone is carried out first; the state change lands when the
   // worker reaches the bin (worker.droppedBurnt).
-  onAbandon: (stationId) => {
-    if (sceneRefs?.worker) sceneRefs.worker.commandTrash()
-    else send('abandon', { stationId })
-  },
+  // The burnt kit is written off on the spot: there is no puppet to walk it to
+  // the bin any more, and a modal button should resolve immediately.
+  onAbandon: (stationId) => send('abandon', { stationId }),
 })
 
 const piggyModal = createPiggyModal(uiRoot, {
@@ -235,15 +235,15 @@ const piggyModal = createPiggyModal(uiRoot, {
 })
 
 const trashModal = createTrashModal(uiRoot, {
+  // Salvage is a player errand: the parts land in whoever's hands opened the
+  // game, and they still have to be carried to a bench.
   onSuccess: () => {
     haptic('light')
-    // The player carries the parts back themselves; the puppet walks them.
-    if (scrapAgent) send('scrapCollected', { agentId: scrapAgent })
-    else sceneRefs?.worker?.resumeScrapSuccess()
+    send('scrapCollected', { agentId: scrapAgent ?? 'player' })
+    scrapAgent = null
   },
   onFail: () => {
     haptic('medium')
-    if (!scrapAgent) sceneRefs?.worker?.resumeScrapFail()
     scrapAgent = null
     send('scrapFailed', { consolation: SCRAP_CONSOLATION })
   },
@@ -346,20 +346,10 @@ if (import.meta.env.MODE === 'debug') {
 // One channel for taps and for the puppet's animation milestones. The scene
 // says what happened; the sim decides what it means.
 
-const INTENTS = {
-  // ── Puppet milestones ──────────────────────────────────
-  // The automated worker still walks its own routes; these are the points where
-  // its animation and the simulation have to agree. C5 replaces the puppet.
-  'worker.atBench': () => send('benchArrived'),
-
-  'worker.readyToSolder': () => workAtBench(busyStations(world.game)[0]?.id),
-
-  'worker.atMailbox': () => sellDrone(),
-
-  'worker.droppedBurnt':   () => send('abandon'),
-  'worker.atScrapBin':     () => { scrapAgent = null; trashModal.open() },
-  'worker.scrapDelivered': () => send('scrapDelivered'),
-}
+// The scene has no intents left to report: taps went in C2 and the worker
+// puppet in C5. The channel stays because C6/C7 will add cues (a tutorial
+// arrow, a tapped hint) and it costs nothing to keep it wired.
+const INTENTS = {}
 
 function onIntent(type, payload = {}) {
   const handler = INTENTS[type]
@@ -380,11 +370,12 @@ function workAtBench(stationId) {
   else send('armSolder', { stationId })
 }
 
-async function sellDrone(stationId) {
-  // D8.2: rewarded ×2 sale hook (hidden while ADS_ENABLED is false).
-  let priceMultBonus = 1
-  if (ADS_ENABLED && await showRewarded(PLACEMENTS.REWARD_DOUBLE_SALE)) priceMultBonus = 2
-  send('sell', { priceMultBonus, stationId })
+// D8.2: rewarded ×2 sale hook. The sale itself already completed at the
+// mailbox — this only offers to double it, and is a no-op while ADS_ENABLED is
+// false. Whoever made the sale (player or a hired seller) does not matter.
+async function offerSaleBonus() {
+  if (!ADS_ENABLED) return
+  if (await showRewarded(PLACEMENTS.REWARD_DOUBLE_SALE)) send('grantSaleBonus', { multiplier: 2 })
 }
 
 function openMinigame(game, agentId) {

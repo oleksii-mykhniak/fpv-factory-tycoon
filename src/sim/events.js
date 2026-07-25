@@ -34,6 +34,11 @@ export const EV = Object.freeze({
   ITEM_PICKED:  'item.picked',          // { agentId, item }
   ITEM_DROPPED: 'item.dropped',         // { agentId, item }
 
+  // Hired workers (C5)
+  JOB_CLAIMED:  'job.claimed',          // { agentId, jobId, type }
+  JOB_RELEASED: 'job.released',         // { agentId, jobId, reason }
+  WORKER_HIRED: 'worker.hired',         // { role, id }
+
   // Requests an interaction raises for the view/commands to complete
   WORK_REQUESTED:     'work.requested',     // { agentId, station }
   SELL_REQUESTED:     'sell.requested',     // { agentId }
