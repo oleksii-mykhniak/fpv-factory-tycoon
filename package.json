@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest",
+    "smoke": "node scripts/smoke.mjs http://localhost:5174/",
     "android": "vite build && npx cap sync android && npx cap run android",
     "android:sync": "vite build && npx cap sync android",
     "android:debug": "vite build --mode debug && npx cap sync android && npx cap run android"

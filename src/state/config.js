@@ -1,3 +1,12 @@
+// ── Simulation loop (Стадія 3 / C0) ──────────────────────
+// The sim advances in fixed steps so behaviour is deterministic and testable
+// headless. 20 Hz is plenty for agents and cheap on low-end Android.
+export const TICK_MS = 50
+// Upper bound on catch-up steps per advance() call. Protects against a huge
+// elapsed time (app backgrounded for an hour) freezing the frame. The clock
+// still jumps to wall time — only the simulated work is capped.
+export const MAX_CATCHUP_STEPS = 40
+
 // ── Delivery ─────────────────────────────────────────────
 // Time from order placement to delivery arrival (ms).
 export const DELIVERY_DELAY_MS = 5000

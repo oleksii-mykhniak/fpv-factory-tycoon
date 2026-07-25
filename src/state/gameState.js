@@ -85,7 +85,10 @@ function _usedSlots(state) {
   return pending + bench
 }
 
-export function orderKit(state, kitTypeId, now = Date.now()) {
+// makeId lets the caller supply a deterministic id source. The sim passes a
+// monotonic counter so a headless run is reproducible; the default keeps the
+// standalone behaviour for direct callers and tests.
+export function orderKit(state, kitTypeId, now = Date.now(), makeId = null) {
   if (state.phase === Phase.BURNT)
     throw new Error(`orderKit: недозволено у фазі ${state.phase}`)
 
@@ -103,7 +106,7 @@ export function orderKit(state, kitTypeId, now = Date.now()) {
   const logMult    = LOGISTICS_DELIVERY_MULT[state.upgrades.logisticsLevel ?? 0] ?? 1.0
   const deliveryMs = Math.round(kit.deliveryMs * logMult)
   const slotIndex  = _nextFreeSlotIndex(state)
-  const id         = `${now}-${Math.random().toString(36).slice(2, 7)}`
+  const id         = makeId ? makeId() : `${now}-${Math.random().toString(36).slice(2, 7)}`
 
   return {
     ...state,

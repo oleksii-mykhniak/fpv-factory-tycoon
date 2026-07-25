@@ -1,5 +1,5 @@
 import * as ex from 'excalibur'
-import { Phase, KIT_TYPES } from '../state/gameState.js'
+import { Phase, DeliveryStatus, KIT_TYPES } from '../state/gameState.js'
 import {
   CAMERA_ZOOM_REF, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX,
   PIGGY_COOLDOWN_MS,
@@ -9,36 +9,21 @@ import {
 import { loadSprites, getSprite } from './loader.js'
 import { createWorker } from './worker.js'
 
+// The scene is a *projection* of the simulation (C0): it never owns gameplay
+// state. Two hooks connect it to the sim:
+//   getWorld()            — read-only access, called from preupdate closures
+//   onIntent(type, data)  — one channel for everything the player or the puppet
+//                           wants the sim to know (taps, animation milestones)
+//
+// Before C0 this file mirrored eight pieces of state in module-level variables
+// and took ten callbacks. Both are gone; adding an interactive object now costs
+// one onIntent call, not a callback threaded through three files.
+
 const BG = ex.Color.fromHex('#0e0e18')
 
-// Height of the action bar (must match --ab-h in style.css).
-const ACTION_BAR_H = 68
-
 // Stored after initScene for use by applyLocationTheme.
-let _engine    = null
+let _engine     = null
 let _floorActor = null
-
-// Tracks the current game phase so pointer handlers can gate commands.
-let currentPhase = Phase.IDLE
-
-// lastPiggyAt from game state — piggy preupdate uses this for real-time cooldown display.
-let _piggyLastAt = null
-
-// Tracks which drone sprite is currently applied to avoid redundant applySprite calls.
-let _lastDroneSpriteKey = null
-
-// All street slot positions (index = slotIndex). Populated in initScene once dims are known.
-let _slotSpawns = []
-
-// Current phase and active carrying slot — read by slot preupdate closures every frame.
-let _activePhase     = Phase.IDLE
-let _activeSlotIndex = 0  // slotIndex of the currently-carrying delivery (or 0)
-
-// All deliveries [{id, kitId, slotIndex, readyAt, status}] — drives slot indicators.
-let _deliveries = []
-
-// Track previous carrying delivery ID to detect carry-start and reposition carry box.
-let _prevCarryingId = null
 
 // ── Helpers ───────────────────────────────────────────────
 
@@ -94,7 +79,7 @@ function buildRoom(scene, W, H, RH) {
   // Lighter sidewalk band just below the door threshold
   colorRect(scene, { x: W * 0.5, y: RH + EXT_H * 0.1, w: W, h: EXT_H * 0.18, hex: '#18182a', z: 0 })
 
-  // ── Room floor (interactive — receives free-walk taps) ─
+  // ── Room floor ─────────────────────────────────────────
   const floor = new ex.Actor({
     pos:    ex.vec(W * 0.5, RH * 0.5),
     width:  W,
@@ -376,9 +361,9 @@ function createBenchProgress(scene, benchActor) {
   return { startStep, advanceDots, hide, showResult }
 }
 
-// ── Scene entry points ────────────────────────────────────
+// ── Scene entry point ─────────────────────────────────────
 
-export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSellRequested, onLoadProgress, onPiggyRequested, onSlotTapped, onTrashRequested, onScrapRequested, onScrapArrivedAtTrash, onScrapDelivered }) {
+export async function initScene(canvas, { getWorld, onIntent, onLoadProgress }) {
   const engine = new ex.Engine({
     canvasElement: canvas,
     backgroundColor: BG,
@@ -413,7 +398,7 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
 
   // All 3 street slot positions indexed by slotIndex (matches delivery.slotIndex).
   // Slot 0 = primary (door gap), slots 1-2 = right of door.
-  _slotSpawns = [
+  const slotSpawns = [
     BOX_SPAWN,
     ex.vec(W * 0.62, RH + EXT_H * 0.35),
     ex.vec(W * 0.82, RH + EXT_H * 0.35),
@@ -437,16 +422,11 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
   applySprite(box, 'delivery_box')
   scene.add(box)
 
-  // ── Delivery slot indicators (D6.6) ──────────────────────
-  // One indicator box + one countdown label per street slot (slotIndex 0, 1, 2).
-  // Slot actors are independent: each reads its own slice of game state via preupdate.
-  // The carry `box` actor (above) is SEPARATE — it's the one the worker physically picks
-  // up and adds as a child. Indicators are purely visual: they show transit timers and
-  // arrived-box sprites, but never leave their positions.
-  //
-  // When a delivery is being carried, the carry box is repositioned to its slotIndex position
-  // and becomes visible; the indicator at that slot hides to avoid overlap.
-  const slotIndicators = _slotSpawns.map(pos => {
+  // ── Delivery slot indicators ───────────────────────────
+  // One indicator box + one countdown label per street slot. Each reads its own
+  // slice of the world in preupdate — no mirrored copy of `deliveries` here.
+  // The carry `box` above is SEPARATE: it is the one the worker picks up.
+  const slotIndicators = slotSpawns.map(pos => {
     const a = new ex.Actor({
       pos:    pos.clone(),
       width:  BOX_W,
@@ -460,7 +440,7 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
     return a
   })
 
-  const slotLabels = _slotSpawns.map(pos => {
+  const slotLabels = slotSpawns.map(pos => {
     const lbl = new ex.Label({
       text:  '',
       pos:   ex.vec(pos.x, pos.y - BOX_W * 1.05),
@@ -473,30 +453,33 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
     return lbl
   })
 
-  // Slot indicator tap: when bench is IDLE and the box has arrived, player can tap to pick up.
-  slotIndicators.forEach((ind, slotIdx) => {
-    ind.on('pointerup', () => {
-      if (currentPhase !== Phase.IDLE) return
-      if (_deliveries.some(d => d.status === 'carrying')) return  // worker already mid-delivery
-      const d = _deliveries.find(d => d.slotIndex === slotIdx && d.status === 'transit')
-      if (d && d.readyAt <= Date.now()) onSlotTapped?.(d.id)
-    })
-  })
-
-  // Unified preupdate: each slot independently decides what to show.
   slotIndicators.forEach((ind, slotIdx) => {
     const lbl = slotLabels[slotIdx]
-    ind.on('preupdate', () => {
-      const d = _deliveries.find(d => d.slotIndex === slotIdx)
 
-      // No delivery OR worker is carrying it — hide indicator (carry box actor shown instead)
-      if (!d || d.status === 'carrying') {
+    // Tap: pick up an arrived box by hand (MANUAL worker mode).
+    ind.on('pointerup', () => {
+      const { game, now } = getWorld()
+      if (game.phase !== Phase.IDLE) return
+      if ((game.deliveries ?? []).some(d => d.status === DeliveryStatus.CARRYING)) return
+      const d = (game.deliveries ?? []).find(
+        d => d.slotIndex === slotIdx && d.status === DeliveryStatus.TRANSIT
+      )
+      if (d && d.readyAt <= now) onIntent('slot.tap', { deliveryId: d.id })
+    })
+
+    // Projection: countdown while in transit, box sprite once it has arrived.
+    ind.on('preupdate', () => {
+      const { game, now } = getWorld()
+      const d = (game.deliveries ?? []).find(d => d.slotIndex === slotIdx)
+
+      // No delivery OR the worker is carrying it — the carry box is shown instead.
+      if (!d || d.status === DeliveryStatus.CARRYING) {
         ind.graphics.visible = false
         lbl.graphics.visible = false
         return
       }
 
-      const ms  = Math.max(0, d.readyAt - Date.now())
+      const ms  = Math.max(0, d.readyAt - now)
       const kit = KIT_TYPES[d.kitId]
       if (ms > 0) {
         ind.graphics.visible = false
@@ -559,8 +542,8 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
 
   piggy.on('preupdate', () => {
     if (!piggy.graphics.visible) return
-    const now = Date.now()
-    const remaining = _piggyLastAt != null ? PIGGY_COOLDOWN_MS - (now - _piggyLastAt) : 0
+    const { game, now } = getWorld()
+    const remaining = game.lastPiggyAt != null ? PIGGY_COOLDOWN_MS - (now - game.lastPiggyAt) : 0
     if (remaining > 0) {
       piggy.graphics.opacity = 0.35
       piggy.scale = ex.vec(1, 1)
@@ -576,10 +559,12 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
   })
 
   piggy.on('pointerup', () => {
-    if (piggy.graphics.visible) onPiggyRequested?.()
+    if (piggy.graphics.visible) onIntent('piggy.tap')
   })
 
   // ── Worker ─────────────────────────────────────────────
+  // The puppet reports animation milestones back as intents; the sim decides
+  // what they mean. C1 replaces this actor with a vel-driven agent.
   const worker = createWorker(scene, {
     W, RH,
     doorPos:      DOOR,
@@ -591,17 +576,30 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
     box,
     tablePos:     TABLE,
     droneRef:     drone,
-    onBoxPicked,
-    onSolderRequested,
-    onSellRequested,
-    onTrashRequested,
-    onScrapArrivedAtTrash,
-    onScrapDelivered,
+    onBoxPicked:           () => onIntent('worker.atBench'),
+    onSolderRequested:     () => onIntent('worker.readyToSolder'),
+    onSellRequested:       () => onIntent('worker.atMailbox'),
+    onTrashRequested:      () => onIntent('worker.droppedBurnt'),
+    onScrapArrivedAtTrash: () => onIntent('worker.atScrapBin'),
+    onScrapDelivered:      () => onIntent('worker.scrapDelivered'),
   })
   worker.setupSprite(getSprite('worker_walk'))
 
-  // ── Trash bin tap: open scrap mini-game ───────────────
-  trashbin.on('pointerup', () => onScrapRequested?.())
+  // ── Pointer intents ────────────────────────────────────
+
+  // Free walk on an empty bit of floor. Uses the engine-level pointer with a
+  // manual bounds check: floor.on('pointerup') at z=0 loses the hit-test to the
+  // workbench at z=2. C1 replaces this with joystick/WASD movement.
+  engine.input.pointers.primary.on('up', (evt) => {
+    const world = evt.worldPos
+    if (world.x > 0 && world.x < W && world.y > 0 && world.y < RH)
+      onIntent('floor.tap', { x: world.x, y: world.y })
+  })
+
+  trashbin.on('pointerup', () => onIntent('trash.tap'))
+  box.on('pointerup',      () => onIntent('box.tap'))
+  workbench.on('pointerup', () => onIntent('bench.tap'))
+  mailbox.on('pointerup',   () => onIntent('mailbox.tap'))
 
   // ── Pulse controllers ──────────────────────────────────
   const boxPulse      = addPulse(box)
@@ -612,125 +610,15 @@ export async function initScene(canvas, { onBoxPicked, onSolderRequested, onSell
   // ── Bench progress (auto / semi soldering) ────────────
   const benchProgress = createBenchProgress(scene, workbench)
 
-  // ── Pointer events ─────────────────────────────────────
-
-  // Tap box → worker fetches (when a delivery has status=carrying).
-  box.on('pointerup', () => {
-    const carrying = _deliveries.find(d => d.status === 'carrying')
-    if (carrying) worker.commandDeliver(_slotSpawns[carrying.slotIndex] ?? BOX_SPAWN)
-  })
-
-  // Tap workbench → solder (ASSEMBLY) or sell animation (READY)
-  workbench.on('pointerup', () => {
-    if (currentPhase === Phase.ASSEMBLY) worker.commandSolder()
-    if (currentPhase === Phase.READY)    worker.commandSell()
-  })
-
-  // Tap mailbox → sell animation (READY)
-  mailbox.on('pointerup', () => {
-    if (currentPhase === Phase.READY) worker.commandSell()
-  })
-
-  // Tap floor → idle free walk (D4.7).
-  // Using engine-level pointer to avoid actor z-order dispatch quirks in Excalibur:
-  // floor.on('pointerup') at z=0 may not fire when a higher-z actor (workbench z=2)
-  // covers the same area. Global pointer always fires; we check bounds manually.
-  engine.input.pointers.primary.on('up', (evt) => {
-    if (currentPhase !== Phase.IDLE) return
-    const world = evt.worldPos
-    // Only if tap is inside the room floor (not on a wall, not in exterior zone)
-    if (world.x > 0 && world.x < W && world.y > 0 && world.y < RH) {
-      worker.walkTo(world.x, world.y)
-    }
-  })
-
   return {
     engine: { getFps: () => engine.clock.fpsSampler.fps, _ex: engine },
     scene,
     box, boxOpen, drone, worker, piggy, mailbox, trashbin,
     benchProgress,
-    _boxSpawn: BOX_SPAWN,
+    slotSpawns,
+    boxSpawn: BOX_SPAWN,
     _pulses: { box: boxPulse, bench: benchPulse, mailbox: mailboxPulse, trashbin: trashbinPulse },
-    get activeBoxSpawn() { return _slotSpawns[_activeSlotIndex] ?? BOX_SPAWN },
   }
-}
-
-// piggyInfo:        null | { show: boolean, lastAt: number|null }
-// droneSpriteKey:   string | null — spriteKey of the active kit
-// deliveries:       DeliveryEntry[] — [{id, kitId, slotIndex, readyAt, status}]; all pending deliveries
-// carryingSlotIndex: number — slotIndex of the delivery currently being carried (0 if none)
-// scrapAvailable:   boolean — pulse trash bin when true and phase is IDLE
-export function updateScene(refs, phase, piggyInfo = null, droneSpriteKey = null, deliveries = [], carryingSlotIndex = 0, scrapAvailable = false) {
-  if (!refs?.box) return
-
-  currentPhase = phase
-
-  const { box, boxOpen, drone, worker, piggy, _pulses } = refs
-
-  // Update module-level state read by slot preupdate closures every frame.
-  _activePhase     = phase
-  _activeSlotIndex = carryingSlotIndex ?? 0
-  _deliveries      = deliveries ?? []
-
-  const carryingDel = _deliveries.find(d => d.status === 'carrying')
-
-  // On carry-start: reposition carry box to the delivery's street slot.
-  // Guards against repeated repositioning every frame while carrying.
-  if (carryingDel && carryingDel.id !== _prevCarryingId) {
-    const slotPos = _slotSpawns[carryingDel.slotIndex]
-    if (slotPos) {
-      box.pos.x = slotPos.x
-      box.pos.y = slotPos.y
-    }
-  }
-  _prevCarryingId = carryingDel?.id ?? null
-
-  if (piggy && piggyInfo !== null) {
-    piggy.graphics.visible = piggyInfo.show
-    _piggyLastAt = piggyInfo.lastAt
-  }
-
-  // Swap drone sprite when kit changes (only when key is known and different)
-  if (droneSpriteKey && droneSpriteKey !== _lastDroneSpriteKey) {
-    applySprite(drone, droneSpriteKey)
-    _lastDroneSpriteKey = droneSpriteKey
-  }
-
-  const assembling = phase === Phase.ASSEMBLY || phase === Phase.READY
-
-  // Carry box: visible when a worker is carrying it to bench (before startAssembly).
-  box.graphics.visible     = !!carryingDel
-  boxOpen.graphics.visible = assembling
-  drone.graphics.visible   = assembling || phase === Phase.BURNT
-
-  // ── Pulse cues (D4.6) ─────────────────────────────────
-  if (_pulses) {
-    _pulses.box.stop()
-    _pulses.bench.stop()
-    _pulses.mailbox.stop()
-    _pulses.trashbin?.stop()
-
-    if (carryingDel)              _pulses.box.start()
-    if (phase === Phase.ASSEMBLY) _pulses.bench.start()
-    if (phase === Phase.READY) {
-      _pulses.bench.start()
-      _pulses.mailbox.start()
-    }
-    if (scrapAvailable && phase === Phase.IDLE) _pulses.trashbin?.start()
-  }
-
-  // Park carry box off-screen when not being carried — prevents invisible actor
-  // from intercepting pointer events (workbench at z=2, box at z=3).
-  if (!carryingDel) {
-    box.actions.clearActions()
-    box.pos.x = -9999
-    box.pos.y = -9999
-  }
-
-  // Return worker to idle between cycles — but not while actively carrying a delivery.
-  // Phase stays IDLE throughout the carry walk (only switches to ASSEMBLY on onBoxPicked),
-  // so guarding on !carryingDel prevents reset() from cancelling an in-progress delivery.
-  if (phase === Phase.IDLE && !carryingDel) worker?.reset()
 }
 
 // Apply location-specific visual theme (background colour, floor colour).
