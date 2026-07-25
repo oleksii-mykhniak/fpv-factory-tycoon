@@ -19,7 +19,7 @@ import { getSprite } from '../scene/loader.js'
 import {
   ZONE_FILL_DIM, ZONE_FILL_LIVE, ZONE_EDGE_DIM, ZONE_EDGE_LIVE,
 } from '../scene/scene.js'
-import { INTERACTIONS, carrySpriteKey } from '../defs/interactions.js'
+import { INTERACTIONS, carrySpriteKey, zoneWantsAttention } from '../defs/interactions.js'
 import { dwellProgress } from '../sim/systems/zone.js'
 import { piggyShouldShow, nextObjective } from '../sim/derive.js'
 import { CARRY_STACK_OFFSET_Y, VIEW_SMOOTHING } from '../state/config.js'
@@ -109,11 +109,16 @@ export function syncScene(refs, world) {
     _pulses.box.stop()
     _pulses.mailbox.stop()
     _pulses.trashbin?.stop()
+    _pulses.desk?.stop()
+    _pulses.rack?.stop()
+    _pulses.jobboard?.stop()
     for (const view of refs.stations ?? []) view.pulse.stop()
     for (const paint of refs.zonePaints ?? []) setZonePaint(paint, false)
 
     for (const zone of world.zones ?? []) {
-      if (!INTERACTIONS[zone.kind]?.enabled(world, zone, player)) continue
+      // Lit means "worth walking over", not merely "would work" — the desk is
+      // always usable but only interesting when there is a kit worth ordering.
+      if (!zoneWantsAttention(INTERACTIONS[zone.kind], world, zone, player)) continue
       // The floor mark lights up for the same reason the object pulses.
       const paint = (refs.zonePaints ?? []).find(p => p.zoneId === zone.id)
       if (paint) setZonePaint(paint, true)
@@ -178,6 +183,9 @@ const ZONE_PULSE = {
   bench:    'bench',
   mailbox:  'mailbox',
   trashbin: 'trashbin',
+  desk:     'desk',
+  rack:     'rack',
+  jobboard: 'jobboard',
 }
 
 // Items float above the head, stacked upward in pickup order. Shared by the

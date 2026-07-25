@@ -6,9 +6,16 @@
 // scrap kit's cost of 0 dragged the minimum kit cost to zero, so the rescue
 // mini-game never appeared).
 
-import { KIT_TYPES, busyStations, Phase, stationsOf } from '../state/gameState.js'
+import {
+  KIT_TYPES, busyStations, idleStations, Phase, stationsOf, nextHireCost,
+} from '../state/gameState.js'
 import { GUIDANCE_ORDERS, GUIDANCE_SCRAP_RUNS } from '../state/config.js'
-import { levelData } from '../state/upgrades.js'
+import { levelData, UPGRADE_TRACKS } from '../state/upgrades.js'
+import {
+  kitsForLocation, hiringAllowed, maxWorkersHere, capFor,
+  canMoveToLocation, LOCATION_ORDER,
+} from '../state/locations.js'
+import { ROLE_ORDER } from '../defs/roles.js'
 
 // Cheapest kit the player could actually buy. Free kits (scrap) are not
 // purchases and must not count.
@@ -21,6 +28,47 @@ export const cheapestKitCost = Math.min(
 export function piggyShouldShow(game) {
   const busy = (game.deliveries ?? []).length > 0 || busyStations(game).length > 0
   return game.money < cheapestKitCost && !busy
+}
+
+// ── Does this object want the player's attention? (S2) ────
+//
+// The badges that used to live on the bottom bar moved onto the objects the
+// panels now sit behind. Kept here rather than in the view because the trigger
+// zone, the pulsing prop and the guidance arrow must agree — three copies of
+// "is there anything worth doing at the desk" is exactly how the piggy bank
+// went wrong.
+
+// The desk: somewhere to put a kit, and enough money to buy one.
+export function shopNeedsAttention(game) {
+  if (!idleStations(game).length) return false
+  const affordable = kitsForLocation(game)
+    .map(id => KIT_TYPES[id])
+    .filter(k => k && k.cost > 0)
+    .some(k => game.money >= k.cost)
+  return affordable
+}
+
+// The rack: an upgrade (or a move) is affordable, and no bench is mid-build —
+// both are between-cycles purchases.
+export function upgradeNeedsAttention(game) {
+  if (busyStations(game).length > 0) return false
+
+  const currentIdx = LOCATION_ORDER.indexOf(game.locationId ?? 'apartment')
+  const nextLocId  = LOCATION_ORDER[currentIdx + 1]
+  if (nextLocId && canMoveToLocation(game, nextLocId).can) return true
+
+  return Object.entries(UPGRADE_TRACKS).some(([id, track]) => {
+    const level = game.upgrades[track.stateKey] ?? 0
+    if (level >= Math.min(track.costs.length, capFor(game, id))) return false
+    return game.money >= track.costs[level]
+  })
+}
+
+// The board: hiring is allowed here, there is room, and somebody is affordable.
+export function hireNeedsAttention(game) {
+  if (!hiringAllowed(game)) return false
+  if ((game.workers ?? []).length >= maxWorkersHere(game)) return false
+  return ROLE_ORDER.some(id => game.money >= nextHireCost(game, id))
 }
 
 // The station the player is standing at, if it has a kit on it (C6).
@@ -76,7 +124,11 @@ export function nextObjective(world, interactions) {
   // Order matters: finish what is in your hands before starting something new.
   // The output table sits just under the mailbox: a finished drone is worth
   // collecting before fetching the next box (S1.2).
-  const PRIORITY = ['mailbox', 'bench_out', 'bench', 'delivery_slot', 'trashbin', 'piggy']
+  // The desk sits last: fetch, build and sell what is already in the shop
+  // before ordering more.
+  const PRIORITY = [
+    'mailbox', 'bench_out', 'bench', 'delivery_slot', 'trashbin', 'piggy', 'desk',
+  ]
 
   let best = null
   let bestRank = Infinity
@@ -87,6 +139,8 @@ export function nextObjective(world, interactions) {
     if (rank < 0 || rank > bestRank) continue
     const def = interactions[zone.kind]
     if (!def?.enabled(world, zone, player)) continue
+    // A desk you cannot usefully use must not pull the arrow (S2).
+    if (def.attention && !def.attention(world, zone, player)) continue
 
     if (rank < bestRank) { bestRank = rank; best = zone; continue }
     // Same kind: take the nearer one.

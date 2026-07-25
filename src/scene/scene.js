@@ -24,6 +24,9 @@ const ZONE_PAINT = {
   mailbox:       '#7a5ad8',
   trashbin:      '#4a6a3a',
   piggy:         '#d4607a',
+  desk:          '#8a6ad8',
+  rack:          '#3a9aa8',
+  jobboard:      '#c08a40',
 }
 export const ZONE_FILL_DIM  = 0.07
 export const ZONE_FILL_LIVE = 0.20
@@ -398,7 +401,7 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
   const engine = _engine
   const scene  = _scene
 
-  const { floor, mailbox, trashbin, piggy } = buildRoom(scene, layout)
+  const { floor, mailbox, trashbin, piggy, desk, rack, jobboard } = buildRoom(scene, layout)
   _floorActor = floor
 
   // ── Stations (C3) ──────────────────────────────────────
@@ -747,6 +750,11 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
   const boxPulse      = addPulse(box)
   const mailboxPulse  = addPulse(mailbox)
   const trashbinPulse = addPulse(trashbin)
+  // The panel objects (S2) pulse for exactly the reason the bottom bar used to
+  // show a "!" badge — the notice moved to where the thing is.
+  const deskPulse     = addPulse(desk)
+  const rackPulse     = addPulse(rack)
+  const boardPulse    = addPulse(jobboard)
 
   return {
     engine: { getFps: () => engine.clock.fpsSampler.fps, _ex: engine },
@@ -760,7 +768,10 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     slotSpawns,
     zonePaints,
     boxSpawn: BOX_SPAWN,
-    _pulses: { box: boxPulse, mailbox: mailboxPulse, trashbin: trashbinPulse },
+    _pulses: {
+      box: boxPulse, mailbox: mailboxPulse, trashbin: trashbinPulse,
+      desk: deskPulse, rack: rackPulse, jobboard: boardPulse,
+    },
   }
 }
 

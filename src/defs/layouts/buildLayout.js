@@ -67,6 +67,12 @@ export function buildLayout({
     { id: 'mailbox',  kind: 'mailbox',  ...rect(props.mailbox.x, props.mailbox.y, 150, 150) },
     { id: 'trashbin', kind: 'trashbin', ...rect(props.trashbin.x, props.trashbin.y, 150, 150) },
     { id: 'piggy',    kind: 'piggy',    ...rect(props.piggy.x, props.piggy.y, 140, 140) },
+    // S2: the panels the bottom bar used to hold are objects in the room now.
+    // Each is a prop with a zone in front of it — you walk up to the laptop to
+    // order a kit, to the rack to buy an upgrade, to the board to hire.
+    { id: 'desk',     kind: 'desk',     ...rect(props.desk.x, props.desk.y, 160, 150) },
+    { id: 'rack',     kind: 'rack',     ...rect(props.rack.x, props.rack.y, 150, 150) },
+    { id: 'jobboard', kind: 'jobboard', ...rect(props.jobboard.x, props.jobboard.y, 150, 150) },
   ]
 
   return {

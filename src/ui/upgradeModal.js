@@ -1,10 +1,8 @@
-import { Phase, busyStations, workersInRole, nextHireCost } from '../state/gameState.js'
-import { hiringAllowed, maxWorkersHere } from '../state/locations.js'
-import { ROLES, ROLE_ORDER } from '../defs/roles.js'
+import { busyStations } from '../state/gameState.js'
 import { UPGRADE_TRACKS } from '../state/upgrades.js'
 import { currentLocation, LOCATIONS, LOCATION_ORDER, capFor, canMoveToLocation } from '../state/locations.js'
 
-export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation, onHire }) {
+export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation }) {
   const overlay = document.createElement('div')
   overlay.id = 'upgrade-modal'
   overlay.className = 'modal-overlay'
@@ -117,52 +115,9 @@ export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation, onHir
       `
     }
 
-    // ── Hiring (C5) ───────────────────────────────────────
-    // Each role is one card: who you already have, what the next one costs.
-    const canHire  = hiringAllowed(state)
-    const room     = maxWorkersHere(state)
-    const onStaff  = (state.workers ?? []).length
-    const full     = onStaff >= room
-    const hireHTML = `
-      <div class="shop-section">
-        <div class="shop-section__title">
-          Робітники${canHire ? ` — ${onStaff}/${room}` : ''}
-        </div>
-        ${canHire && full ? `
-          <div class="shop-upgrade">
-            <p class="upgrade-effect-hint">Більше людей сюди не поміститься — переїдьте далі.</p>
-          </div>` : ''}
-        ${!canHire ? `
-          <div class="shop-upgrade">
-            <p class="upgrade-effect-hint">
-              У квартирі ви працюєте самі. Переїдьте до гаража, щоб наймати людей.
-            </p>
-          </div>` : ''}
-        ${!canHire ? '' : ROLE_ORDER.map(id => {
-          const role  = ROLES[id]
-          const count = workersInRole(state, id).length
-          const cost  = nextHireCost(state, id)
-          const can   = state.money >= cost && !full
-          return `
-            <div class="shop-upgrade">
-              <span class="shop-upgrade__current">
-                ${role.emoji} ${role.name}${count ? ` ×${count}` : ''}
-              </span>
-              <button class="btn btn--upgrade" data-hire="${id}" ${can ? '' : 'disabled'}>
-                Найняти — $${cost}
-              </button>
-              <p class="upgrade-effect-hint">${role.hint}</p>
-            </div>
-          `
-        }).join('')}
-      </div>
-    `
-
-    body.innerHTML = trackHTML + hireHTML + locationHTML
-
-    body.querySelectorAll('[data-hire]').forEach(btn => {
-      btn.addEventListener('click', () => onHire?.(btn.dataset.hire))
-    })
+    // Hiring moved out to its own panel behind the job board (S2): the rack is
+    // where tools are bought, the board by the door is where people are taken on.
+    body.innerHTML = trackHTML + locationHTML
 
     body.querySelectorAll('[data-upgrade]').forEach(btn => {
       btn.addEventListener('click', () => onBuyUpgrade(btn.dataset.upgrade))

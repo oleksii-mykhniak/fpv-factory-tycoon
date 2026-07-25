@@ -42,6 +42,10 @@ export const EV = Object.freeze({
   // Requests an interaction raises for the view/commands to complete
   SELL_REQUESTED:     'sell.requested',     // { agentId }
   MINIGAME_REQUESTED: 'minigame.requested', // { agentId, game }
+  // A panel the player walked up to and asked for (S2): the shop desk, the
+  // upgrade rack, the job board. Same shape as MINIGAME_REQUESTED — the sim
+  // says what was asked for, the view decides how to answer.
+  PANEL_REQUESTED: 'panel.requested',       // { agentId, panel }
 
   // Side activities
   PIGGY_COLLECTED: 'piggy.collected',     // { amount }

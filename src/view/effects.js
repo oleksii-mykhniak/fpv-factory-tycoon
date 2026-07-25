@@ -11,7 +11,7 @@ import { playSfx } from '../audio/sfx.js'
 
 export function createEffects({
   getRefs, haptic, onStateDirty, onColdSolder,
-  onSaleMade, onMinigame,
+  onSaleMade, onMinigame, onPanel,
 }) {
   // Each station draws its own progress card (C3).
   const progressOf = (stationId) =>
@@ -60,6 +60,7 @@ export function createEffects({
     // Pass the event through: dropping the payload here once crashed the whole
     // tick (the sim runs inside Excalibur's preupdate).
     [EV.MINIGAME_REQUESTED]: (e) => onMinigame?.(e),
+    [EV.PANEL_REQUESTED]:    (e) => onPanel?.(e),
 
     [EV.STATE_DIRTY]: () => onStateDirty(),
   }

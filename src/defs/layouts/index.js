@@ -24,6 +24,9 @@ export const apartment = buildLayout({
     piggy:    { x: 130, y: 700, w: 46, h: 46, sprite: 'piggy',    color: '#d4607a' },
     mailbox:  { x: 150, y: 1090, w: 42, h: 34, sprite: 'mailbox',  color: '#3a5db8' },
     trashbin: { x: 690, y: 1090, w: 42, h: 46, sprite: 'trashbin', color: '#4a6a3a' },
+    desk:     { x: 720, y: 470, w: 86, h: 52, sprite: 'desk',     color: '#5a4a7a' },
+    rack:     { x: 120, y: 330, w: 58, h: 84, sprite: 'rack',     color: '#3a6a72' },
+    jobboard: { x: 120, y: 520, w: 56, h: 72, sprite: 'jobboard', color: '#7a5a3a' },
   },
   deliverySlots: [
     { x: 360, y: 1000 },
@@ -59,6 +62,9 @@ export const garage = buildLayout({
     piggy:    { x: 170, y: 980, w: 46, h: 46, sprite: 'piggy',    color: '#d4607a' },
     mailbox:  { x: 230, y: 1450, w: 46, h: 38, sprite: 'mailbox',  color: '#3a5db8' },
     trashbin: { x: 1300, y: 1450, w: 46, h: 50, sprite: 'trashbin', color: '#4a6a3a' },
+    desk:     { x: 1340, y: 700, w: 92, h: 56, sprite: 'desk',     color: '#5a4a7a' },
+    rack:     { x: 170, y: 620, w: 60, h: 88, sprite: 'rack',     color: '#3a6a72' },
+    jobboard: { x: 170, y: 790, w: 58, h: 76, sprite: 'jobboard', color: '#7a5a3a' },
   },
   deliverySlots: [
     { x: 620, y: 1340 },
@@ -95,6 +101,9 @@ export const workshop = buildLayout({
     piggy:    { x: 200, y: 1150, w: 46, h: 46, sprite: 'piggy',    color: '#d4607a' },
     mailbox:  { x: 300, y: 1650, w: 50, h: 40, sprite: 'mailbox',  color: '#3a5db8' },
     trashbin: { x: 1780, y: 1650, w: 50, h: 54, sprite: 'trashbin', color: '#4a6a3a' },
+    desk:     { x: 1800, y: 860, w: 96, h: 58, sprite: 'desk',     color: '#5a4a7a' },
+    rack:     { x: 220, y: 720, w: 62, h: 92, sprite: 'rack',     color: '#3a6a72' },
+    jobboard: { x: 220, y: 900, w: 60, h: 78, sprite: 'jobboard', color: '#7a5a3a' },
   },
   deliverySlots: [
     { x: 900,  y: 1540 },

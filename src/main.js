@@ -26,6 +26,7 @@ import { createHUD } from './ui/hud.js'
 import { createActionBar } from './ui/actionBar.js'
 import { createShopModal } from './ui/shopModal.js'
 import { createUpgradeModal } from './ui/upgradeModal.js'
+import { createHireModal } from './ui/hireModal.js'
 import { createSettingsModal } from './ui/settingsModal.js'
 import { createSolderModal } from './ui/solderModal.js'
 import { createSolderBar } from './ui/solderBar.js'
@@ -173,6 +174,8 @@ const effects = createEffects({
   // Trigger zones ask; the view decides how to answer (C2).
   onSaleMade:      () => offerSaleBonus(),
   onMinigame:      ({ game, agentId }) => openMinigame(game, agentId),
+  // Walking up to the laptop / rack / board is what opens these now (S2).
+  onPanel:         ({ panel }) => openPanel(panel),
 })
 
 // Applies a player command and pushes the result through the presentation layer.
@@ -225,7 +228,6 @@ const upgradeModal = createUpgradeModal(uiRoot, {
       present()
     }
   },
-  onHire:           (role) => send('hireWorker', { role }),
   onMoveToLocation: (id) => {
     send('moveToLocation', { locationId: id })
     // A move is a different room, not a re-tint: tear the scene down and build
@@ -288,11 +290,23 @@ const trashModal = createTrashModal(uiRoot, {
   },
 })
 
+const hireModal = createHireModal(uiRoot, {
+  onHire: (role) => send('hireWorker', { role }),
+})
+
+// The bar is down to settings: everything that used to sit here is a place in
+// the room now (S2).
 const actionBar = createActionBar(uiRoot, {
-  onShopOpen:     () => shopModal.open(world.game),
-  onUpgradeOpen:  () => upgradeModal.open(world.game),
   onSettingsOpen: () => settingsModal.open(),
 })
+
+// Which panel a zone asked for. One place, so adding an object with a panel
+// behind it is a line here and an entry in defs/interactions.js.
+function openPanel(panel) {
+  if (panel === 'shop')    shopModal.open(world.game)
+  if (panel === 'upgrade') upgradeModal.open(world.game)
+  if (panel === 'hire')    hireModal.open(world.game)
+}
 
 let _lastRendered = null
 let _lastCarrySig = ''
@@ -319,6 +333,7 @@ function renderUI() {
   actionBar.update(world.game)
   shopModal.update(world.game)
   upgradeModal.update(world.game)
+  hireModal.update(world.game)
   solderModal.update(world.game, coldWarning ? 'cold' : null)
 
   // The soldering strip follows the player's feet, not a button (C6) — and is

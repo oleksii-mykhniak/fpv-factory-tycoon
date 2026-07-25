@@ -42,8 +42,9 @@ function hint(state, carrying) {
       if (arrived) return 'Коробка прибула — забери її з вулиці'
       if (deliveries.length) return "Кур'єр їде до вас…"
       // Nothing in flight: the very first thing the game must say is where the
-      // loop starts, or a new player has no idea what to do at all.
-      return 'Відкрий 🛒 Магазин і замов дрон'
+      // loop starts, or a new player has no idea what to do at all. Since S2
+      // the shop is a place, not a button — so the hint names the place.
+      return 'Підійди до столу з ноутбуком і замов дрон'
     }
     case Phase.ASSEMBLY: {
       const kit   = KIT_TYPES[station.kitId]

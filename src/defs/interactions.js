@@ -23,11 +23,14 @@ import {
 } from '../state/gameState.js'
 import {
   ZONE_DWELL_INSTANT_MS, ZONE_DWELL_BENCH_MS, ZONE_DWELL_OUTPUT_MS,
-  ZONE_DWELL_MAILBOX_MS, ZONE_DWELL_TRASH_MS,
+  ZONE_DWELL_MAILBOX_MS, ZONE_DWELL_TRASH_MS, ZONE_DWELL_PANEL_MS,
   CARRY_CAPACITY,
 } from '../state/config.js'
 import { EV, emit } from '../sim/events.js'
-import { piggyShouldShow } from '../sim/derive.js'
+import {
+  piggyShouldShow, shopNeedsAttention, upgradeNeedsAttention, hireNeedsAttention,
+} from '../sim/derive.js'
+import { hiringAllowed } from '../state/locations.js'
 
 // ── Carry helpers ─────────────────────────────────────────
 
@@ -177,6 +180,56 @@ export const INTERACTIONS = {
       emit(events, EV.MINIGAME_REQUESTED, { agentId: agent.id, game: 'scrap' }),
   },
 
+  // ── Panels as places (S2) ───────────────────────────────
+  //
+  // Ordering a kit, buying an upgrade and hiring used to be buttons on a bar
+  // pinned over the game. They are objects in the room now: the same
+  // request-and-answer path the mini-games already use, so no modal had to be
+  // rewritten — only where you ask for it changed.
+  //
+  // accepts: 'player' — a hired worker has no business opening the player's
+  // shop. `repeat: false` means the panel opens once per visit, so closing it
+  // while still standing at the desk does not immediately reopen it.
+
+  // Desk with a laptop: order kits.
+  //
+  // `enabled` and `attention` differ here for the first time. You may always
+  // walk up and look at the shop — a panel that refuses to open because you are
+  // broke would just look broken. What the desk must NOT do is glow and drag
+  // the guidance arrow over when there is nothing worth buying.
+  desk: {
+    dwellMs: ZONE_DWELL_PANEL_MS,
+    repeat:  false,
+    accepts: 'player',
+    enabled: () => true,
+    attention: (world) => shopNeedsAttention(world.game),
+    run: (_world, _zone, agent, events) =>
+      emit(events, EV.PANEL_REQUESTED, { agentId: agent.id, panel: 'shop' }),
+  },
+
+  // Upgrade rack: the workshop's own kit.
+  rack: {
+    dwellMs: ZONE_DWELL_PANEL_MS,
+    repeat:  false,
+    accepts: 'player',
+    enabled: () => true,
+    attention: (world) => upgradeNeedsAttention(world.game),
+    run: (_world, _zone, agent, events) =>
+      emit(events, EV.PANEL_REQUESTED, { agentId: agent.id, panel: 'upgrade' }),
+  },
+
+  // Job board: hiring. Dark where nobody may be hired, so the player is never
+  // walked over to a board that can only say no.
+  jobboard: {
+    dwellMs: ZONE_DWELL_PANEL_MS,
+    repeat:  false,
+    accepts: 'player',
+    enabled: (world) => hiringAllowed(world.game),
+    attention: (world) => hireNeedsAttention(world.game),
+    run: (_world, _zone, agent, events) =>
+      emit(events, EV.PANEL_REQUESTED, { agentId: agent.id, panel: 'hire' }),
+  },
+
   // Piggy bank: the rescue mini-game.
   piggy: {
     dwellMs: ZONE_DWELL_INSTANT_MS,
@@ -186,6 +239,13 @@ export const INTERACTIONS = {
     run: (_world, _zone, agent, events) =>
       emit(events, EV.MINIGAME_REQUESTED, { agentId: agent.id, game: 'piggy' }),
   },
+}
+
+// Should this zone be lit up and pointed at? Defaults to "is there anything to
+// do here at all" — only the panels (S2) draw the distinction.
+export function zoneWantsAttention(def, world, zone, agent) {
+  if (!def?.enabled(world, zone, agent)) return false
+  return def.attention ? def.attention(world, zone, agent) : true
 }
 
 // The station a bench zone belongs to.

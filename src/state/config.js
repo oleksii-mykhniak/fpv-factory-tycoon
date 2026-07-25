@@ -148,6 +148,12 @@ export const ZONE_DWELL_BENCH_MS   = 1100
 // Collecting a finished drone from the output table (S1.2). Short: the walk
 // round the bench is the cost, standing still is not.
 export const ZONE_DWELL_OUTPUT_MS  = 250
+// Walking up to the laptop / rack / board (S2). Long enough that crossing the
+// room past the desk never pops a panel in your face — at full speed a
+// character clears a 150-unit zone in ~0.6 s, so anything below that fires on
+// people just walking past. Deliberately longer than that, and the objects sit
+// out of the traffic lanes as well.
+export const ZONE_DWELL_PANEL_MS   = 750
 export const ZONE_DWELL_MAILBOX_MS = 700
 export const ZONE_DWELL_TRASH_MS   = 900
 // Progress drains this many times faster than it fills when you step out, so

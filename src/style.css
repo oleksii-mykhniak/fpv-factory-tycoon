@@ -158,6 +158,12 @@ body {
   transition: background 0.1s, transform 0.1s;
 }
 
+/* S2: with only settings left on the bar, a full-width button reads as the
+   main action. It is not — it is the one thing that had nowhere to live in the
+   room, so it sits small and to the right. */
+.action-bar--single { justify-content: flex-end; }
+.action-bar--single .action-bar__btn { flex: 0 0 auto; min-width: 96px; }
+
 .action-bar__btn:active {
   background: #34345a;
   transform: scale(0.96);

@@ -231,6 +231,42 @@ describe('sim/interactions — the full loop without a single tap', () => {
     expect(w.jobs.filter(j => j.type === 'sell_drone')).toHaveLength(1)
   })
 
+  it('S2: standing at the desk asks for the shop panel', () => {
+    const w = world()
+    standAt(w, zone('desk'))
+    const events = run(w, 1500)
+    const asked = events.filter(e => e.t === EV.PANEL_REQUESTED)
+    expect(asked).toHaveLength(1)
+    expect(asked[0].panel).toBe('shop')
+  })
+
+  it('S2: the panel opens once per visit, not every second', () => {
+    const w = world()
+    standAt(w, zone('rack'))
+    const events = run(w, 6000)
+    expect(events.filter(e => e.t === EV.PANEL_REQUESTED)).toHaveLength(1)
+  })
+
+  it('S2: the job board is dead where nobody may be hired', () => {
+    // The apartment is a one-person shop, so the board must not even light up.
+    const w = world()
+    standAt(w, zone('jobboard'))
+    const events = run(w, 3000)
+    expect(events.filter(e => e.t === EV.PANEL_REQUESTED)).toHaveLength(0)
+  })
+
+  it('S2: a worker walking past the desk never opens the shop', () => {
+    const w = world()
+    const z = zone('desk')
+    w.agents.push({
+      id: 'w1', kind: 'worker', role: 'courier', x: z.cx, y: z.cy,
+      vx: 0, vy: 0, halfW: 20, halfH: 14, speed: 0, carrying: [], level: 0,
+    })
+    standAt(w, { cx: 800, cy: 700 })
+    const events = run(w, 3000)
+    expect(events.filter(e => e.t === EV.PANEL_REQUESTED)).toHaveLength(0)
+  })
+
   it('refuses to hand over a box while the bench is busy', () => {
     const w = withArrivedBox(world())
     standAt(w, zone('slot0'))

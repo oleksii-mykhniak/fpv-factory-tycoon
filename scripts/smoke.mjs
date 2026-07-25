@@ -23,6 +23,26 @@ const goTo = (zoneId) => page.evaluate((id) => {
   a.x = z.cx; a.y = z.cy
 }, zoneId)
 
+// Walks the player into a panel object's zone and waits for its modal.
+// goAway() first, because a zone only fires once per visit — standing there
+// already (from a previous step) would open nothing.
+async function openPanelAt(zoneId) {
+  await goAway()
+  await page.waitForTimeout(400)
+  await goTo(zoneId)
+  await page.waitForTimeout(900)
+}
+
+const playerPos = () => page.evaluate(() => {
+  const a = globalThis.__world.agents.find(x => x.kind === 'player')
+  return { x: a.x, y: a.y }
+})
+
+const putPlayerAt = (pos) => page.evaluate((p) => {
+  const a = globalThis.__world.agents.find(x => x.kind === 'player')
+  a.x = p.x; a.y = p.y
+}, pos)
+
 const goAway = () => page.evaluate(() => {
   const a = globalThis.__world.agents.find(x => x.kind === 'player')
   a.x = 800; a.y = 700
@@ -77,13 +97,17 @@ async function boot(seed) {
 // Ordering can legitimately be impossible — every bench busy, every slot full.
 // Returns whether the order actually went through.
 async function orderFirstKit() {
-  await page.click('#ab-shop')
-  await page.waitForTimeout(400)
+  // Since S2 the shop is a desk with a laptop: you walk up to it. Callers
+  // elsewhere in this file assume ordering does not move the player (one of
+  // them asserts exactly that), so put them back where they were afterwards.
+  const before = await playerPos()
+  await openPanelAt('desk')
   const btn = page.locator('button', { hasText: 'Замовити' }).first()
   const ok = await btn.isEnabled().catch(() => false)
   if (ok) await btn.click()
   else await page.click('#shop-close').catch(() => page.keyboard.press('Escape'))
   await page.waitForTimeout(600)
+  await putPlayerAt(before)
   return ok
 }
 
@@ -222,13 +246,14 @@ console.log('\n### F. The shop runs without the player')
 // Hiring starts at the garage — the apartment is a one-person shop (C7 fix).
 await boot(seedState({}, { money: 20000, locationId: 'garage' }))
 // Hire all three through the real UI, not by seeding state.
-await page.click('#ab-upgrade'); await page.waitForTimeout(500)
+// Hiring lives behind the job board now (S2), not in the upgrade panel.
+await openPanelAt('jobboard')
 // The garage has room for two.
 for (const role of ['courier', 'tech']) {
   await page.click(`[data-hire="${role}"]`)
   await page.waitForTimeout(400)
 }
-await page.click('#upgrade-close'); await page.waitForTimeout(300)
+await page.click('#hire-close'); await page.waitForTimeout(300)
 const fHired = await page.evaluate(() => ({
   roster: globalThis.__world.game.workers.map(w => w.role),
   agents: globalThis.__world.agents.filter(a => a.kind === 'worker').length,
@@ -303,7 +328,7 @@ const hBefore = await page.evaluate(() => ({
   slots: globalThis.__world.layout.stationSlots.length,
   grid: globalThis.__world.navGrid.cols,
 }))
-await page.click('#ab-upgrade'); await page.waitForTimeout(500)
+await openPanelAt('rack')
 await page.click('#move-btn').catch(() => {})
 await page.waitForTimeout(1500)
 const hAfter = await page.evaluate(() => {
