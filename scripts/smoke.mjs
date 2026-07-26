@@ -600,7 +600,13 @@ const nLater = await page.evaluate(() => {
   const c = w.agents.find(a => a.kind === 'cat')
   return { x: c.x, y: c.y, carrying: (c.carrying ?? []).length }
 })
-const nMoved = nStart ? Math.hypot(nLater.x - nStart.x, nLater.y - nStart.y) : 0
+// Measured against where the cat STARTS, not against a sample taken a second
+// in. boot() pins the sim's dice, so with a fixed roll the cat picks one spot,
+// walks there and stays — sampling two live positions caught it mid-sit about
+// one run in three. Displacement from its spawn is the same question, asked in
+// a way the pinned dice can answer.
+const nHome = await page.evaluate(() => globalThis.__world.layout.spawns.cat)
+const nMoved = Math.hypot(nLater.x - nHome.x, nLater.y - nHome.y)
 console.log(`  cat at (${Math.round(nStart?.x)}, ${Math.round(nStart?.y)}) moved ${nMoved.toFixed(0)} units`)
 
 // It must be incapable of touching the shop: park it in the delivery slot with

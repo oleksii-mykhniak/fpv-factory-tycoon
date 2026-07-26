@@ -34,6 +34,11 @@ export const SPRITES = Object.freeze({
     },
   },
 
+  desk:     { url: `${BASE}sprites/desk.png`,     anchors: {} },
+  rack:     { url: `${BASE}sprites/rack.png`,     anchors: {} },
+  jobboard: { url: `${BASE}sprites/jobboard.png`, anchors: {} },
+  trashbin: { url: `${BASE}sprites/trashbin.png`, anchors: {} },
+
   cat_walk: {
     url: `${BASE}sprites/cat_walk.png`,
     anchors: {},

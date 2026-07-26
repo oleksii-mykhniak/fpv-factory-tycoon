@@ -547,6 +547,72 @@ function drawArrow(pixels, w, h) {
   }
 }
 
+// ── The four objects you walk up to (V4) ────────────────────────────────────
+// Desk, rack, board and bin had no sprite at all — they were the fallback
+// rectangle the loader draws when a PNG is missing. They are also the four
+// things the game asks the player to walk over to, which made them the worst
+// possible place for a placeholder.
+
+function drawDesk(pixels, w, h) {
+  // Desk top, seen slightly from above, with a laptop open on it.
+  fillRect(pixels, w, 4, 22, w - 5, h - 8, 0x7a, 0x5c, 0x3e)
+  fillRect(pixels, w, 4, 22, w - 5, 27, 0x9a, 0x78, 0x52)          // lit front edge
+  fillRect(pixels, w, 8, h - 8, 13, h - 2, 0x5a, 0x42, 0x2c)       // legs
+  fillRect(pixels, w, w - 14, h - 8, w - 9, h - 2, 0x5a, 0x42, 0x2c)
+  // Laptop: screen leaning back, keyboard flat.
+  fillRect(pixels, w, 22, 6, 44, 22, 0x33, 0x38, 0x4a)
+  fillRect(pixels, w, 24, 8, 42, 20, 0x6e, 0xc8, 0xd8)
+  fillRect(pixels, w, 20, 22, 46, 27, 0x50, 0x56, 0x6a)
+  // A mug, because a desk with only a laptop reads as furniture, not a place.
+  fillCircle(pixels, w, w - 16, 30, 4, 0xd0, 0x6a, 0x5a)
+}
+
+function drawRack(pixels, w, h) {
+  // Upright tool rack: frame, three shelves, tools hanging.
+  fillRect(pixels, w, 3, 2, w - 4, h - 3, 0x46, 0x5a, 0x60)
+  fillRect(pixels, w, 6, 5, w - 7, h - 6, 0x2e, 0x3e, 0x44)
+  for (const y of [16, 34, 52]) {
+    fillRect(pixels, w, 6, y, w - 7, y + 3, 0x6a, 0x86, 0x8e)
+  }
+  // Tools: a spanner, a coil of solder, a couple of boxes.
+  drawLine(pixels, w, 12, 8, 12, 15, 0xc8, 0xc8, 0xd0, 2)
+  fillCircle(pixels, w, 12, 7, 3, 0xc8, 0xc8, 0xd0)
+  fillCircle(pixels, w, 24, 26, 5, 0xb0, 0xb6, 0xc0)
+  fillCircle(pixels, w, 24, 26, 2, 0x2e, 0x3e, 0x44)
+  fillRect(pixels, w, 10, 40, 20, 50, 0xc4, 0x8a, 0x40)
+  fillRect(pixels, w, 22, 42, 30, 50, 0x8a, 0xb0, 0x60)
+}
+
+function drawJobboard(pixels, w, h) {
+  // Cork board with pinned notes.
+  fillRect(pixels, w, 2, 2, w - 3, h - 3, 0x6a, 0x4c, 0x30)
+  fillRect(pixels, w, 5, 5, w - 6, h - 6, 0xb0, 0x8a, 0x5c)
+  const notes = [
+    [9, 10, 20, 24, 0xf0, 0xf0, 0xe0],
+    [24, 14, 34, 30, 0xd8, 0xe8, 0xf0],
+    [11, 32, 22, 46, 0xe8, 0xe0, 0xa0],
+    [26, 36, 36, 50, 0xf0, 0xd8, 0xd8],
+  ]
+  for (const [x1, y1, x2, y2, r, g, b] of notes) {
+    fillRect(pixels, w, x1, y1, x2, y2, r, g, b)
+    // Lines of "writing" so it reads as a notice, not a blank square.
+    for (let y = y1 + 3; y < y2 - 2; y += 4)
+      fillRect(pixels, w, x1 + 2, y, x2 - 2, y, 0x70, 0x70, 0x78)
+    fillCircle(pixels, w, Math.round((x1 + x2) / 2), y1 + 1, 1, 0xd0, 0x40, 0x40)
+  }
+}
+
+function drawTrashbin(pixels, w, h) {
+  // Bin with a lid slightly off and something sticking out.
+  fillRect(pixels, w, 8, 14, w - 9, h - 4, 0x3e, 0x56, 0x34)
+  fillRect(pixels, w, 8, 14, 13, h - 4, 0x52, 0x6e, 0x44)        // lit side
+  for (let y = 20; y < h - 6; y += 8)
+    fillRect(pixels, w, 10, y, w - 11, y + 1, 0x2c, 0x3e, 0x26)  // ribs
+  fillRect(pixels, w, 4, 8, w - 5, 14, 0x56, 0x74, 0x48)          // lid
+  fillRect(pixels, w, 22, 3, 34, 9, 0x8a, 0x8a, 0x96)            // scrap poking out
+  drawLine(pixels, w, 24, 3, 30, 8, 0xb0, 0xb0, 0xbc, 2)
+}
+
 // ── Cat (V5) ────────────────────────────────────────────────────────────────
 // Four frames: three walking, one sitting. Side-on, tiny, and the tail is the
 // part that has to read at 30 px — it is what says "cat" rather than "dog".
@@ -640,6 +706,11 @@ const sprites = [
   { name: 'arrow',            w:  32, h:  40, draw: drawArrow           },
 
   { name: 'cat_walk',         w: 160, h:  32, draw: drawCat             },
+
+  { name: 'desk',             w:  96, h:  58, draw: drawDesk            },
+  { name: 'rack',             w:  48, h:  70, draw: drawRack            },
+  { name: 'jobboard',         w:  48, h:  60, draw: drawJobboard        },
+  { name: 'trashbin',         w:  48, h:  56, draw: drawTrashbin        },
 ]
 
 for (const { name, w, h, draw } of sprites) {
