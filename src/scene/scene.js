@@ -132,8 +132,8 @@ function buildRoom(scene, layout) {
   // Tiled floors (V6). ex.TileMap rather than one actor per tile: it culls to
   // the camera, so the three-hall factory draws the dozen tiles on screen
   // instead of the thirteen hundred that exist.
-  tileFloor(scene, theme.floorTile, 0, 0, room.w, room.h, 0.2, theme.floorTint)
-  tileFloor(scene, theme.streetTile, 0, street.y, world.w, street.h, 0.2, theme.streetTint)
+  tileFloor(scene, theme.floorTile, 0, 0, room.w, room.h, 0.2)
+  tileFloor(scene, theme.streetTile, 0, street.y, world.w, street.h, 0.2)
 
   // ── Conveyor (F3) ──────────────────────────────────────
   // Drawn on the floor rather than as an obstacle: characters walk over the
@@ -154,8 +154,24 @@ function buildRoom(scene, layout) {
   }
 
   // ── Walls + door opening ───────────────────────────────
+  // Three strips, not one flat rectangle: body, a lit top edge and a shadow
+  // where the wall meets the floor. The same light every object in the game is
+  // drawn with — a flat wall next to shaded furniture is what made the room
+  // look like two different games.
+  const wallBody   = theme.wallColor  ?? '#55526e'
+  const wallEdge   = theme.wallEdge   ?? '#6b7284'
+  const wallShadow = theme.wallShadow ?? '#242232'
   for (const wall of walls) {
-    colorRect(scene, { x: wall.cx, y: wall.cy, w: wall.w, h: wall.h, hex: theme.wallColor ?? '#55557a', z: 1 })
+    colorRect(scene, { x: wall.cx, y: wall.cy, w: wall.w, h: wall.h, hex: wallBody, z: 1 })
+    const lip = Math.max(3, Math.round(Math.min(wall.w, wall.h) * 0.22))
+    if (wall.h > wall.w) {
+      // Vertical wall: light down its left face, shadow down the right.
+      colorRect(scene, { x: wall.x + lip / 2, y: wall.cy, w: lip, h: wall.h, hex: wallEdge, z: 1.01 })
+      colorRect(scene, { x: wall.x + wall.w - lip / 2, y: wall.cy, w: lip, h: wall.h, hex: wallShadow, z: 1.01 })
+    } else {
+      colorRect(scene, { x: wall.cx, y: wall.y + lip / 2, w: wall.w, h: lip, hex: wallEdge, z: 1.01 })
+      colorRect(scene, { x: wall.cx, y: wall.y + wall.h - lip / 2, w: wall.w, h: lip, hex: wallShadow, z: 1.01 })
+    }
   }
   for (const gap of doorVoids ?? []) {
     // A doorway is a hole, so it is painted with whatever is on the other side
@@ -215,10 +231,17 @@ function buildRoom(scene, layout) {
 // character height (V4), so the grid reads at the same scale as everything
 // standing on it. No-ops when the sprite is missing — the painted floor below
 // is a complete picture on its own.
-function tileFloor(scene, spriteKey, x, y, w, h, z, tintHex) {
+function tileFloor(scene, spriteKey, x, y, w, h, z) {
   if (!spriteKey) return null
-  const src = getSprite(spriteKey)
-  if (!src) return null
+
+  // Three variants per material. One tile repeated across a room reads as
+  // wallpaper — the eye finds the period immediately. The variants differ only
+  // in grain, never in base colour, so the floor still reads as one surface.
+  const variants = [0, 1, 2]
+    .map(i => getSprite(`${spriteKey}_${i}`))
+    .filter(Boolean)
+  const sources = variants.length ? variants : [getSprite(spriteKey)].filter(Boolean)
+  if (!sources.length) return null
 
   const size = TILE_U
   const map = new ex.TileMap({
@@ -230,12 +253,20 @@ function tileFloor(scene, spriteKey, x, y, w, h, z, tintHex) {
   })
   map.z = z
 
-  const sprite = src.toSprite()
-  sprite.width = size
-  sprite.height = size
-  if (tintHex) sprite.tint = ex.Color.fromHex(tintHex)
+  const sprites = sources.map(src => {
+    const s = src.toSprite()
+    s.width = size
+    s.height = size
+    return s
+  })
 
-  for (const tile of map.tiles) tile.addGraphic(sprite)
+  // Deterministic scatter: the same cell always gets the same variant, so the
+  // floor does not shimmer when the scene is rebuilt.
+  map.tiles.forEach((tile, i) => {
+    const col = i % map.columns
+    const row = Math.floor(i / map.columns)
+    tile.addGraphic(sprites[(col * 7 + row * 13) % sprites.length])
+  })
   scene.add(map)
   track(map)
   return map

@@ -76,12 +76,12 @@ const THEME = {
   wallColor:     '#7a6480',
   streetColor:   '#302430',
   pavementColor: '#463646',
-  // Plain concrete, not the striped tile: at three halls wide the stripes lined
-  // up into bands across the whole floor and read as a rendering fault.
-  floorTile:     'k_floor_concrete',
-  floorTint:     '#a892ae',
-  streetTile:    'k_asphalt',
-  streetTint:    '#8a7a90',
+  wallColor:     '#55526e',
+  wallEdge:      '#6b7284',
+  wallShadow:    '#242232',
+  doorColor:     '#7a5533',
+  floorTile:     'tile_concrete',
+  streetTile:    'tile_asphalt',
 }
 
 export function buildFactoryLayout(hallIds) {
@@ -144,8 +144,8 @@ export function buildFactoryLayout(hallIds) {
   // whole factory and the rack is the player's own business.
   const home = placed[0]
   const props = {
-    desk: { x: home.x0 + home.w - 200, y: 860, w: u(1.3), h: u(1), sprite: 'k_desk', color: '#5a4a7a' },
-    rack: { x: home.x0 + 220, y: 720, w: u(1), h: u(1.4), sprite: 'k_bookshelf', color: '#3a6a72' },
+    desk: { x: home.x0 + home.w - 200, y: 860, w: u(1.3), h: u(1), sprite: 'desk', color: '#5a4a7a' },
+    rack: { x: home.x0 + 220, y: 720, w: u(1), h: u(1.4), sprite: 'f_bookshelf', color: '#3a6a72' },
   }
 
   // A board and a post box PER HALL (F4). Both follow from binding staff to a
@@ -154,16 +154,16 @@ export function buildFactoryLayout(hallIds) {
   // factory — exactly the walk the conveyor was built to remove.
   for (const hall of placed) {
     props[`lamp_${hall.id}`] = {
-      x: hall.cx, y: 130, w: u(1), h: u(1), sprite: 'k_painting', color: '#d4c060', z: 2,
+      x: hall.cx, y: 130, w: u(1), h: u(1), sprite: 'f_painting', color: '#d4c060', z: 2,
     }
     props[`mailbox_${hall.id}`] = {
-      x: hall.x0 + 300, y: 1240, w: u(0.8), h: u(1), sprite: 'k_postbox', color: '#3a5db8',
+      x: hall.x0 + 300, y: 1240, w: u(0.8), h: u(1), sprite: 'o_postbox', color: '#3a5db8',
     }
     // Well below the rack: at y=700 the board's zone overlapped the rack's, so
     // walking up to buy an upgrade opened the hiring panel on top of it. Two
     // panels behind one spot is indistinguishable from a broken button.
     props[`jobboard_${hall.id}`] = {
-      x: hall.x0 + 150, y: 1050, w: u(1), h: u(1), sprite: 'k_mirror', color: '#7a5a3a',
+      x: hall.x0 + 150, y: 1050, w: u(1), h: u(1), sprite: 'f_painting', color: '#7a5a3a',
     }
   }
 
@@ -226,11 +226,11 @@ export function buildFactoryLayout(hallIds) {
   const T = u(1)
   const decor = placed.flatMap(hall => [
     { sprite: 'floor_mark',  x: hall.cx, y: 300, w: hall.w * 0.7, h: 8, color: '#d2c25e', z: 0.4 },
-    { sprite: 'k_pallet',    x: hall.x0 + 120, y: 1240, w: T, h: T, color: '#b58d55', z: 2, solid: true },
-    { sprite: 'k_pallet',    x: hall.x0 + 120, y: 1150, w: T, h: T, color: '#b58d55', z: 2, solid: true },
-    { sprite: 'k_crate',     x: hall.x0 + hall.w - 140, y: 250, w: T, h: T, color: '#9e7c4c', z: 2, solid: true },
-    { sprite: 'k_crate_veg', x: hall.x0 + hall.w - 220, y: 250, w: T, h: T, color: '#8a6b40', z: 2, solid: true },
-    { sprite: 'k_shelf_shop',x: hall.cx + 240, y: 120, w: T*1.4, h: T, color: '#8e8eae', z: 2, solid: true },
+    { sprite: 'f_pallet',    x: hall.x0 + 120, y: 1240, w: T, h: T, color: '#b58d55', z: 2, solid: true },
+    { sprite: 'f_pallet',    x: hall.x0 + 120, y: 1150, w: T, h: T, color: '#b58d55', z: 2, solid: true },
+    { sprite: 'f_crate',     x: hall.x0 + hall.w - 140, y: 250, w: T, h: T, color: '#9e7c4c', z: 2, solid: true },
+    { sprite: 'f_crate', x: hall.x0 + hall.w - 220, y: 250, w: T, h: T, color: '#8a6b40', z: 2, solid: true },
+    { sprite: 'o_shelf',x: hall.cx + 240, y: 120, w: T*1.4, h: T, color: '#8e8eae', z: 2, solid: true },
   ])
 
   const decorRects = decor.map((d, i) => ({

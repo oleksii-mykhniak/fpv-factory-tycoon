@@ -547,11 +547,463 @@ function drawArrow(pixels, w, h) {
   }
 }
 
+
+// ── One palette, one light, one pixel density ───────────────────────────────
+//
+// This is what makes a set of hand-drawn sprites read as ONE set rather than as
+// thirty separate drawings. It is not discipline, it is arithmetic:
+//
+//   PALETTE     every object picks from this list and nowhere else
+//   box()       every object is lit from the top-left, because only box() shades
+//   UNITS_PER_PX one world unit is always the same number of pixels
+//
+// The last one is the rule the Kenney experiment broke: their furniture was
+// drawn for a 16px character while ours is 64px, so the same physical object
+// arrived with pixels four times the size. Here every sprite declares its size
+// in WORLD UNITS and the generator derives the pixel size, so that cannot drift.
+const UNITS_PER_PX = 74 / 64   // character: 74 world units tall, 64px sprite
+
+const P = {
+  // Woods — furniture, crates, floors
+  wood:     [0xa8, 0x7c, 0x4e], woodHi:  [0xc9, 0x9c, 0x6c], woodLo: [0x7a, 0x55, 0x33],
+  // Fabric — beds, sofas, rugs
+  cloth:    [0x7d, 0x6f, 0xb0], clothHi: [0x9d, 0x8f, 0xd0], clothLo: [0x58, 0x4c, 0x82],
+  warm:     [0xc4, 0x6a, 0x62], warmHi:  [0xe0, 0x8a, 0x80], warmLo: [0x94, 0x48, 0x42],
+  // Metals — appliances, racks, poles
+  metal:    [0x9a, 0xa2, 0xb4], metalHi: [0xc2, 0xc9, 0xd6], metalLo: [0x6b, 0x72, 0x84],
+  dark:     [0x3a, 0x38, 0x4c], darkHi:  [0x55, 0x52, 0x6e], darkLo: [0x24, 0x22, 0x32],
+  // Nature
+  leaf:     [0x5c, 0xa0, 0x58], leafHi:  [0x7c, 0xc4, 0x72], leafLo: [0x3c, 0x70, 0x3c],
+  // Accents
+  accent:   [0xe0, 0xa8, 0x48], white:   [0xe8, 0xe6, 0xf0], glass:  [0x86, 0xc8, 0xd8],
+  // Floors are their own, quieter shades. Furniture wood at full saturation
+  // across a whole room turned the flat into one orange field — a floor has to
+  // sit UNDER the furniture, not compete with it.
+  fWood:    [0x7e, 0x66, 0x4e], fWoodHi: [0x8d, 0x74, 0x5a], fWoodLo: [0x6a, 0x54, 0x40],
+}
+
+// A lit box: body, brighter top edge, darker bottom edge. Every solid object in
+// the game is made of these, which is why they all agree about where the light is.
+function box(px, w, x, y, bw, bh, base, hi, lo) {
+  fillRect(px, w, x, y, x + bw - 1, y + bh - 1, ...base)
+  if (hi) fillRect(px, w, x, y, x + bw - 1, y + Math.max(0, Math.round(bh * 0.18)), ...hi)
+  if (lo) fillRect(px, w, x, y + bh - Math.max(1, Math.round(bh * 0.16)), x + bw - 1, y + bh - 1, ...lo)
+}
+
+// Evenly spaced lines — planks, slats, ribs. Horizontal by default.
+function ribs(px, w, x, y, bw, bh, step, col, vertical = false) {
+  if (vertical) {
+    for (let i = x + step; i < x + bw; i += step) fillRect(px, w, i, y, i, y + bh - 1, ...col)
+  } else {
+    for (let i = y + step; i < y + bh; i += step) fillRect(px, w, x, i, x + bw - 1, i, ...col)
+  }
+}
+
+// ── Furniture and props, all from P and box() ───────────────────────────────
+
+function drawBed(px, w, h) {
+  box(px, w, 2, 2, w - 4, h - 4, P.wood, P.woodHi, P.woodLo)          // frame
+  box(px, w, 5, 5, w - 10, Math.round(h * 0.30), P.white, null, P.metal)  // pillow
+  box(px, w, 5, Math.round(h * 0.34), w - 10, Math.round(h * 0.60), P.cloth, P.clothHi, P.clothLo)
+  ribs(px, w, 6, Math.round(h * 0.40), w - 12, Math.round(h * 0.50), 9, P.clothLo)
+}
+
+function drawSofa(px, w, h) {
+  box(px, w, 2, Math.round(h * 0.18), w - 4, Math.round(h * 0.72), P.cloth, P.clothHi, P.clothLo)
+  box(px, w, 2, 2, w - 4, Math.round(h * 0.26), P.clothLo, P.cloth, null)     // backrest
+  box(px, w, 2, Math.round(h * 0.18), 8, Math.round(h * 0.72), P.clothLo, null, null)   // arms
+  box(px, w, w - 10, Math.round(h * 0.18), 8, Math.round(h * 0.72), P.clothLo, null, null)
+  const cw = Math.round((w - 24) / 2)
+  box(px, w, 12, Math.round(h * 0.40), cw, Math.round(h * 0.38), P.clothHi, null, P.cloth)
+  box(px, w, 14 + cw, Math.round(h * 0.40), cw, Math.round(h * 0.38), P.clothHi, null, P.cloth)
+}
+
+function drawRug(px, w, h) {
+  // Quiet, and patterned rather than striped: the first version was a bright
+  // salmon block with ribs and read as a mattress lying on the floor.
+  box(px, w, 0, 0, w, h, P.warmLo, null, null)
+  box(px, w, 4, 4, w - 8, h - 8, P.warm, null, null)
+  box(px, w, 12, 12, w - 24, h - 24, P.warmLo, null, null)
+  for (let y = 16; y < h - 16; y += 12)
+    for (let x = 16; x < w - 16; x += 12)
+      fillRect(px, w, x, y, x + 3, y + 3, ...P.warmHi)
+  // Fringe on the short edges.
+  for (let x = 2; x < w - 2; x += 4) {
+    fillRect(px, w, x, 0, x + 1, 2, ...P.warmHi)
+    fillRect(px, w, x, h - 3, x + 1, h - 1, ...P.warmHi)
+  }
+}
+
+function drawTable(px, w, h) {
+  box(px, w, 2, 2, w - 4, h - 10, P.wood, P.woodHi, P.woodLo)
+  ribs(px, w, 3, 3, w - 6, h - 12, 8, P.woodLo, true)
+  fillRect(px, w, 5, h - 9, 11, h - 3, ...P.woodLo)
+  fillRect(px, w, w - 12, h - 9, w - 6, h - 3, ...P.woodLo)
+}
+
+function drawChair(px, w, h) {
+  box(px, w, Math.round(w * 0.18), 2, Math.round(w * 0.64), Math.round(h * 0.30), P.woodLo, P.wood, null)
+  box(px, w, 3, Math.round(h * 0.34), w - 6, Math.round(h * 0.44), P.wood, P.woodHi, P.woodLo)
+  fillRect(px, w, 5, h - 8, 9, h - 3, ...P.woodLo)
+  fillRect(px, w, w - 10, h - 8, w - 6, h - 3, ...P.woodLo)
+}
+
+function drawCounter(px, w, h) {
+  box(px, w, 1, 1, w - 2, h - 2, P.wood, P.woodHi, P.woodLo)
+  box(px, w, 4, 4, w - 8, Math.round(h * 0.22), P.metalHi, null, P.metal)   // worktop
+  ribs(px, w, 4, Math.round(h * 0.34), w - 8, Math.round(h * 0.56), 12, P.woodLo, true)
+  for (let i = 1; i < 3; i++)
+    fillCircle(px, w, Math.round(w * i / 3), Math.round(h * 0.62), 2, ...P.metalHi)
+}
+
+function drawStove(px, w, h) {
+  box(px, w, 1, 1, w - 2, h - 2, P.metal, P.metalHi, P.metalLo)
+  for (const [cx, cy] of [[0.30, 0.32], [0.70, 0.32], [0.30, 0.68], [0.70, 0.68]]) {
+    fillCircle(px, w, Math.round(w * cx), Math.round(h * cy), Math.round(w * 0.13), ...P.darkLo)
+    fillCircle(px, w, Math.round(w * cx), Math.round(h * cy), Math.round(w * 0.08), ...P.dark)
+  }
+}
+
+function drawSink(px, w, h) {
+  box(px, w, 1, 1, w - 2, h - 2, P.metal, P.metalHi, P.metalLo)
+  box(px, w, 6, 8, w - 12, h - 16, P.metalLo, null, null)
+  box(px, w, 9, 11, w - 18, h - 22, P.dark, null, null)
+  fillRect(px, w, Math.round(w / 2) - 1, 3, Math.round(w / 2) + 1, 9, ...P.metalHi)
+}
+
+function drawFridge(px, w, h) {
+  box(px, w, 2, 1, w - 4, h - 2, P.white, null, P.metal)
+  fillRect(px, w, 2, Math.round(h * 0.42), w - 3, Math.round(h * 0.44), ...P.metal)
+  fillRect(px, w, w - 10, Math.round(h * 0.18), w - 8, Math.round(h * 0.34), ...P.metalLo)
+  fillRect(px, w, w - 10, Math.round(h * 0.56), w - 8, Math.round(h * 0.72), ...P.metalLo)
+}
+
+function drawBookshelf(px, w, h) {
+  box(px, w, 1, 1, w - 2, h - 2, P.woodLo, P.wood, null)
+  const shelves = 3
+  for (let s = 0; s < shelves; s++) {
+    const y = 4 + Math.round((h - 8) * s / shelves)
+    const sh = Math.round((h - 8) / shelves) - 4
+    box(px, w, 4, y, w - 8, sh, P.darkLo, null, null)
+    let x = 6
+    const cols = [P.warm, P.leaf, P.glass, P.accent, P.cloth]
+    while (x < w - 9) {
+      const bw = 3 + ((x + s) % 3)
+      box(px, w, x, y + 2, bw, sh - 4, cols[(x + s) % cols.length], null, null)
+      x += bw + 1
+    }
+  }
+}
+
+function drawPainting(px, w, h) {
+  box(px, w, 1, 1, w - 2, h - 2, P.accent, null, P.woodLo)
+  box(px, w, 5, 5, w - 10, h - 10, P.glass, null, null)
+  fillCircle(px, w, Math.round(w * 0.35), Math.round(h * 0.38), Math.round(w * 0.10), ...P.white)
+  for (let x = 6; x < w - 6; x++) {
+    const y = Math.round(h * 0.68 + Math.sin(x / 5) * h * 0.06)
+    fillRect(px, w, x, y, x, h - 6, ...P.leaf)
+  }
+}
+
+function drawPlant(px, w, h) {
+  box(px, w, Math.round(w * 0.28), Math.round(h * 0.62), Math.round(w * 0.44), Math.round(h * 0.34),
+      P.warm, P.warmHi, P.warmLo)
+  for (const [dx, dy, r] of [[0.5, 0.36, 0.26], [0.32, 0.46, 0.18], [0.68, 0.46, 0.18], [0.5, 0.20, 0.16]])
+    fillCircle(px, w, Math.round(w * dx), Math.round(h * dy), Math.round(w * r), ...P.leaf)
+  fillCircle(px, w, Math.round(w * 0.44), Math.round(h * 0.30), Math.round(w * 0.12), ...P.leafHi)
+}
+
+function drawCrate(px, w, h) {
+  box(px, w, 1, 1, w - 2, h - 2, P.wood, P.woodHi, P.woodLo)
+  ribs(px, w, 2, 2, w - 4, h - 4, Math.round(h / 3), P.woodLo)
+  fillRect(px, w, 2, 2, 4, h - 3, ...P.woodLo)
+  fillRect(px, w, w - 5, 2, w - 3, h - 3, ...P.woodLo)
+}
+
+function drawPallet(px, w, h) {
+  box(px, w, 0, Math.round(h * 0.20), w, Math.round(h * 0.60), P.woodLo, null, null)
+  ribs(px, w, 0, Math.round(h * 0.20), w, Math.round(h * 0.60), 7, P.wood, true)
+  fillRect(px, w, 0, Math.round(h * 0.20), w - 1, Math.round(h * 0.28), ...P.woodHi)
+}
+
+// ── Outdoors ────────────────────────────────────────────────────────────────
+
+function drawTree(px, w, h) {
+  fillRect(px, w, Math.round(w / 2) - 3, Math.round(h * 0.62), Math.round(w / 2) + 3, h - 2, ...P.woodLo)
+  for (const [dx, dy, r] of [[0.5, 0.36, 0.34], [0.30, 0.46, 0.22], [0.70, 0.46, 0.22]])
+    fillCircle(px, w, Math.round(w * dx), Math.round(h * dy), Math.round(w * r), ...P.leafLo)
+  fillCircle(px, w, Math.round(w * 0.46), Math.round(h * 0.34), Math.round(w * 0.27), ...P.leaf)
+  fillCircle(px, w, Math.round(w * 0.40), Math.round(h * 0.28), Math.round(w * 0.14), ...P.leafHi)
+}
+
+function drawBush(px, w, h) {
+  for (const [dx, dy, r] of [[0.30, 0.60, 0.28], [0.70, 0.60, 0.28], [0.50, 0.44, 0.32]])
+    fillCircle(px, w, Math.round(w * dx), Math.round(h * dy), Math.round(w * r), ...P.leafLo)
+  fillCircle(px, w, Math.round(w * 0.44), Math.round(h * 0.44), Math.round(w * 0.20), ...P.leaf)
+  fillCircle(px, w, Math.round(w * 0.38), Math.round(h * 0.38), Math.round(w * 0.10), ...P.leafHi)
+}
+
+function drawHedge(px, w, h) {
+  box(px, w, 0, Math.round(h * 0.18), w, Math.round(h * 0.74), P.leafLo, P.leaf, null)
+  for (let x = 3; x < w - 2; x += 7)
+    fillCircle(px, w, x, Math.round(h * 0.30), 3, ...P.leaf)
+}
+
+function drawBench(px, w, h) {
+  box(px, w, 0, Math.round(h * 0.10), w, Math.round(h * 0.34), P.wood, P.woodHi, P.woodLo)
+  box(px, w, 0, Math.round(h * 0.52), w, Math.round(h * 0.30), P.wood, P.woodHi, P.woodLo)
+  fillRect(px, w, 2, Math.round(h * 0.44), 6, h - 2, ...P.metalLo)
+  fillRect(px, w, w - 7, Math.round(h * 0.44), w - 3, h - 2, ...P.metalLo)
+}
+
+function drawStreetBin(px, w, h) {
+  box(px, w, Math.round(w * 0.16), Math.round(h * 0.22), Math.round(w * 0.68), Math.round(h * 0.72),
+      P.dark, P.darkHi, P.darkLo)
+  ribs(px, w, Math.round(w * 0.20), Math.round(h * 0.30), Math.round(w * 0.60), Math.round(h * 0.56), 6, P.darkLo)
+  box(px, w, Math.round(w * 0.10), Math.round(h * 0.10), Math.round(w * 0.80), Math.round(h * 0.16),
+      P.metalLo, P.metal, null)
+}
+
+function drawPostbox(px, w, h) {
+  box(px, w, Math.round(w * 0.42), Math.round(h * 0.46), Math.round(w * 0.16), Math.round(h * 0.52),
+      P.metalLo, null, null)
+  box(px, w, Math.round(w * 0.12), Math.round(h * 0.08), Math.round(w * 0.76), Math.round(h * 0.42),
+      P.warm, P.warmHi, P.warmLo)
+  fillRect(px, w, Math.round(w * 0.24), Math.round(h * 0.24), Math.round(w * 0.76), Math.round(h * 0.28), ...P.darkLo)
+}
+
+function drawLamppost(px, w, h) {
+  fillRect(px, w, Math.round(w / 2) - 2, Math.round(h * 0.18), Math.round(w / 2) + 2, h - 2, ...P.metalLo)
+  fillRect(px, w, Math.round(w / 2) - 5, h - 4, Math.round(w / 2) + 5, h - 2, ...P.dark)
+  box(px, w, Math.round(w * 0.18), 2, Math.round(w * 0.64), Math.round(h * 0.18), P.metal, P.metalHi, null)
+  fillCircle(px, w, Math.round(w / 2), Math.round(h * 0.12), Math.round(w * 0.18), ...P.accent)
+}
+
+function drawHydrant(px, w, h) {
+  box(px, w, Math.round(w * 0.30), Math.round(h * 0.26), Math.round(w * 0.40), Math.round(h * 0.62),
+      P.warm, P.warmHi, P.warmLo)
+  fillCircle(px, w, Math.round(w / 2), Math.round(h * 0.24), Math.round(w * 0.22), ...P.warmHi)
+  fillRect(px, w, Math.round(w * 0.14), Math.round(h * 0.44), Math.round(w * 0.86), Math.round(h * 0.52), ...P.warmLo)
+  fillRect(px, w, Math.round(w * 0.20), h - 5, Math.round(w * 0.80), h - 2, ...P.dark)
+}
+
+function drawBarrier(px, w, h) {
+  box(px, w, 0, Math.round(h * 0.24), w, Math.round(h * 0.34), P.white, null, P.metal)
+  for (let x = 0; x < w; x += 10)
+    fillRect(px, w, x, Math.round(h * 0.24), x + 4, Math.round(h * 0.58), ...P.warm)
+  fillRect(px, w, 3, Math.round(h * 0.58), 7, h - 2, ...P.metalLo)
+  fillRect(px, w, w - 8, Math.round(h * 0.58), w - 4, h - 2, ...P.metalLo)
+}
+
+function drawBicycle(px, w, h) {
+  const r = Math.round(h * 0.30)
+  for (const cx of [Math.round(w * 0.24), Math.round(w * 0.76)]) {
+    fillCircle(px, w, cx, Math.round(h * 0.62), r, ...P.dark)
+    fillCircle(px, w, cx, Math.round(h * 0.62), r - 3, ...P.metalLo)
+    fillCircle(px, w, cx, Math.round(h * 0.62), 2, ...P.metalHi)
+  }
+  drawLine(px, w, Math.round(w * 0.24), Math.round(h * 0.62), Math.round(w * 0.52), Math.round(h * 0.34), ...P.glass, 3)
+  drawLine(px, w, Math.round(w * 0.52), Math.round(h * 0.34), Math.round(w * 0.76), Math.round(h * 0.62), ...P.glass, 3)
+  drawLine(px, w, Math.round(w * 0.34), Math.round(h * 0.30), Math.round(w * 0.58), Math.round(h * 0.30), ...P.glass, 2)
+}
+
+function drawCar(px, w, h) {
+  box(px, w, Math.round(w * 0.10), 2, Math.round(w * 0.80), h - 4, P.warm, P.warmHi, P.warmLo)
+  box(px, w, Math.round(w * 0.18), Math.round(h * 0.16), Math.round(w * 0.64), Math.round(h * 0.22), P.glass, null, null)
+  box(px, w, Math.round(w * 0.18), Math.round(h * 0.64), Math.round(w * 0.64), Math.round(h * 0.20), P.glass, null, null)
+  for (const y of [Math.round(h * 0.20), Math.round(h * 0.70)]) {
+    fillRect(px, w, Math.round(w * 0.02), y, Math.round(w * 0.12), y + Math.round(h * 0.12), ...P.dark)
+    fillRect(px, w, Math.round(w * 0.88), y, Math.round(w * 0.98), y + Math.round(h * 0.12), ...P.dark)
+  }
+}
+
+function drawVending(px, w, h) {
+  box(px, w, 1, 1, w - 2, h - 2, P.metalLo, P.metal, P.darkLo)
+  box(px, w, 5, 5, Math.round(w * 0.60), h - 12, P.dark, null, null)
+  const cols = [P.warm, P.leaf, P.glass, P.accent]
+  for (let r = 0; r < 3; r++)
+    for (let c = 0; c < 3; c++)
+      box(px, w, 7 + c * 6, 8 + r * Math.round((h - 18) / 3), 4, 5, cols[(r + c) % 4], null, null)
+  box(px, w, Math.round(w * 0.70), 8, Math.round(w * 0.22), Math.round(h * 0.30), P.glass, null, null)
+}
+
+function drawShopShelf(px, w, h) {
+  box(px, w, 0, Math.round(h * 0.10), w, Math.round(h * 0.82), P.metalLo, P.metal, P.darkLo)
+  for (let r = 0; r < 2; r++) {
+    const y = Math.round(h * 0.18) + r * Math.round(h * 0.34)
+    fillRect(px, w, 2, y + Math.round(h * 0.24), w - 3, y + Math.round(h * 0.28), ...P.metalHi)
+    const cols = [P.warm, P.leaf, P.accent, P.glass, P.cloth]
+    for (let c = 0; c * 9 + 4 < w - 6; c++)
+      box(px, w, 4 + c * 9, y, 7, Math.round(h * 0.22), cols[(c + r) % cols.length], null, null)
+  }
+}
+
+// ── Floors ──────────────────────────────────────────────────────────────────
+// Tiled edge to edge, so they must look right against a copy of themselves:
+// the seam is drawn on two sides only, never four.
+
+// Floor variants. One tile repeated across a whole room reads as wallpaper, so
+// each material gets three, and the tile map picks between them per cell. The
+// variation is in the grain, never in the base colour — a floor that changes
+// shade looks like a rendering fault, not like a floor.
+function woodVariant(seed) {
+  return (px, w, h) => {
+    box(px, w, 0, 0, w, h, P.fWood, null, null)
+    const plank = Math.round(h / 3)
+    ribs(px, w, 0, 0, w, h, plank, P.fWoodLo)
+    // Staggered end-joints, moved by the seed so neighbours do not line up.
+    for (let i = 0; i < 3; i++) {
+      const x = Math.round(w * (0.2 + ((i * 7 + seed * 3) % 10) / 14))
+      const y = i * plank
+      fillRect(px, w, x, y + 1, x, y + plank - 1, ...P.fWoodLo)
+    }
+    // A few grain streaks.
+    for (let i = 0; i < 4; i++) {
+      const x = ((i * 13 + seed * 5) % (w - 8)) + 4
+      const y = ((i * 9 + seed * 7) % h)
+      fillRect(px, w, x, y, x + 3, y, ...P.fWoodHi)
+    }
+  }
+}
+
+function concreteVariant(seed) {
+  return (px, w, h) => {
+    box(px, w, 0, 0, w, h, P.metalLo, null, null)
+    fillRect(px, w, 0, 0, w - 1, 0, ...P.metal)
+    fillRect(px, w, 0, 0, 0, h - 1, ...P.metal)
+    for (let i = 0; i < 7; i++) {
+      const x = ((i * 29 + seed * 11) % (w - 4)) + 2
+      const y = ((i * 19 + seed * 7) % (h - 4)) + 2
+      fillRect(px, w, x, y, x + (i % 2), y, ...P.darkLo)
+    }
+    if (seed === 2) drawLine(px, w, 4, h - 8, w - 6, h - 12, ...P.metal, 1)
+  }
+}
+
+function asphaltVariant(seed) {
+  return (px, w, h) => {
+    box(px, w, 0, 0, w, h, P.dark, null, null)
+    fillRect(px, w, 0, 0, w - 1, 0, ...P.darkHi)
+    for (let i = 0; i < 10; i++) {
+      const x = ((i * 23 + seed * 13) % (w - 2)) + 1
+      const y = ((i * 31 + seed * 5) % (h - 2)) + 1
+      fillRect(px, w, x, y, x, y, ...(i % 3 ? P.darkHi : P.metalLo))
+    }
+  }
+}
+
+// ── Walls ───────────────────────────────────────────────────────────────────
+// Painted flat until now, in a colour picked by hand per location — which is
+// exactly why they never matched the floor. Same palette, same light: a body,
+// a lit top edge, a shadow where they meet the floor.
+function wallTile(px, w, h) {
+  box(px, w, 0, 0, w, h, P.darkHi, null, null)
+  fillRect(px, w, 0, 0, w - 1, Math.max(1, Math.round(h * 0.14)), ...P.metalLo)
+  fillRect(px, w, 0, h - Math.max(1, Math.round(h * 0.18)), w - 1, h - 1, ...P.darkLo)
+  // Brick courses, offset row to row.
+  const course = Math.max(4, Math.round(h / 4))
+  for (let y = course; y < h - 2; y += course) {
+    fillRect(px, w, 0, y, w - 1, y, ...P.dark)
+    for (let x = ((y / course) % 2) * Math.round(w / 4); x < w; x += Math.round(w / 2))
+      fillRect(px, w, x, y, x, Math.min(h - 1, y + course - 1), ...P.dark)
+  }
+}
+
+// A doorway: the floor shows through, with a threshold and a lit frame either
+// side so the opening reads as a way through rather than as a hole.
+function doorTile(px, w, h) {
+  box(px, w, 0, 0, w, h, P.woodLo, null, null)
+  fillRect(px, w, 0, 0, w - 1, Math.max(1, Math.round(h * 0.12)), ...P.wood)
+  fillRect(px, w, 0, h - Math.max(1, Math.round(h * 0.12)), w - 1, h - 1, ...P.darkLo)
+  const frame = Math.max(2, Math.round(w * 0.08))
+  fillRect(px, w, 0, 0, frame, h - 1, ...P.metalLo)
+  fillRect(px, w, w - 1 - frame, 0, w - 1, h - 1, ...P.metalLo)
+}
+
+function drawFloorWood(px, w, h) {
+  box(px, w, 0, 0, w, h, P.wood, null, null)
+  ribs(px, w, 0, 0, w, h, Math.round(h / 3), P.woodLo)
+  for (let y = 0; y < h; y += Math.round(h / 3))
+    fillRect(px, w, Math.round(w * ((y / h) % 1 < 0.34 ? 0.55 : 0.25)), y,
+             Math.round(w * ((y / h) % 1 < 0.34 ? 0.56 : 0.26)), y + Math.round(h / 3) - 1, ...P.woodLo)
+}
+
+function drawFloorConcrete(px, w, h) {
+  box(px, w, 0, 0, w, h, P.metalLo, null, null)
+  fillRect(px, w, 0, 0, w - 1, 0, ...P.metal)
+  fillRect(px, w, 0, 0, 0, h - 1, ...P.metal)
+  for (let i = 0; i < 5; i++) {
+    const x = (i * 37) % (w - 4) + 2
+    const y = (i * 23) % (h - 4) + 2
+    fillRect(px, w, x, y, x + 1, y, ...P.darkLo)
+  }
+}
+
+function drawAsphalt(px, w, h) {
+  box(px, w, 0, 0, w, h, P.dark, null, null)
+  fillRect(px, w, 0, 0, w - 1, 0, ...P.darkHi)
+  for (let i = 0; i < 7; i++) {
+    const x = (i * 29) % (w - 2) + 1
+    const y = (i * 17) % (h - 2) + 1
+    fillRect(px, w, x, y, x, y, ...P.darkHi)
+  }
+}
+
 // ── The four objects you walk up to (V4) ────────────────────────────────────
 // Desk, rack, board and bin had no sprite at all — they were the fallback
 // rectangle the loader draws when a PNG is missing. They are also the four
 // things the game asks the player to walk over to, which made them the worst
 // possible place for a placeholder.
+
+function drawDesk2(px, w, h) {
+  box(px, w, 2, Math.round(h * 0.22), w - 4, Math.round(h * 0.60), P.wood, P.woodHi, P.woodLo)
+  ribs(px, w, 3, Math.round(h * 0.24), w - 6, Math.round(h * 0.56), 10, P.woodLo, true)
+  fillRect(px, w, 6, Math.round(h * 0.82), 12, h - 3, ...P.woodLo)
+  fillRect(px, w, w - 13, Math.round(h * 0.82), w - 7, h - 3, ...P.woodLo)
+  // Laptop: screen up, keyboard flat, lit from the top-left like everything else.
+  box(px, w, Math.round(w * 0.30), 3, Math.round(w * 0.30), Math.round(h * 0.24), P.dark, P.darkHi, null)
+  box(px, w, Math.round(w * 0.32), 5, Math.round(w * 0.26), Math.round(h * 0.18), P.glass, null, null)
+  box(px, w, Math.round(w * 0.27), Math.round(h * 0.26), Math.round(w * 0.36), Math.round(h * 0.06), P.metalLo, P.metal, null)
+  fillCircle(px, w, Math.round(w * 0.80), Math.round(h * 0.36), 4, ...P.warm)
+}
+
+function drawRack2(px, w, h) {
+  box(px, w, 1, 1, w - 2, h - 2, P.metalLo, P.metal, P.darkLo)
+  for (let s = 0; s < 3; s++) {
+    const y = 5 + Math.round((h - 10) * s / 3)
+    const sh = Math.round((h - 10) / 3) - 4
+    box(px, w, 4, y, w - 8, sh, P.darkLo, null, null)
+    fillRect(px, w, 4, y + sh, w - 5, y + sh + 1, ...P.metalHi)
+  }
+  fillCircle(px, w, Math.round(w * 0.35), Math.round(h * 0.20), 4, ...P.metalHi)
+  fillCircle(px, w, Math.round(w * 0.35), Math.round(h * 0.20), 2, ...P.darkLo)
+  box(px, w, Math.round(w * 0.20), Math.round(h * 0.48), Math.round(w * 0.24), Math.round(h * 0.12), P.accent, null, null)
+  box(px, w, Math.round(w * 0.52), Math.round(h * 0.48), Math.round(w * 0.24), Math.round(h * 0.12), P.leaf, null, null)
+  box(px, w, Math.round(w * 0.28), Math.round(h * 0.76), Math.round(w * 0.40), Math.round(h * 0.12), P.warm, null, null)
+}
+
+function drawJobboard2(px, w, h) {
+  box(px, w, 1, 1, w - 2, h - 2, P.woodLo, P.wood, null)
+  box(px, w, 5, 5, w - 10, h - 10, P.wood, null, P.woodLo)
+  const notes = [[8, 9, 0.42, 0.34], [Math.round(w * 0.52), 12, 0.38, 0.30],
+                 [9, Math.round(h * 0.52), 0.40, 0.34], [Math.round(w * 0.50), Math.round(h * 0.58), 0.38, 0.30]]
+  for (const [x, y, fw, fh] of notes) {
+    const nw = Math.round(w * fw), nh = Math.round(h * fh)
+    box(px, w, x, y, nw, nh, P.white, null, P.metal)
+    for (let ly = y + 3; ly < y + nh - 2; ly += 4)
+      fillRect(px, w, x + 2, ly, x + nw - 3, ly, ...P.metalLo)
+    fillCircle(px, w, x + Math.round(nw / 2), y + 1, 1, ...P.warm)
+  }
+}
+
+function drawTrashbin2(px, w, h) {
+  box(px, w, Math.round(w * 0.14), Math.round(h * 0.22), Math.round(w * 0.72), Math.round(h * 0.72),
+      P.leafLo, P.leaf, P.darkLo)
+  ribs(px, w, Math.round(w * 0.18), Math.round(h * 0.30), Math.round(w * 0.64), Math.round(h * 0.56), 7, P.darkLo)
+  box(px, w, Math.round(w * 0.08), Math.round(h * 0.08), Math.round(w * 0.84), Math.round(h * 0.16),
+      P.leaf, P.leafHi, null)
+  fillRect(px, w, Math.round(w * 0.44), 2, Math.round(w * 0.68), Math.round(h * 0.10), ...P.metalHi)
+}
 
 function drawDesk(pixels, w, h) {
   // Desk top, seen slightly from above, with a laptop open on it.
@@ -707,11 +1159,69 @@ const sprites = [
 
   { name: 'cat_walk',         w: 160, h:  32, draw: drawCat             },
 
-  { name: 'desk',             w:  96, h:  58, draw: drawDesk            },
-  { name: 'rack',             w:  48, h:  70, draw: drawRack            },
-  { name: 'jobboard',         w:  48, h:  60, draw: drawJobboard        },
-  { name: 'trashbin',         w:  48, h:  56, draw: drawTrashbin        },
+  // Redrawn from the shared palette (V6): the first pass at these four used
+  // their own colours and stood out against everything drawn since.
+  { name: 'desk',             w: 104, h:  64, draw: drawDesk2           },
+  { name: 'rack',             w:  56, h:  80, draw: drawRack2           },
+  { name: 'jobboard',         w:  56, h:  64, draw: drawJobboard2       },
+  { name: 'trashbin',         w:  48, h:  58, draw: drawTrashbin2       },
 ]
+
+// Sprites whose size is declared in WORLD UNITS. The generator converts, so
+// every one of them lands at the same pixel density as the character (V6).
+const T = 74   // one character height
+const worldSprites = [
+  { name: 'f_bed',       wu: T * 1.0, hu: T * 1.9, draw: drawBed },
+  { name: 'f_sofa',      wu: T * 1.9, hu: T * 0.9, draw: drawSofa },
+  { name: 'f_rug',       wu: T * 2.4, hu: T * 1.6, draw: drawRug },
+  { name: 'f_table',     wu: T * 1.7, hu: T * 0.9, draw: drawTable },
+  { name: 'f_chair',     wu: T * 0.7, hu: T * 0.8, draw: drawChair },
+  { name: 'f_counter',   wu: T * 1.0, hu: T * 0.9, draw: drawCounter },
+  { name: 'f_stove',     wu: T * 0.9, hu: T * 0.9, draw: drawStove },
+  { name: 'f_sink',      wu: T * 0.9, hu: T * 0.9, draw: drawSink },
+  { name: 'f_fridge',    wu: T * 0.8, hu: T * 1.2, draw: drawFridge },
+  { name: 'f_bookshelf', wu: T * 1.0, hu: T * 1.3, draw: drawBookshelf },
+  { name: 'f_painting',  wu: T * 0.9, hu: T * 0.7, draw: drawPainting },
+  { name: 'f_plant',     wu: T * 0.7, hu: T * 0.9, draw: drawPlant },
+  { name: 'f_crate',     wu: T * 0.8, hu: T * 0.8, draw: drawCrate },
+  { name: 'f_pallet',    wu: T * 1.0, hu: T * 0.7, draw: drawPallet },
+
+  { name: 'o_tree',      wu: T * 1.2, hu: T * 1.4, draw: drawTree },
+  { name: 'o_bush',      wu: T * 0.9, hu: T * 0.8, draw: drawBush },
+  { name: 'o_hedge',     wu: T * 1.4, hu: T * 0.6, draw: drawHedge },
+  { name: 'o_bench',     wu: T * 1.2, hu: T * 0.7, draw: drawBench },
+  { name: 'o_bin',       wu: T * 0.7, hu: T * 0.9, draw: drawStreetBin },
+  { name: 'o_postbox',   wu: T * 0.7, hu: T * 1.0, draw: drawPostbox },
+  { name: 'o_lamppost',  wu: T * 0.6, hu: T * 1.5, draw: drawLamppost },
+  { name: 'o_hydrant',   wu: T * 0.5, hu: T * 0.7, draw: drawHydrant },
+  { name: 'o_barrier',   wu: T * 1.2, hu: T * 0.6, draw: drawBarrier },
+  { name: 'o_bicycle',   wu: T * 1.0, hu: T * 0.7, draw: drawBicycle },
+  { name: 'o_car',       wu: T * 1.0, hu: T * 1.8, draw: drawCar },
+  { name: 'o_vending',   wu: T * 0.8, hu: T * 1.1, draw: drawVending },
+  { name: 'o_shelf',     wu: T * 1.6, hu: T * 1.0, draw: drawShopShelf },
+
+  { name: 'tile_wood_0',     wu: T, hu: T, draw: woodVariant(0) },
+  { name: 'tile_wood_1',     wu: T, hu: T, draw: woodVariant(1) },
+  { name: 'tile_wood_2',     wu: T, hu: T, draw: woodVariant(2) },
+  { name: 'tile_concrete_0', wu: T, hu: T, draw: concreteVariant(0) },
+  { name: 'tile_concrete_1', wu: T, hu: T, draw: concreteVariant(1) },
+  { name: 'tile_concrete_2', wu: T, hu: T, draw: concreteVariant(2) },
+  { name: 'tile_asphalt_0',  wu: T, hu: T, draw: asphaltVariant(0) },
+  { name: 'tile_asphalt_1',  wu: T, hu: T, draw: asphaltVariant(1) },
+  { name: 'tile_asphalt_2',  wu: T, hu: T, draw: asphaltVariant(2) },
+
+  { name: 'wall_tile', wu: T, hu: T, draw: wallTile },
+  { name: 'door_tile', wu: T, hu: T, draw: doorTile },
+]
+
+for (const s of worldSprites) {
+  sprites.push({
+    name: s.name,
+    w: Math.round(s.wu / UNITS_PER_PX),
+    h: Math.round(s.hu / UNITS_PER_PX),
+    draw: s.draw,
+  })
+}
 
 for (const { name, w, h, draw } of sprites) {
   const path = `public/sprites/${name}.png`
