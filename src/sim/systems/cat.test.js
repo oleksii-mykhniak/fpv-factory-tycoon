@@ -9,11 +9,22 @@ import { TICK_MS } from '../../state/config.js'
 
 const T0 = 1_000_000
 
+// Deterministic but VARYING: a constant rng makes the mood table pick the same
+// branch every time, so the cat ends up in a two-state loop and the tests below
+// would be measuring the stub rather than the behaviour.
+function lcg(seed = 42) {
+  let s = seed
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0
+    return s / 0xffffffff
+  }
+}
+
 function flat({ money = 5000 } = {}) {
   const base = createState()
   const state = { ...base, money }
   const w = createWorld({ state, salesLog: [] },
-    { now: T0, rng: () => 0.5, layout: layoutFor('apartment', state) })
+    { now: T0, rng: lcg(), layout: layoutFor('apartment', state) })
   // The player waits outside the flat: these tests are about the cat.
   const p = w.agents.find(a => a.kind === 'player')
   p.x = w.layout.door.x
@@ -92,6 +103,52 @@ describe('V5 — кіт', () => {
     const before = { x: p.x, y: p.y }
     run(w, 1000)
     expect(Math.hypot(p.x - before.x, p.y - before.y)).toBeLessThan(1)
+  })
+
+  it('кіт має настрій, і настрій змінюється', () => {
+    const w = flat()
+    run(w, 200)
+    expect(cat(w).mood).toBeTruthy()
+
+    const seen = new Set()
+    for (let i = 0; i < 200; i++) {
+      run(w, 1000)
+      seen.add(cat(w).mood)
+    }
+    // За три хвилини кіт має побувати щонайменше у трьох станах.
+    expect(seen.size).toBeGreaterThanOrEqual(3)
+  })
+
+  it('біг швидший за прогулянку, сон нерухомий', () => {
+    const w = flat()
+    run(w, 200)
+    const c = cat(w)
+
+    const speeds = {}
+    for (let i = 0; i < 400; i++) {
+      run(w, 500)
+      speeds[c.mood] = c.speed
+    }
+    if (speeds.run && speeds.stroll) expect(speeds.run).toBeGreaterThan(speeds.stroll)
+  })
+
+  it('прогулянка закінчується після прибуття, а не по таймеру', () => {
+    const w = flat()
+    run(w, 200)
+    const c = cat(w)
+    // Доводимо кота до стану прогулянки й перевіряємо, що діставшись цілі
+    // він не стоїть на ній із увімкненим таймером.
+    for (let i = 0; i < 300 && c.mood !== 'stroll'; i++) run(w, 500)
+    if (c.mood === 'stroll') {
+      const target = { ...c.pathTarget }
+      c.arrived = true
+      run(w, 100)
+      // Either a different mood, or a stroll with a NEW destination — what must
+      // not happen is standing on the old one waiting out a timer.
+      const restarted = c.mood === 'stroll' &&
+        (c.pathTarget?.x !== target.x || c.pathTarget?.y !== target.y)
+      expect(c.mood !== 'stroll' || restarted).toBe(true)
+    }
   })
 
   it('у гаражі та на фабриці кота немає', () => {

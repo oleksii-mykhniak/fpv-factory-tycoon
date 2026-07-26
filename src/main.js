@@ -7,7 +7,7 @@ import {
 import { ADS_ENABLED, SCRAP_CONSOLATION, INPUT_DEADZONE } from './state/config.js'
 import { levelData } from './state/upgrades.js'
 import { currentLocation } from './state/locations.js'
-import { setMuted } from './audio/sfx.js'
+import { setMuted, unlockAudio } from './audio/sfx.js'
 import { showRewarded, PLACEMENTS } from './monetization/ads.js'
 
 import { layoutFor } from './defs/layouts/index.js'
@@ -371,6 +371,14 @@ function renderUI() {
 }
 
 // ── Onboarding ────────────────────────────────────────────
+
+// The browser will not play a sound until the player has interacted with the
+// page. Most of what makes noise here is triggered by walking into a zone, not
+// by pressing a button, so the unlock hangs off the first input of any kind
+// rather than off a command.
+for (const evt of ['pointerdown', 'keydown', 'touchstart']) {
+  window.addEventListener(evt, () => unlockAudio(), { once: true, passive: true })
+}
 
 const onboardingEl = document.createElement('div')
 onboardingEl.id = 'onboarding'

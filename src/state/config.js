@@ -189,15 +189,35 @@ export const WANDER_RADIUS   = u(1.6)
 export const WANDER_PAUSE_MS = 2600
 
 // ── The cat (V5) ─────────────────────────────────────────
-// Slower than everybody: it is not going anywhere in particular.
-export const CAT_SPEED         = 110
+// A cat is not a slow worker: it has moods, and most of them are stationary.
+// Each state picks the next one from CAT_MOODS, so behaviour is a table rather
+// than a pile of conditions — the same shape as defs/tasks.js.
+export const CAT_SPEED       = 110    // strolling
+export const CAT_RUN_SPEED   = 280    // faster than the player: a cat sprint is a joke, not a chase
 export const CAT_WANDER_RADIUS = u(4)
-// Sitting is most of what a cat does. A constantly moving one reads as a bug.
-export const CAT_SIT_MS         = 7000
-export const CAT_STROLL_PAUSE_MS = 2200
-// Now and then it decides the player is worth following.
-export const CAT_FOLLOW_CHANCE = 0.18
-export const CAT_FOLLOW_MS     = 4000
+export const CAT_ROAM_RADIUS   = u(9)   // where a run can take it
+
+// How long each mood lasts, in ms [min, max].
+export const CAT_MOOD_MS = {
+  sit:    [3000, 9000],
+  sleep:  [12000, 26000],
+  groom:  [3000, 6000],
+  stroll: [1200, 2600],
+  run:    [900, 1800],
+  follow: [3000, 6000],
+}
+
+// What a mood turns into next, as weights. Sleep is sticky, running is not:
+// a cat that sprints twice in a row looks broken, one that sleeps twice does
+// not look like anything at all.
+export const CAT_MOODS = {
+  sit:    { stroll: 4, groom: 3, sleep: 2, run: 1, follow: 1 },
+  sleep:  { sleep: 3, sit: 4, groom: 2 },
+  groom:  { sit: 4, stroll: 3, sleep: 2 },
+  stroll: { sit: 5, stroll: 2, groom: 2, run: 1, follow: 1 },
+  run:    { sit: 6, stroll: 3 },
+  follow: { sit: 4, stroll: 3, groom: 1 },
+}
 
 // ── Navigation (C4) ──────────────────────────────────────
 // Grid cell size. Smaller = more accurate paths and a more expensive search;

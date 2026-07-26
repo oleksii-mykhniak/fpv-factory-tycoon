@@ -50,7 +50,7 @@ export function createEffects({
       if (reason === 'abandoned') { playSfx('sell'); haptic('medium') }
     },
 
-    [EV.PIGGY_COLLECTED]: () => haptic('light'),
+    [EV.PIGGY_COLLECTED]: () => { playSfx('piggy'); haptic('light') },
 
     // ── Trigger zones (C2) ───────────────────────────────
     [EV.ITEM_PICKED]:  () => haptic('light'),

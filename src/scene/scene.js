@@ -561,6 +561,24 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
       actor, boxOpen, drone,
       pulse:    addPulse(actor),
       progress: createBenchProgress(scene, actor),
+      // Said out loud over the bench when a kit burns. The modal that used to
+      // explain it closes itself, and a smoking drone with no words next to it
+      // reads as "the game broke", not as "that one is scrap".
+      burntLabel: (() => {
+        const lbl = new ex.Label({
+          text: '',
+          pos:  ex.vec(actor.pos.x, actor.pos.y - actor.height / 2 - 34),
+          z: 27,
+          color: ex.Color.fromHex('#ff9a6a'),
+          font: new ex.Font({
+            family: 'monospace', size: 13, unit: ex.FontUnit.Px,
+            textAlign: ex.TextAlign.Center, baseAlign: ex.BaseAlign.Middle,
+          }),
+        })
+        lbl.graphics.visible = false
+        scene.add(track(lbl))
+        return lbl
+      })(),
       workSpot: placed.workSpot,
       surface:  placed.surface,
       outSpot:  placed.outSpot,
@@ -870,20 +888,33 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
   scene.add(track(catActor))
   catActor.graphics.visible = false
 
+  // One graphic per mood (V5). The sheet is four walk frames then sit, sleep
+  // and groom; running is the walk cycle played faster, which is enough of a
+  // difference at this size and costs no extra art.
   const catImage = getSprite('cat_walk')
   let catAnim = null
   if (catImage) {
     const sheet = ex.SpriteSheet.fromImageSource({
       image: catImage,
-      grid: { rows: 1, columns: 5, spriteWidth: 32, spriteHeight: 32 },
+      grid: { rows: 1, columns: 7, spriteWidth: 32, spriteHeight: 32 },
     })
     const scale = ex.vec(catActor.width / 32, catActor.height / 32)
-    const walk = ex.Animation.fromSpriteSheet(sheet, [0, 1, 2, 3], 160)
-    const sit  = ex.Animation.fromSpriteSheet(sheet, [4], 1000)
-    walk.scale = scale
-    sit.scale  = scale
-    catActor.graphics.use(sit)
-    catAnim = { walk, sit, current: 'sit' }
+    const make = (frames, ms) => {
+      const a = ex.Animation.fromSpriteSheet(sheet, frames, ms)
+      a.scale = scale
+      return a
+    }
+    catAnim = {
+      stroll: make([0, 1, 2, 3], 170),
+      run:    make([0, 1, 2, 3], 80),
+      follow: make([0, 1, 2, 3], 140),
+      sit:    make([4], 1000),
+      sleep:  make([5], 1000),
+      groom:  make([6], 1000),
+      current: null,
+    }
+    catActor.graphics.use(catAnim.sit)
+    catAnim.current = 'sit'
   }
 
   catActor.on('preupdate', () => { catActor.z = catActor.pos.y * 0.01 })

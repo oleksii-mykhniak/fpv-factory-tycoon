@@ -388,9 +388,25 @@ await page.evaluate(() => {
       i === 0 ? { ...s, phase: 'BURNT', kitId: 'mini_drone' } : s),
   }
 })
+// The label has to appear BEFORE anyone clears it: it is the only explanation
+// the player gets that the drone burnt (A2 / V6).
+await page.waitForTimeout(600)
+const iBurntLabel = await page.evaluate(() => {
+  const v = globalThis.__refs.stations?.[0]
+  return { visible: v?.burntLabel?.graphics?.visible ?? false, text: v?.burntLabel?.text ?? '' }
+})
+console.log(`  burnt label: "${iBurntLabel.text}" (visible ${iBurntLabel.visible})`)
+
 await goTo('zone-station-0')
 await page.waitForTimeout(2500)
 const iCleared = await log('stood at the burnt bench')
+const iSounds = await page.evaluate(async () => {
+  const a = new Audio('/audio/sell.wav')
+  await new Promise(r => { a.addEventListener('loadedmetadata', r, { once: true })
+                           a.addEventListener('error', r, { once: true }); setTimeout(r, 1200) })
+  return { duration: a.duration || 0 }
+})
+console.log(`  sell.wav duration: ${iSounds.duration}`)
 
 // ── J. A hall is a floor plan, and opening one grows the map (F2) ──
 console.log('\n### J. Opening a factory hall')
@@ -607,6 +623,17 @@ const nLater = await page.evaluate(() => {
 // a way the pinned dice can answer.
 const nHome = await page.evaluate(() => globalThis.__world.layout.spawns.cat)
 const nMoved = Math.hypot(nLater.x - nHome.x, nLater.y - nHome.y)
+
+// Moods (V5): over half a minute the cat should be seen in more than one.
+// boot() pins the dice, so the sequence is fixed — that is the point: a fixed
+// roll must still produce a cat that changes what it is doing.
+const nMoods = new Set()
+for (let i = 0; i < 40; i++) {
+  nMoods.add(await page.evaluate(() =>
+    globalThis.__world.agents.find(a => a.kind === 'cat')?.mood ?? '?'))
+  await page.waitForTimeout(700)
+}
+console.log(`  moods seen: ${[...nMoods].join(', ')}`)
 console.log(`  cat at (${Math.round(nStart?.x)}, ${Math.round(nStart?.y)}) moved ${nMoved.toFixed(0)} units`)
 
 // It must be incapable of touching the shop: park it in the delivery slot with
@@ -760,6 +787,8 @@ const checks = [
   ['I: the factory opens with one hall of benches', iScene.stations === 2],
   ['I: an old "workshop" save lands in the factory', iMigrated === 'factory'],
   ['I: a burnt kit can be cleared on foot', iCleared.phase === 'IDLE'],
+  ['I: the bench says the kit burnt',      iBurntLabel.visible && iBurntLabel.text.includes('Згорів')],
+  ['I: sound files are actually there',    iSounds.duration > 0],
   ['J: the hall actually opened',         jAfter.halls === jBefore.halls + 1],
   ['J: the map got wider',                jAfter.world > jBefore.world],
   ['J: the hall brought its own benches', jAfter.stations > jBefore.stations],
@@ -790,6 +819,7 @@ const checks = [
   ['M: every sale is timestamped',       mAfter.logged > 0 && mAfter.stamped],
   ['N: there is a cat in the flat',      nStart !== null && nStart.visible],
   ['N: it wanders on its own',           nMoved > 20],
+  ['N: it has more than one thing to do', nMoods.size >= 2],
   ['N: it cannot pick anything up',      nInnocent.carrying === 0],
   ['N: and the box stays where it was',  nInnocent.status === 'transit'],
   ['no console errors',                   errors.length === 0],

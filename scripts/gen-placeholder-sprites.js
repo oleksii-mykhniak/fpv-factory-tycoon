@@ -1116,6 +1116,49 @@ function drawCatFrame(pixels, w, ox, { legs, sitting }) {
   setPixel(pixels, w, hx - 1, hy + 2, ...CAT.nose)
 }
 
+// Curled up asleep: an oval with the tail round it and the eyes shut. Read at
+// this size it is the silhouette that says "asleep", not the closed eyes.
+function drawCatSleep(px, w, ox) {
+  const cx = ox + 16, cy = 22
+  for (let a = 0; a < 360; a += 6) {
+    const r = 11
+    const x = cx + Math.round(Math.cos(a * Math.PI / 180) * (r + 2))
+    const y = cy + Math.round(Math.sin(a * Math.PI / 180) * (r * 0.55))
+    drawLine(px, w, x, y, x, y, ...CAT.furDark, 3)
+  }
+  for (let dy = -6; dy <= 6; dy++)
+    for (let dx = -11; dx <= 11; dx++)
+      if ((dx * dx) / 121 + (dy * dy) / 36 <= 1)
+        setPixel(px, w, cx + dx, cy + dy, ...CAT.fur)
+  for (let dy = -5; dy <= 1; dy++)
+    for (let dx = -9; dx <= 4; dx++)
+      if ((dx * dx) / 81 + (dy * dy) / 25 <= 1)
+        setPixel(px, w, cx + dx, cy + dy - 1, ...CAT.furHi)
+  // Head tucked in at the left, ears flat, eyes shut.
+  fillCircle(px, w, cx - 7, cy - 1, 5, ...CAT.fur)
+  drawLine(px, w, cx - 10, cy - 4, cx - 8, cy - 7, ...CAT.furDark, 2)
+  drawLine(px, w, cx - 5, cy - 5, cx - 3, cy - 7, ...CAT.furDark, 2)
+  drawLine(px, w, cx - 9, cy - 1, cx - 6, cy - 1, ...CAT.furDark, 1)
+  // Three little z's.
+  for (let i = 0; i < 3; i++) {
+    const zx = cx + 8 + i * 3, zy = 8 - i * 3
+    drawLine(px, w, zx, zy, zx + 2, zy, ...CAT.eye, 1)
+    drawLine(px, w, zx + 2, zy, zx, zy + 2, ...CAT.eye, 1)
+    drawLine(px, w, zx, zy + 2, zx + 2, zy + 2, ...CAT.eye, 1)
+  }
+}
+
+// Grooming: sitting, head down against a raised paw.
+function drawCatGroom(px, w, ox) {
+  drawCatFrame(px, w, ox, { legs: [], sitting: true })
+  const cx = ox + 16
+  fillCircle(px, w, cx - 8, 16, 5, ...CAT.fur)      // head, lowered
+  fillCircle(px, w, cx - 8, 14, 4, ...CAT.furHi)
+  drawLine(px, w, cx - 12, 12, cx - 10, 8, ...CAT.furDark, 2)
+  drawLine(px, w, cx - 6, 12, cx - 4, 8, ...CAT.furDark, 2)
+  fillCircle(px, w, cx - 4, 19, 3, ...CAT.furHi)    // raised paw
+}
+
 function drawCat(pixels, w) {
   const frames = [
     { legs: [[-5, 5], [5, 5]],  sitting: false },
@@ -1124,8 +1167,9 @@ function drawCat(pixels, w) {
     { legs: [[-4, 4], [4, 6]],  sitting: false },
   ]
   frames.forEach((f, i) => drawCatFrame(pixels, w, i * 32, f))
-  // Fifth cell: sitting. The rig can hold on it when the cat stops.
-  drawCatFrame(pixels, w, 4 * 32, { legs: [], sitting: true })
+  drawCatFrame(pixels, w, 4 * 32, { legs: [], sitting: true })   // 4: sit
+  drawCatSleep(pixels, w, 5 * 32)                                 // 5: sleep
+  drawCatGroom(pixels, w, 6 * 32)                                 // 6: groom
 }
 
 const drawWorkerWalk = (pixels, w, h) => drawWalkCycle(pixels, w, h, WORKER_PALETTE)
@@ -1157,7 +1201,8 @@ const sprites = [
   // Objective arrow — 32×40, points down; the scene rotates it toward the goal
   { name: 'arrow',            w:  32, h:  40, draw: drawArrow           },
 
-  { name: 'cat_walk',         w: 160, h:  32, draw: drawCat             },
+  // Seven cells: four walking, then sit, sleep, groom (V5 moods).
+  { name: 'cat_walk',         w: 224, h:  32, draw: drawCat             },
 
   // Redrawn from the shared palette (V6): the first pass at these four used
   // their own colours and stood out against everything drawn since.

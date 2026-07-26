@@ -23,7 +23,7 @@ import { INTERACTIONS, carrySpriteKey, zoneWantsAttention } from '../defs/intera
 import { dwellProgress } from '../sim/systems/zone.js'
 import { piggyShouldShow, nextObjective, incomePerSec } from '../sim/derive.js'
 import { promoteCost, roleMaxLevel } from '../defs/roles.js'
-import { CARRY_STACK_OFFSET_Y, VIEW_SMOOTHING } from '../state/config.js'
+import { CARRY_STACK_OFFSET_Y, VIEW_SMOOTHING, SALVAGE_RATE } from '../state/config.js'
 import * as ex from 'excalibur'
 
 // Purely presentational memo: which sprite is on the drone actor right now, and
@@ -90,6 +90,20 @@ export function syncScene(refs, world) {
       !!station.takenBy || inHand.some(i => i.type === 'drone' && i.stationId === station.id)
     view.drone.graphics.visible =
       (assembling || station.phase === Phase.BURNT) && !carriedFromHere
+
+    // Burnt kit: say so, over the bench, until somebody clears it. This is the
+    // only feedback there is — the burn modal is not opened any more (F1.7),
+    // and the fix is to stand at the bench, which nothing else would tell you.
+    if (view.burntLabel) {
+      const burnt = station.phase === Phase.BURNT
+      view.burntLabel.graphics.visible = burnt
+      if (burnt) {
+        const salvage = (KIT_TYPES[station.kitId]?.cost ?? 0) * SALVAGE_RATE
+        view.burntLabel.text = salvage > 0
+          ? `🔥 Згорів — стань тут, +$${salvage.toFixed(0)}`
+          : '🔥 Згорів — стань тут, щоб прибрати'
+      }
+    }
 
     // A finished drone waits on the OUTPUT edge of the bench, where it is
     // collected (S1.2) — not in the middle, where the work happens.
@@ -161,12 +175,15 @@ export function syncScene(refs, world) {
       actor.graphics.visible = true
       follow(actor, catAgent.x, catAgent.y)
       if (anim) {
-        const want = catAgent.moving ? 'walk' : 'sit'
+        // The sim owns the mood; the view only knows which picture goes with it.
+        const want = anim[catAgent.mood] ? catAgent.mood : 'sit'
         if (anim.current !== want) {
           actor.graphics.use(anim[want])
           anim.current = want
         }
-        actor.graphics.flipHorizontal = catAgent.vx > 0
+        // Facing is only meaningful while moving — a sleeping cat should not
+        // flip because its last velocity happened to point right.
+        if (Math.abs(catAgent.vx) > 1) actor.graphics.flipHorizontal = catAgent.vx > 0
       }
     }
   }
