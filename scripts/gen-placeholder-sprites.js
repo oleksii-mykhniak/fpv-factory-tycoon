@@ -547,6 +547,69 @@ function drawArrow(pixels, w, h) {
   }
 }
 
+// ── Cat (V5) ────────────────────────────────────────────────────────────────
+// Four frames: three walking, one sitting. Side-on, tiny, and the tail is the
+// part that has to read at 30 px — it is what says "cat" rather than "dog".
+// Ginger, not grey. The first pass made a dark cat on a dark floor: you could
+// not find it in a screenshot, let alone while playing. Everything alive in
+// this game has to read against #1a1a26.
+const CAT = {
+  fur:     [0xd8, 0x8a, 0x40],
+  furHi:   [0xf2, 0xac, 0x5c],
+  furDark: [0xa6, 0x62, 0x28],
+  eye:     [0x3a, 0xe0, 0x9a],
+  nose:    [0xf0, 0x9a, 0xaa],
+}
+
+function drawCatFrame(pixels, w, ox, { legs, sitting }) {
+  const cx = ox + 16
+  const baseY = sitting ? 25 : 24
+
+  // Tail — a curve, drawn first so the body overlaps its root.
+  const tailPts = sitting
+    ? [[cx + 9, baseY], [cx + 13, baseY - 2], [cx + 15, baseY - 7]]
+    : [[cx + 9, baseY - 4], [cx + 14, baseY - 6], [cx + 16, baseY - 12]]
+  for (let i = 0; i < tailPts.length - 1; i++) {
+    const [x0, y0] = tailPts[i], [x1, y1] = tailPts[i + 1]
+    drawLine(pixels, w, x0, y0, x1, y1, ...CAT.furDark, 3)
+  }
+
+  if (sitting) {
+    // Haunches + upright chest.
+    fillCircle(pixels, w, cx + 3, baseY - 4, 6, ...CAT.fur)
+    fillRect(pixels, w, cx - 4, baseY - 12, cx + 2, baseY - 1, ...CAT.fur)
+  } else {
+    fillRect(pixels, w, cx - 6, baseY - 10, cx + 8, baseY - 3, ...CAT.fur)
+    fillRect(pixels, w, cx - 6, baseY - 10, cx + 8, baseY - 8, ...CAT.furHi)
+    // Legs swing between frames so the walk reads even this small.
+    for (const [lx, len] of legs) {
+      fillRect(pixels, w, cx + lx, baseY - 3, cx + lx + 1, baseY - 3 + len, ...CAT.furDark)
+    }
+  }
+
+  // Head + ears + face.
+  const hx = cx - 8, hy = sitting ? baseY - 16 : baseY - 12
+  fillCircle(pixels, w, hx, hy, 5, ...CAT.fur)
+  fillCircle(pixels, w, hx, hy - 2, 4, ...CAT.furHi)
+  drawLine(pixels, w, hx - 4, hy - 4, hx - 2, hy - 8, ...CAT.furDark, 2)
+  drawLine(pixels, w, hx + 2, hy - 4, hx + 4, hy - 8, ...CAT.furDark, 2)
+  setPixel(pixels, w, hx - 3, hy, ...CAT.eye)
+  setPixel(pixels, w, hx + 1, hy, ...CAT.eye)
+  setPixel(pixels, w, hx - 1, hy + 2, ...CAT.nose)
+}
+
+function drawCat(pixels, w) {
+  const frames = [
+    { legs: [[-5, 5], [5, 5]],  sitting: false },
+    { legs: [[-6, 6], [6, 4]],  sitting: false },
+    { legs: [[-5, 5], [5, 5]],  sitting: false },
+    { legs: [[-4, 4], [4, 6]],  sitting: false },
+  ]
+  frames.forEach((f, i) => drawCatFrame(pixels, w, i * 32, f))
+  // Fifth cell: sitting. The rig can hold on it when the cat stops.
+  drawCatFrame(pixels, w, 4 * 32, { legs: [], sitting: true })
+}
+
 const drawWorkerWalk = (pixels, w, h) => drawWalkCycle(pixels, w, h, WORKER_PALETTE)
 const drawPlayerWalk = (pixels, w, h) => drawWalkCycle(pixels, w, h, PLAYER_PALETTE)
 
@@ -575,6 +638,8 @@ const sprites = [
   { name: 'piggy',            w:  64, h:  64, draw: drawPiggy           },
   // Objective arrow — 32×40, points down; the scene rotates it toward the goal
   { name: 'arrow',            w:  32, h:  40, draw: drawArrow           },
+
+  { name: 'cat_walk',         w: 160, h:  32, draw: drawCat             },
 ]
 
 for (const { name, w, h, draw } of sprites) {

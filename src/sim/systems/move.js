@@ -103,9 +103,13 @@ export function moveSystem(world, dt) {
   const bounds    = world.bounds
   const agents    = world.agents ?? []
 
+  // The cat is not in the crowd: people walk through it rather than round it.
+  // A cat you trip over is a cat you want deleted.
+  const crowd = agents.filter(a => a.kind !== 'cat')
+
   for (const agent of agents) {
     followPath(agent)
-    if (agents.length > 1) separate(agent, agents)
+    if (agent.kind !== 'cat' && crowd.length > 1) separate(agent, crowd)
 
     if (!agent.vx && !agent.vy) { agent.moving = false; continue }
 

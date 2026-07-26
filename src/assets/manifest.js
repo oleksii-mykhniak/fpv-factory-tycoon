@@ -34,6 +34,11 @@ export const SPRITES = Object.freeze({
     },
   },
 
+  cat_walk: {
+    url: `${BASE}sprites/cat_walk.png`,
+    anchors: {},
+  },
+
   soldering_iron: {
     url: `${BASE}sprites/soldering_iron.png`,
     anchors: {},

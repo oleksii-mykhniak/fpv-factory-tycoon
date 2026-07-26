@@ -15,7 +15,7 @@
 }
 
 body {
-  background: #111;
+  background: #232132;
   color: #eee;
   font-family: monospace;
   height: 100dvh;
@@ -96,7 +96,7 @@ body {
   transform: translateX(-50%);
   font-size: 0.82rem;
   color: #bbb;
-  background: rgba(14, 14, 24, 0.75);
+  background: rgba(44, 42, 60, 0.8);
   padding: 5px 12px;
   border-radius: 20px;
   white-space: nowrap;
@@ -123,7 +123,7 @@ body {
   font-size: 0.78rem;
   padding: 2px 10px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.14);
   color: #aaa;
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -140,7 +140,7 @@ body {
   color: #9ab;
   margin: 0 0 10px;
   padding: 4px 10px;
-  background: rgba(255,255,255,0.05);
+  background: rgba(255,255,255,0.10);
   border-radius: 8px;
 }
 
@@ -157,7 +157,7 @@ body {
   justify-content: center;
   font-size: 1.35rem;
   line-height: 1;
-  background: rgba(24, 24, 38, 0.7);
+  background: rgba(58, 56, 78, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 50%;
   color: #ccd;
@@ -167,7 +167,7 @@ body {
 }
 
 .settings-btn:active {
-  background: #34345a;
+  background: #4c4a78;
   transform: scale(0.94);
 }
 
@@ -176,7 +176,7 @@ body {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(20, 18, 32, 0.62);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -188,7 +188,7 @@ body {
 .modal-overlay[hidden] { display: none; }
 
 .modal {
-  background: #1e1e2e;
+  background: #35334a;
   border: 1px solid #333;
   border-radius: 16px;
   width: 100%;
@@ -207,7 +207,7 @@ body {
   border-bottom: 1px solid #2a2a3a;
   position: sticky;
   top: 0;
-  background: #1e1e2e;
+  background: #35334a;
   z-index: 1;
 }
 
@@ -244,7 +244,7 @@ body {
   gap: 8px;
   padding: 12px;
   background: #16162a;
-  border: 1px solid #2a2a3a;
+  border: 1px solid #4a4864;
   border-radius: 10px;
 }
 
@@ -383,12 +383,12 @@ body {
 .btn--upgrade {
   background: #2a2a3e;
   color: #aac;
-  border: 1px solid #444;
+  border: 1px solid #6b6890;
   padding: 8px 14px;
   font-size: 0.88rem;
   text-align: left;
 }
-.btn--upgrade:not(:disabled):hover { background: #34345a; }
+.btn--upgrade:not(:disabled):hover { background: #4c4a78; }
 .btn--upgrade:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .btn--danger { background: #7a2d2d; color: #fdd; }
@@ -522,7 +522,7 @@ body {
 .sg__track {
   position: relative;
   height: 52px;
-  background: #111;
+  background: #232132;
   border-radius: 8px;
   border: 1px solid #333;
   overflow: hidden;
@@ -590,7 +590,7 @@ body {
 #load-overlay {
   position: fixed;
   inset: 0;
-  background: #111;
+  background: #232132;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -775,8 +775,8 @@ body {
 #onboarding[hidden] { display: none; }
 
 .onboarding__box {
-  background: #1e1e2e;
-  border: 1px solid #44446a;
+  background: #35334a;
+  border: 1px solid #6a6790;
   border-radius: 16px;
   padding: 24px 28px 20px;
   max-width: 300px;
@@ -1113,7 +1113,7 @@ body {
   transform: translateX(-50%);
   width: min(92vw, 460px);
   padding: 10px 14px 12px;
-  background: rgba(18, 18, 34, 0.94);
+  background: rgba(48, 46, 70, 0.95);
   border: 1px solid #3a4a80;
   border-radius: 14px;
   box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);

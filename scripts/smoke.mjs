@@ -586,6 +586,43 @@ console.log(`  tag "${lBefore.tag}" (visible ${lBefore.tagOn}); dots ${lBefore.d
             `level ${lBefore.level}→${lAfter.level}, speed ${lBefore.speed}→${lAfter.speed}, ` +
             `money ${lBefore.money}→${lAfter.money}`)
 
+// ── N. The cat (V5) ───────────────────────────────────────
+console.log('\n### N. The cat')
+await boot(seedState({}))
+await page.waitForTimeout(1200)
+const nStart = await page.evaluate(() => {
+  const c = globalThis.__world.agents.find(a => a.kind === 'cat')
+  return c ? { x: c.x, y: c.y, visible: globalThis.__refs.cat.actor.graphics.visible } : null
+})
+await page.waitForTimeout(9000)
+const nLater = await page.evaluate(() => {
+  const w = globalThis.__world
+  const c = w.agents.find(a => a.kind === 'cat')
+  return { x: c.x, y: c.y, carrying: (c.carrying ?? []).length }
+})
+const nMoved = nStart ? Math.hypot(nLater.x - nStart.x, nLater.y - nStart.y) : 0
+console.log(`  cat at (${Math.round(nStart?.x)}, ${Math.round(nStart?.y)}) moved ${nMoved.toFixed(0)} units`)
+
+// It must be incapable of touching the shop: park it in the delivery slot with
+// a box waiting there and confirm nothing happens.
+await orderFirstKit()
+await page.waitForTimeout(5200)
+for (let i = 0; i < 25; i++) {
+  await page.evaluate(() => {
+    const w = globalThis.__world
+    const c = w.agents.find(a => a.kind === 'cat')
+    const z = w.zones.find(x => x.kind === 'delivery_slot')
+    c.x = z.cx; c.y = z.cy
+  })
+  await page.waitForTimeout(80)
+}
+const nInnocent = await page.evaluate(() => {
+  const w = globalThis.__world
+  const c = w.agents.find(a => a.kind === 'cat')
+  return { carrying: (c.carrying ?? []).length, status: w.game.deliveries[0]?.status }
+})
+console.log(`  cat sat in the delivery slot: carrying ${nInnocent.carrying}, box ${nInnocent.status}`)
+
 // ── C. Movement, collisions, camera (C1 regression) ───────
 console.log('\n### C. Movement (WASD)')
 await boot(seedState({}))
@@ -745,6 +782,10 @@ const checks = [
   ['M: the rate appears after a sale',   mAfter.visible === true],
   ['M: and it reads as $/сек',           /\$\d/.test(mAfter.text) && mAfter.text.includes('сек')],
   ['M: every sale is timestamped',       mAfter.logged > 0 && mAfter.stamped],
+  ['N: there is a cat in the flat',      nStart !== null && nStart.visible],
+  ['N: it wanders on its own',           nMoved > 20],
+  ['N: it cannot pick anything up',      nInnocent.carrying === 0],
+  ['N: and the box stays where it was',  nInnocent.status === 'transit'],
   ['no console errors',                   errors.length === 0],
 ]
 console.log('\n=== checks ===')

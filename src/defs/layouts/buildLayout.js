@@ -78,6 +78,7 @@ export function buildLayout({
   roomH,          // interior height; the street fills the rest
   door,           // { x, w } gap in the bottom wall
   partitions = [],// interior walls — see partitionRects
+  decor = [],     // furniture that does nothing — see below
   stationSlots,   // [{ def, x, y }] where benches may stand
   props,          // { name: { x, y, w, h, sprite, color, z } }
   deliverySlots,  // [{ x, y }] street positions, indexed by delivery.slotIndex
@@ -100,6 +101,22 @@ export function buildLayout({
 
   const interior = partitions.map(partitionRects)
   walls.push(...interior.flatMap(p => p.walls))
+
+  // Decor (V3) — things that make a room a room and have no rules attached.
+  // No zone, no interaction, no entry in the manifest of things the sim knows
+  // about: the only question it ever answers is `solid`.
+  //
+  // `solid: false` is the default on purpose. A rug or a poster that quietly
+  // narrowed a doorway would break pathing in the one way that never shows up
+  // on screen — the courier just stops.
+  const decorRects = decor.map((d, i) => ({
+    id:     d.id ?? `decor-${i}`,
+    ...rect(d.x, d.y, d.w, d.h),
+    sprite: d.sprite,
+    color:  d.color,
+    z:      d.z ?? 2,
+    solid:  d.solid === true,
+  }))
 
   const propRects = Object.fromEntries(
     Object.entries(props).map(([name, p]) => [
@@ -143,7 +160,8 @@ export function buildLayout({
     door:   { ...door, y: roomH - WALL_HORIZ },
     walls,
     // Stations are added to `obstacles` at runtime from stationSlots.
-    obstacles: [...walls],
+    obstacles: [...walls, ...decorRects.filter(d => d.solid)],
+    decor: decorRects,
     // Painted gaps in the walls. An array because the factory has one per
     // hall divider as well as the street door (F2).
     doorVoids: [

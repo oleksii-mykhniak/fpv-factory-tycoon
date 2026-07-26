@@ -176,6 +176,17 @@ export const OFFLINE_CAP_MS = 4 * 60 * 60 * 1000
 export const WANDER_RADIUS   = u(1.6)
 export const WANDER_PAUSE_MS = 2600
 
+// ── The cat (V5) ─────────────────────────────────────────
+// Slower than everybody: it is not going anywhere in particular.
+export const CAT_SPEED         = 110
+export const CAT_WANDER_RADIUS = u(4)
+// Sitting is most of what a cat does. A constantly moving one reads as a bug.
+export const CAT_SIT_MS         = 7000
+export const CAT_STROLL_PAUSE_MS = 2200
+// Now and then it decides the player is worth following.
+export const CAT_FOLLOW_CHANCE = 0.18
+export const CAT_FOLLOW_MS     = 4000
+
 // ── Navigation (C4) ──────────────────────────────────────
 // Grid cell size. Smaller = more accurate paths and a more expensive search;
 // 24 is about a third of a character, which is enough to find doorways.

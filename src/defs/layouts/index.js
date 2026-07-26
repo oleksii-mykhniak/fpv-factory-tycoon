@@ -44,6 +44,25 @@ export const apartment = buildLayout({
     mailbox:  { x: 250, y: 1180, w: 42, h: 34, sprite: 'mailbox',  color: '#3a5db8' },
     trashbin: { x: 780, y: 1180, w: 42, h: 46, sprite: 'trashbin', color: '#4a6a3a' },
   },
+  // Furniture that does nothing (V3). This is a home: the bench sits in
+  // somebody's living room, and the whole point of the first location is that
+  // you can see that.
+  // Colours are chosen against the floor, not in isolation: the first pass used
+  // dark furniture that vanished the moment the floor was lightened.
+  decor: [
+    { sprite: 'rug',     x: 320, y: 470, w: 260, h: 170, color: '#7d4a5c', z: 0.6 },
+    { sprite: 'bed',     x: 480, y: 130, w: 150, h: 210, color: '#8f83b8', z: 2, solid: true },
+    { sprite: 'sofa',    x: 120, y: 690, w: 170, h: 70,  color: '#5f83ad', z: 2, solid: true },
+    { sprite: 'plant',   x: 570, y: 540, w: 46,  h: 62,  color: '#4f9e5c', z: 2 },
+    { sprite: 'poster',  x: 300, y: 40,  w: 90,  h: 12,  color: '#cbb96e', z: 1 },
+    // Kitchen nook
+    { sprite: 'counter', x: 900, y: 120, w: 150, h: 70,  color: '#bda98a', z: 2, solid: true },
+    { sprite: 'fridge',  x: 730, y: 110, w: 70,  h: 90,  color: '#d2dade', z: 2, solid: true },
+    { sprite: 'chair',   x: 820, y: 430, w: 50,  h: 50,  color: '#a67c4c', z: 2 },
+    // Hallway
+    { sprite: 'shoes',   x: 620, y: 880, w: 60,  h: 26,  color: '#2f2d3a', z: 1 },
+    { sprite: 'coatrack', x: 880, y: 720, w: 44, h: 80,  color: '#8d6c49', z: 2 },
+  ],
   deliverySlots: [
     { x: 420, y: 1090 },
     { x: 590, y: 1090 },
@@ -52,6 +71,8 @@ export const apartment = buildLayout({
   spawns: {
     player:     { x: 500, y: 780 },
     workerIdle: { x: 560, y: 800 },
+    // Somebody lives here, and so does a cat (V5). Only the flat has one.
+    cat:        { x: 330, y: 470 },
     // No hiring in the apartment, but the posts keep the shape of the data the
     // same everywhere — a location never has to be a special case.
     posts: {
@@ -61,12 +82,32 @@ export const apartment = buildLayout({
       manager: { x: 820, y: 430 },
     },
   },
-  theme: { bgColor: '#0e0e18', floorColor: '#1a1a26' },
+  // Lighter than it was (V4 polish): the whole game read as a night scene, and
+  // a home should not. Wall, street and pavement live here too now — they were
+  // hardcoded in the scene, which meant a location could not really have a
+  // palette of its own.
+  theme: {
+    bgColor:       '#242236',
+    floorColor:    '#4b4260',
+    wallColor:     '#6f6790',
+    streetColor:   '#2a2a3c',
+    pavementColor: '#3d3d54',
+  },
 })
 
 // ── Гараж — wider, two bench slots side by side, room to run ──
 export const garage = buildLayout({
   id:    'garage',
+  decor: [
+    { sprite: 'oil_stain', x: 700, y: 700, w: 220, h: 140, color: '#26301f', z: 0.4 },
+    { sprite: 'tyres',   x: 1380, y: 200, w: 90, h: 90, color: '#2a2a30', z: 2, solid: true },
+    { sprite: 'tyres',   x: 1380, y: 320, w: 90, h: 90, color: '#24242a', z: 2, solid: true },
+    { sprite: 'toolbox', x: 180,  y: 980, w: 90, h: 60, color: '#b2532f', z: 2, solid: true },
+    { sprite: 'shelf',   x: 760,  y: 90,  w: 220, h: 54, color: '#8d8168', z: 2, solid: true },
+    { sprite: 'barrel',  x: 1360, y: 980, w: 64, h: 64, color: '#7d9c4e', z: 2, solid: true },
+    { sprite: 'plant',   x: 120,  y: 700, w: 46, h: 62, color: '#4f9e5c', z: 2 },
+    { sprite: 'poster',  x: 900,  y: 40,  w: 110, h: 12, color: '#cbb96e', z: 1 },
+  ],
   world: { w: 1500, h: 1700 },
   roomH: 1200,
   door:  { x: 620, w: 200 },
@@ -100,7 +141,13 @@ export const garage = buildLayout({
       manager: { x: 1300, y: 860 },
     },
   },
-  theme: { bgColor: '#0d1810', floorColor: '#1a2618' },
+  theme: {
+    bgColor:       '#1c2c1e',
+    floorColor:    '#41563d',
+    wallColor:     '#63795c',
+    streetColor:   '#26302a',
+    pavementColor: '#3a4a3c',
+  },
 })
 
 export const LAYOUTS = Object.freeze({ apartment, garage })

@@ -69,7 +69,13 @@ const ROOM_H     = 1400
 const STREET_H   = 500
 const DOOR_W     = 240      // street door, in hall 1
 const HALL_GAP_H = 260      // doorway between two halls
-const THEME      = { bgColor: '#180d18', floorColor: '#261a26' }
+const THEME = {
+  bgColor:       '#2c1e2c',
+  floorColor:    '#544254',
+  wallColor:     '#7a6480',
+  streetColor:   '#302430',
+  pavementColor: '#463646',
+}
 
 export function buildFactoryLayout(hallIds) {
   const halls   = openHalls(hallIds)
@@ -208,6 +214,26 @@ export function buildFactoryLayout(hallIds) {
     { id: 'rack', kind: 'rack', ...rect(props.rack.x, props.rack.y, 150, 150) },
   ]
 
+  // Decor (V3): what a working floor has lying about. Pallets and crates are
+  // solid — you walk round them; markings and shadows are not.
+  const decor = placed.flatMap(hall => [
+    { sprite: 'floor_mark', x: hall.cx, y: 300, w: hall.w * 0.7, h: 8, color: '#d2c25e', z: 0.4 },
+    { sprite: 'pallet', x: hall.x0 + 120, y: 1240, w: 90, h: 60, color: '#b58d55', z: 2, solid: true },
+    { sprite: 'pallet', x: hall.x0 + 120, y: 1150, w: 90, h: 60, color: '#b58d55', z: 2, solid: true },
+    { sprite: 'crate',  x: hall.x0 + hall.w - 140, y: 250, w: 70, h: 70, color: '#9e7c4c', z: 2, solid: true },
+    { sprite: 'crate',  x: hall.x0 + hall.w - 220, y: 250, w: 70, h: 70, color: '#8a6b40', z: 2, solid: true },
+    { sprite: 'shelf',  x: hall.cx + 240, y: 120, w: 200, h: 54, color: '#8e8eae', z: 2, solid: true },
+  ])
+
+  const decorRects = decor.map((d, i) => ({
+    id:     `decor-${i}`,
+    ...rect(d.x, d.y, d.w, d.h),
+    sprite: d.sprite,
+    color:  d.color,
+    z:      d.z ?? 2,
+    solid:  d.solid === true,
+  }))
+
   const propRects = Object.fromEntries(
     Object.entries(props).map(([name, p]) => [
       name,
@@ -222,7 +248,8 @@ export function buildFactoryLayout(hallIds) {
     street: { y: ROOM_H, h: STREET_H },
     door:   { x: doorX, w: DOOR_W, y: ROOM_H - WALL_HORIZ },
     walls,
-    obstacles: [...walls],
+    obstacles: [...walls, ...decorRects.filter(d => d.solid)],
+    decor: decorRects,
     doorVoids,
     stationSlots,
     props: propRects,

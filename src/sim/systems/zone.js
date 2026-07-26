@@ -15,8 +15,18 @@ function inside(zone, agent) {
          Math.abs(agent.y - zone.cy) <= zone.h / 2
 }
 
+// `accepts: 'any'` means any PERSON, not any agent (V5).
+//
+// It used to mean literally any agent, and five zones use it — including the
+// delivery slot and the bench. The moment something else moved through the shop
+// it would have picked up a box and broken the production loop. Excluding the
+// cat by listing it would only survive until the next animal; this way anything
+// that is not a person is excluded by construction.
+const PERSON_KINDS = ['player', 'worker']
+
 function accepts(def, agent) {
-  return def.accepts === 'any' || def.accepts === agent.kind
+  if (def.accepts === 'any') return PERSON_KINDS.includes(agent.kind)
+  return def.accepts === agent.kind
 }
 
 export function zoneSystem(world, dt, events) {

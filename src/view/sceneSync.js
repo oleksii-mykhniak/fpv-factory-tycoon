@@ -151,6 +151,26 @@ export function syncScene(refs, world) {
     syncArrow(refs, world, player)
   }
 
+  // ── The cat (V5) ───────────────────────────────────────
+  const catAgent = (world.agents ?? []).find(a => a.kind === 'cat')
+  if (refs.cat) {
+    const { actor, anim } = refs.cat
+    if (!catAgent) {
+      actor.graphics.visible = false
+    } else {
+      actor.graphics.visible = true
+      follow(actor, catAgent.x, catAgent.y)
+      if (anim) {
+        const want = catAgent.moving ? 'walk' : 'sit'
+        if (anim.current !== want) {
+          actor.graphics.use(anim[want])
+          anim.current = want
+        }
+        actor.graphics.flipHorizontal = catAgent.vx > 0
+      }
+    }
+  }
+
   // ── Hired workers (C5) ─────────────────────────────────
   // Same projection as the player: the sim moved them, the actors follow.
   syncWorkers(refs, world)

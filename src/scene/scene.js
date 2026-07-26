@@ -110,12 +110,12 @@ function buildRoom(scene, layout) {
   // ── Street (below the building) ────────────────────────
   colorRect(scene, {
     x: world.w / 2, y: street.y + street.h / 2, w: world.w, h: street.h,
-    hex: '#0c0c18', z: 0,
+    hex: theme.streetColor ?? '#1c1c2c', z: 0,
   })
   // Lighter sidewalk band just outside the door
   colorRect(scene, {
     x: world.w / 2, y: street.y + street.h * 0.10, w: world.w, h: street.h * 0.18,
-    hex: '#18182a', z: 0,
+    hex: theme.pavementColor ?? '#33334a', z: 0,
   })
 
   // ── Room floor ─────────────────────────────────────────
@@ -144,10 +144,29 @@ function buildRoom(scene, layout) {
 
   // ── Walls + door opening ───────────────────────────────
   for (const wall of walls) {
-    colorRect(scene, { x: wall.cx, y: wall.cy, w: wall.w, h: wall.h, hex: '#2e2e42', z: 1 })
+    colorRect(scene, { x: wall.cx, y: wall.cy, w: wall.w, h: wall.h, hex: theme.wallColor ?? '#55557a', z: 1 })
   }
   for (const gap of doorVoids ?? []) {
-    colorRect(scene, { x: gap.cx, y: gap.cy, w: gap.w, h: gap.h, hex: '#0a0a14', z: 1 })
+    // A doorway is a hole, so it is painted with whatever is on the other side
+    // of the wall rather than with black.
+    colorRect(scene, { x: gap.cx, y: gap.cy, w: gap.w, h: gap.h, hex: theme.doorColor ?? theme.floorColor, z: 1 })
+  }
+
+  // ── Decor (V3) ─────────────────────────────────────────
+  // Drawn before the props so furniture never covers something you can walk up
+  // to. Tall pieces are y-sorted by their FEET, like characters — sorting a
+  // wardrobe by its centre puts a person standing in front of it behind it.
+  for (const d of layout.decor ?? []) {
+    const actor = new ex.Actor({
+      pos:    ex.vec(d.cx, d.cy),
+      width:  d.w,
+      height: d.h,
+      z:      d.z <= 1 ? d.z : (d.cy + d.h / 2) * 0.01,
+      color:  ex.Color.fromHex(d.color ?? '#3a3a4a'),
+    })
+    scene.add(actor)
+    track(actor)
+    applySprite(actor, d.sprite)
   }
 
   // ── Props ──────────────────────────────────────────────
@@ -746,6 +765,38 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
 
   const { actor: player, rig: playerRig } = makeCharacter('player_walk', '#1f9e92')
 
+  // ── The cat (V5) ───────────────────────────────────────
+  // Its own tiny rig: five cells (four walking, one sitting) rather than the
+  // four-frame character sheet, so it gets its own slicing instead of pretending
+  // to be a person.
+  const catActor = new ex.Actor({
+    pos:    ex.vec(-9999, -9999),
+    width:  sizes.character * 0.50,
+    height: sizes.character * 0.34,
+    z: 6,
+    color:  ex.Color.fromHex('#d88a40'),
+  })
+  scene.add(track(catActor))
+  catActor.graphics.visible = false
+
+  const catImage = getSprite('cat_walk')
+  let catAnim = null
+  if (catImage) {
+    const sheet = ex.SpriteSheet.fromImageSource({
+      image: catImage,
+      grid: { rows: 1, columns: 5, spriteWidth: 32, spriteHeight: 32 },
+    })
+    const scale = ex.vec(catActor.width / 32, catActor.height / 32)
+    const walk = ex.Animation.fromSpriteSheet(sheet, [0, 1, 2, 3], 160)
+    const sit  = ex.Animation.fromSpriteSheet(sheet, [4], 1000)
+    walk.scale = scale
+    sit.scale  = scale
+    catActor.graphics.use(sit)
+    catAnim = { walk, sit, current: 'sit' }
+  }
+
+  catActor.on('preupdate', () => { catActor.z = catActor.pos.y * 0.01 })
+
   // ── Objective arrow (C7.3) ─────────────────────────────
   // Bobs above the player's head, pointing at the next useful zone.
   const arrow = new ex.Actor({
@@ -867,6 +918,7 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     engine: { getFps: () => engine.clock.fpsSampler.fps, _ex: engine },
     scene,
     box, piggy, workbench,
+    cat: { actor: catActor, anim: catAnim },
     ...propActors,
     beltBoxes,
     hallEarnings,
