@@ -188,6 +188,21 @@ export const OFFLINE_CAP_MS = 4 * 60 * 60 * 1000
 export const WANDER_RADIUS   = u(1.6)
 export const WANDER_PAUSE_MS = 2600
 
+// ── Background music (A6) ────────────────────────────────
+// Synthesised live rather than shipped as a file — see src/audio/music.js.
+// Slow, quiet, and in a mode that does not resolve: a loop that keeps arriving
+// somewhere is a loop you notice, and this one plays for an hour.
+export const MUSIC_BPM  = 74
+export const MUSIC_GAIN = 0.10          // the room, not the game
+export const MUSIC_ROOT = 220           // A3
+// Semitones from the root. Am – F – C – G, the four chords that never tire.
+export const CHORDS = [
+  [0, 3, 7],      // Am
+  [-4, 0, 5],     // F
+  [3, 7, 10],     // C
+  [-2, 2, 7],     // G
+]
+
 // ── The cat (V5) ─────────────────────────────────────────
 // A cat is not a slow worker: it has moods, and most of them are stationary.
 // Each state picks the next one from CAT_MOODS, so behaviour is a table rather

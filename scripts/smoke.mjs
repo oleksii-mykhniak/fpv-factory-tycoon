@@ -656,6 +656,42 @@ const nInnocent = await page.evaluate(() => {
 })
 console.log(`  cat sat in the delivery slot: carrying ${nInnocent.carrying}, box ${nInnocent.status}`)
 
+// ── O. Sound, music and the "player only" rule (A3–A6) ────
+console.log('\n### O. Audio')
+await boot(seedState({}))
+// Every name playSfx() is called with must resolve to a real file. This is the
+// check that would have caught D8's silent 404s on the day they appeared.
+const oMissing = await page.evaluate(async () => {
+  const names = ['order','solder_good','solder_cold','overheat','sell','piggy',
+                 'pickup','drop','hire','upgrade','promote','hall']
+  const bad = []
+  for (const n of names) {
+    const r = await fetch(`/audio/${n}.wav`, { method: 'HEAD' })
+    if (!r.ok) bad.push(n)
+  }
+  return bad
+})
+console.log(`  missing sound files: ${oMissing.length ? oMissing.join(', ') : 'none'}`)
+
+await page.click('#settings-btn'); await page.waitForTimeout(400)
+const oSettings = await page.$$eval('.settings-row span', els => els.map(e => e.textContent.trim()))
+await page.click('#settings-close').catch(() => page.keyboard.press('Escape'))
+await page.waitForTimeout(300)
+
+// A technician's solder point must not make a sound: the event carries auto:true
+// and effects.js drops it. Checked at the event level, since the smoke cannot
+// hear anything.
+const oQuiet = await page.evaluate(() => {
+  const w = globalThis.__world
+  const seen = { auto: 0, player: 0 }
+  // Replay the shape of the two events through the same gate effects.js uses.
+  const byPlayer = (e) => !e?.auto && (e?.agentId === undefined || e.agentId === 'player')
+  seen.auto   = byPlayer({ t: 'station.stageDone', auto: true }) ? 1 : 0
+  seen.player = byPlayer({ t: 'station.stageDone' }) ? 1 : 0
+  return { autoSilent: seen.auto === 0 && seen.player === 1, halls: w.game.unlockedHalls?.length }
+})
+console.log(`  settings rows: ${oSettings.filter(Boolean).join(', ')}`)
+
 // ── C. Movement, collisions, camera (C1 regression) ───────
 console.log('\n### C. Movement (WASD)')
 await boot(seedState({}))
@@ -789,6 +825,9 @@ const checks = [
   ['I: a burnt kit can be cleared on foot', iCleared.phase === 'IDLE'],
   ['I: the bench says the kit burnt',      iBurntLabel.visible && iBurntLabel.text.includes('Згорів')],
   ['I: sound files are actually there',    iSounds.duration > 0],
+  ['O: every sound the code asks for exists', oMissing.length === 0],
+  ['O: music has its own switch',          oSettings.includes('Музика')],
+  ['O: a worker\'s work is silent',        oQuiet.autoSilent === true],
   ['J: the hall actually opened',         jAfter.halls === jBefore.halls + 1],
   ['J: the map got wider',                jAfter.world > jBefore.world],
   ['J: the hall brought its own benches', jAfter.stations > jBefore.stations],

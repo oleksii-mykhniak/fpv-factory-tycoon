@@ -10,8 +10,11 @@ function saveSettings(s) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)) } catch {}
 }
 
-export function createSettingsModal(root, { onClearSave, onSoundChange, onHapticsChange, onAddMoney }) {
-  let settings = { sound: true, haptics: true, ...loadSettings() }
+export function createSettingsModal(root, {
+  onClearSave, onSoundChange, onMusicChange, onHapticsChange, onAddMoney,
+  hapticsSupported = true,
+}) {
+  let settings = { sound: true, music: true, haptics: true, ...loadSettings() }
 
   const overlay = document.createElement('div')
   overlay.id = 'settings-modal'
@@ -32,9 +35,17 @@ export function createSettingsModal(root, { onClearSave, onSoundChange, onHaptic
           </label>
         </div>
         <div class="settings-row">
-          <span>Гаптика</span>
+          <span>Музика</span>
           <label class="toggle">
-            <input type="checkbox" id="settings-haptics" ${settings.haptics ? 'checked' : ''}>
+            <input type="checkbox" id="settings-music" ${settings.music ? 'checked' : ''}>
+            <span class="toggle__slider"></span>
+          </label>
+        </div>
+        <div class="settings-row">
+          <span>Вібрація${hapticsSupported ? '' : '<br><small style="opacity:.6">недоступна на цьому пристрої</small>'}</span>
+          <label class="toggle">
+            <input type="checkbox" id="settings-haptics"
+                   ${settings.haptics ? 'checked' : ''} ${hapticsSupported ? '' : 'disabled'}>
             <span class="toggle__slider"></span>
           </label>
         </div>
@@ -62,6 +73,11 @@ export function createSettingsModal(root, { onClearSave, onSoundChange, onHaptic
     settings.sound = e.target.checked
     saveSettings(settings)
     onSoundChange?.(settings.sound)
+  })
+  overlay.querySelector('#settings-music').addEventListener('change', e => {
+    settings.music = e.target.checked
+    saveSettings(settings)
+    onMusicChange?.(settings.music)
   })
   overlay.querySelector('#settings-haptics').addEventListener('change', e => {
     settings.haptics = e.target.checked

@@ -189,6 +189,51 @@ const sounds = [
     } },
 ]
 
+// ── Sounds for things the PLAYER does (A3) ──────────────────────────────────
+// Quieter than the six above on purpose: these fire often, and the rule for the
+// whole set is that frequency and loudness go in opposite directions.
+sounds.push(
+  // Picking something up: a soft thud with a little air in it.
+  { name: 'pickup', peak: 0.40, make: () => soften(mix(
+      env(noise(30), { attack: 1, release: 30, curve: 2.5 }),
+      env(tone(300, 90, 'sine'), { attack: 2, release: 90, curve: 3 }),
+    ), 0.5) },
+
+  // Putting it down: the same thud, lower and shorter. Pick-up and put-down are
+  // one gesture in two directions and should sound like it.
+  { name: 'drop', peak: 0.42, make: () => soften(mix(
+      env(noise(26), { attack: 1, release: 26, curve: 2.2 }),
+      env(tone(190, 80, 'sine'), { attack: 2, release: 80, curve: 3 }),
+    ), 0.55) },
+
+  // Hiring: a small two-note "welcome", warmer than the sale.
+  { name: 'hire', peak: 0.7, make: () => seq(
+      env(tone(520, 90, 'tri'), { attack: 3, release: 90, curve: 2.6 }),
+      env(tone(780, 160, 'tri'), { attack: 3, release: 160, curve: 2.4 }),
+    ) },
+
+  // Buying an upgrade: a mechanical clunk that settles into a tone.
+  { name: 'upgrade', peak: 0.75, make: () => soften(seq(
+      env(noise(40), { attack: 1, release: 40, curve: 2 }),
+      env(mix(tone(440, 180, 'square'), tone(660, 180, 'sine')),
+          { attack: 4, release: 180, curve: 2.2 }),
+    ), 0.45) },
+
+  // Promoting somebody: the hire sound one step higher — same event, better.
+  { name: 'promote', peak: 0.7, make: () => seq(
+      env(tone(660, 80, 'tri'), { attack: 2, release: 80, curve: 2.6 }),
+      env(tone(880, 90, 'tri'), { attack: 2, release: 90, curve: 2.6 }),
+      env(tone(1170, 190, 'tri'), { attack: 2, release: 190, curve: 2.2 }),
+    ) },
+
+  // Opening a hall: the biggest thing in the game, so the only long sound.
+  { name: 'hall', peak: 0.95, make: () => soften(mix(
+      seq(silence(60), env(mix(tone(330, 520, 'tri'), tone(495, 520, 'sine'), tone(660, 520, 'sine')),
+                            { attack: 40, release: 520, curve: 1.6 })),
+      env(noise(140), { attack: 6, release: 140, curve: 1.8 }),
+    ), 0.45) },
+)
+
 mkdirSync(OUT, { recursive: true })
 for (const s of sounds) {
   const data = wav(normalise(s.make(), s.peak))

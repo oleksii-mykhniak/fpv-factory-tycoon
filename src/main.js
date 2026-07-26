@@ -8,6 +8,7 @@ import { ADS_ENABLED, SCRAP_CONSOLATION, INPUT_DEADZONE } from './state/config.j
 import { levelData } from './state/upgrades.js'
 import { currentLocation } from './state/locations.js'
 import { setMuted, unlockAudio } from './audio/sfx.js'
+import { setMusicEnabled, startMusic } from './audio/music.js'
 import { showRewarded, PLACEMENTS } from './monetization/ads.js'
 
 import { layoutFor } from './defs/layouts/index.js'
@@ -147,11 +148,25 @@ let coldWarning = null    // transient: consumed by solderModal on the next rend
 
 let hapticsEnabled = true
 
+// Patterns, not durations (A5). A single 50 ms buzz for both "sold a drone" and
+// "the kit is on fire" says the same thing twice; the shape is what carries the
+// meaning, and it costs nothing.
+const HAPTIC = {
+  light:  15,
+  medium: 30,
+  heavy:  50,
+  sale:   [30, 40, 60],       // ta-da
+  burn:   [40, 60, 40, 60, 90], // stutter, then a long one — something is wrong
+}
+
+// iOS Safari has no Vibration API at all. Worth knowing rather than guessing,
+// because a toggle that silently controls nothing is worse than no toggle.
+export const hapticsSupported = typeof navigator !== 'undefined' && 'vibrate' in navigator
+
 function haptic(style = 'light') {
-  if (!hapticsEnabled) return
+  if (!hapticsEnabled || !hapticsSupported) return
   try {
-    const ms = style === 'heavy' ? 50 : style === 'medium' ? 30 : 15
-    navigator.vibrate?.(ms)
+    navigator.vibrate?.(HAPTIC[style] ?? HAPTIC.light)
   } catch {}
 }
 
@@ -259,6 +274,8 @@ const upgradeModal = createUpgradeModal(uiRoot, {
 const settingsModal = createSettingsModal(uiRoot, {
   onClearSave:     () => { clearSave(); location.reload() },
   onSoundChange:   (on) => setMuted(!on),
+  onMusicChange:   (on) => setMusicEnabled(on),
+  hapticsSupported,
   onHapticsChange: (on) => { hapticsEnabled = on },
   onAddMoney:      (amount) => send('addMoney', { amount }),
 })
@@ -266,6 +283,7 @@ const settingsModal = createSettingsModal(uiRoot, {
 {
   const s = settingsModal.getSettings()
   setMuted(!s.sound)
+  setMusicEnabled(s.music !== false)
   hapticsEnabled = s.haptics
 }
 
@@ -377,7 +395,7 @@ function renderUI() {
 // by pressing a button, so the unlock hangs off the first input of any kind
 // rather than off a command.
 for (const evt of ['pointerdown', 'keydown', 'touchstart']) {
-  window.addEventListener(evt, () => unlockAudio(), { once: true, passive: true })
+  window.addEventListener(evt, () => { unlockAudio(); startMusic() }, { once: true, passive: true })
 }
 
 const onboardingEl = document.createElement('div')

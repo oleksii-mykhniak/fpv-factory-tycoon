@@ -164,7 +164,7 @@ export function stationSystem(world, dt, events) {
       } else {
         const step = kit.assemblySteps?.[station.solderPoints.length]
         world.game = applyColdSolderPenalty(world.game, stationId, COLD_SOLDER_QUALITY_PENALTY)
-        emit(events, EV.STAGE_COLD, { stationId, missMsg: step?.missMsg })
+        emit(events, EV.STAGE_COLD, { stationId, missMsg: step?.missMsg, auto: true })
       }
       idle(rt)
       emit(events, EV.STATE_DIRTY)
@@ -180,7 +180,7 @@ export function stationSystem(world, dt, events) {
     const total   = kit.solderPointCount
 
     if (done < total) {
-      emit(events, EV.STAGE_DONE, { stationId, total, done, quality })
+      emit(events, EV.STAGE_DONE, { stationId, total, done, quality, auto: true })
       startStage(world, updated, rt, kit, source, events)
       emit(events, EV.STATE_DIRTY)
       continue
@@ -191,7 +191,7 @@ export function stationSystem(world, dt, events) {
     const price = calcPrice(kit.basePrice, finished.quality, world.game.upgrades.priceMultiplier)
 
     idle(rt)
-    emit(events, EV.STAGE_DONE, { stationId, total, done, quality })
+    emit(events, EV.STAGE_DONE, { stationId, total, done, quality, auto: true })
     emit(events, EV.ASSEMBLY_DONE, { stationId, quality: finished.quality, price })
     emit(events, EV.STATE_DIRTY)
   }

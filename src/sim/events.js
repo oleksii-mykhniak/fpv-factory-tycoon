@@ -16,8 +16,8 @@ export const EV = Object.freeze({
 
   // Station (workbench)
   STAGE_STARTED: 'station.stageStarted',  // { label, total, done, durationMs }
-  STAGE_DONE:    'station.stageDone',     // { total, done, quality }
-  STAGE_COLD:    'station.stageCold',     // { missMsg }
+  STAGE_DONE:    'station.stageDone',     // { total, done, quality, auto? }
+  STAGE_COLD:    'station.stageCold',     // { missMsg, auto? }
   ASSEMBLY_DONE: 'station.assemblyDone',  // { quality, price }
   KIT_BURNT:     'station.kitBurnt',      // { kitId }
   BENCH_CLEARED: 'station.benchCleared',  // { reason: 'sold' | 'abandoned' }
