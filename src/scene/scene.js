@@ -6,6 +6,7 @@ import {
   PIGGY_COOLDOWN_MS,
   PULSE_FREQ_HZ, PULSE_SCALE_AMP,
   CHARACTER_U as TILE_U,
+  CHARACTER_ART,
 } from '../state/config.js'
 import { loadSprites, getSprite } from './loader.js'
 import { createCharacterSprite, createTileCharacter } from './character.js'
@@ -779,9 +780,10 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     })
     scene.add(track(actor))
 
-    // Kenney tiles when we have them for this role, the generated walk sheet
-    // otherwise. Both rigs answer the same `setMoving(moving, facingRight)`.
-    const pair = tiles && TILE_CHARACTER[tiles]
+    // Kenney tiles when we have them for this role AND that art is selected;
+    // the generated walk sheet otherwise. Both rigs answer the same
+    // `setMoving(moving, facingRight)`.
+    const pair = CHARACTER_ART === 'kenney' && tiles && TILE_CHARACTER[tiles]
     const frontImg = pair && getSprite(pair[0])
     const rig = frontImg
       ? createTileCharacter(actor, frontImg, getSprite(pair[1]))

@@ -106,6 +106,18 @@ export const CAMERA_ZOOM_MAX   = 1.60
 export const CAMERA_ELASTICITY = 0.20
 export const CAMERA_FRICTION   = 0.28
 
+// Which art the people are drawn with (V6 revert).
+//
+//   'generated' — scripts/gen-placeholder-sprites.js: a four-frame walk cycle
+//                 per palette, tinted per role at runtime
+//   'kenney'    — the CC0 tiles: four fixed poses, movement read from a bob
+//
+// Both rigs live in scene/character.js and answer the same setMoving(). The
+// owner tried the Kenney characters against the Kenney furniture and preferred
+// ours, so this is the switch rather than a deletion — the tiles and the credits
+// stay in the repo.
+export const CHARACTER_ART = 'generated'
+
 // ── Scale (V1) ───────────────────────────────────────────
 // The character is the ruler. Every size in the game is written as a fraction
 // of their height, because sizes picked by eye drift apart: the workbench spent
