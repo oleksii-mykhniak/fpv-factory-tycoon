@@ -20,9 +20,14 @@ export const PRICE_QUALITY_COEFF = 0.7
 
 // ── Failure thresholds ────────────────────────────────────
 // Quality below this = miss (cold solder or overheat).
-export const COLD_SOLDER_THRESHOLD = 0.40
+// Raised 0.40 → 0.48 in the 2026-07-26 difficulty pass: at 0.40 a tap had to
+// land in the outer third of the miss range to fail at all, so a player who
+// half-aimed never saw a bad joint and never learned the mini-game had stakes.
+export const COLD_SOLDER_THRESHOLD = 0.48
 // Of all misses, this fraction escalates to overheating.
-export const OVERHEAT_CHANCE = 0.25
+// 0.25 → 0.40: with the old numbers a full playthrough could end without ever
+// burning a kit, which made the whole burnt-drone branch content nobody met.
+export const OVERHEAT_CHANCE = 0.40
 // Fraction of kit cost returned as scrap on abandon.
 export const SALVAGE_RATE = 0.40
 // How much each cold-solder miss subtracts from the final assembly quality cap.
@@ -31,7 +36,7 @@ export const COLD_SOLDER_QUALITY_PENALTY = 0.15
 // ── Solder mini-game (level 0 — manual iron) ─────────────
 export const SOLDER_BASE_PERIOD_MS = 1600  // one oscillation at point 0
 export const SOLDER_SPEED_FACTOR   = 0.88  // each point 12% faster
-export const SOLDER_GREEN_HALF     = 0.15  // green zone half-width [0..1]
+export const SOLDER_GREEN_HALF     = 0.12  // green zone half-width [0..1]
 
 // ── Upgrade: Better iron (level 1) ───────────────────────
 export const BETTER_IRON_GREEN_HALF     = 0.22  // wider zone
@@ -46,16 +51,16 @@ export const SEMIAUTO_QUALITY_MIN    = 0.60
 export const SEMIAUTO_QUALITY_MAX    = 0.75
 export const SEMIAUTO_POINT_DELAY_MS = 1200
 
-// ── Upgrade: Auto-solder (level 3) ───────────────────────
-export const AUTO_GREEN_HALF      = 0.30
-export const AUTO_OVERHEAT_CHANCE = 0.04
-// C7 balance: level 3 used to be SLOWER and WORSE than level 2 (8.0 s @ 0.65 vs
-// 3.2 s @ 0.75). That made sense when level 2 still needed a tap per kit and
-// level 3 was the hands-off option — but C6 removed arming, so the most
-// expensive upgrade in the game was a strict downgrade. It now dominates.
-export const AUTO_QUALITY_MIN   = 0.75
-export const AUTO_QUALITY_MAX   = 0.88
-export const AUTO_POINT_DELAY_MS = 700
+// ── Upgrade: Soldering station (level 3) ─────────────────
+// Was "auto-solder": a bench that soldered itself at 0.75–0.88. It had no place
+// left. Hiring a technician already buys hands-off assembly, and it is people
+// the game grows through — an upgrade that ALSO removed the player from the
+// bench competed with hiring while making the best-margin path (your own hands)
+// pointless to ever use again. So level 3 no longer works alone: it is the best
+// possible iron FOR YOU. No overheat at all, and a green zone nearly three
+// times the width of the starting one.
+export const SOLDER_STATION_GREEN_HALF      = 0.34
+export const SOLDER_STATION_OVERHEAT_CHANCE = 0
 
 // ── Camera (C1) ──────────────────────────────────────────
 // The world is now larger than the screen and measured in fixed world units,

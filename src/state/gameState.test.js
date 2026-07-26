@@ -396,15 +396,16 @@ describe('Реєстр апгрейдів (data-driven)', () => {
   it('C6: кожен рівень дає параметри ручної пайки — трек не гейтить доступ', () => {
     for (let i = 0; i < 4; i++) {
       expect(levelData('soldering', i).greenHalf).toBeGreaterThan(0)
-      expect(levelData('soldering', i).overheatChance).toBeGreaterThan(0)
+      expect(levelData('soldering', i).overheatChance).toBeGreaterThanOrEqual(0)
     }
   })
 
-  it('C6: лише рівні 2–3 вміють паяти без нагляду', () => {
+  it('без нагляду паяє лише напівавтомат — станція знову вимагає рук', () => {
     expect(levelData('soldering', 0).qualityMin).toBeUndefined()
     expect(levelData('soldering', 1).qualityMin).toBeUndefined()
     expect(levelData('soldering', 2).qualityMin).toBeGreaterThan(0)
-    expect(levelData('soldering', 3).qualityMin).toBeGreaterThan(0)
+    // Рівень 3 навмисно без auto-темпу: автоматизація — це найм, а не апгрейд.
+    expect(levelData('soldering', 3).qualityMin).toBeUndefined()
   })
 
   it('C6: вища прокачка — прощучіша зона й менший ризик перегріву', () => {
@@ -932,14 +933,26 @@ describe('D7 — canMoveToLocation', () => {
 })
 
 describe('D7 — moveToLocation', () => {
-  it('переїзд до garage: locationId змінюється, гроші знімаються', () => {
+  it('переїзд до garage: каса скидається до стартової суми локації', () => {
     let s = { ...createState(), money: 9999, locationId: 'apartment' }
     s = buyUpgrade(s, 'soldering')
     s = buyUpgrade(s, 'soldering')
-    const before = s.money
     s = moveToLocation(s, 'garage')
     expect(s.locationId).toBe('garage')
-    expect(s.money).toBe(before - LOCATIONS.garage.unlockCost)
+    expect(s.money).toBe(LOCATIONS.garage.startMoney)
+  })
+
+  it('скидання не залежить від того, скільки було накопичено', () => {
+    const rich = { ...createState(), money: 500000, locationId: 'apartment',
+      upgrades: { ...createState().upgrades, solderingLevel: 2 } }
+    const poor = { ...rich, money: LOCATIONS.garage.unlockCost }
+    expect(moveToLocation(rich, 'garage').money).toBe(moveToLocation(poor, 'garage').money)
+  })
+
+  it('unlockCost лишається порогом входу, хоч і не списується', () => {
+    const s = { ...createState(), money: LOCATIONS.garage.unlockCost - 1,
+      upgrades: { ...createState().upgrades, solderingLevel: 2 } }
+    expect(() => moveToLocation(s, 'garage')).toThrow('moveToLocation')
   })
 
   it('після переїзду до garage: capFor storage = 1', () => {
@@ -1109,18 +1122,21 @@ describe('C7: прогресія апгрейдів монотонна', () => {
     }
   })
 
-  it('автопаяльник не повільніший і не гірший за напівавтомат', () => {
-    const semi = levelData('soldering', 2)
-    const auto = levelData('soldering', 3)
-    expect(auto.pointDelayMs).toBeLessThanOrEqual(semi.pointDelayMs)
-    expect(auto.qualityMin).toBeGreaterThanOrEqual(semi.qualityMin)
+  it('паяльна станція — найпрощучіша зона в грі й нульовий перегрів', () => {
+    const station = levelData('soldering', 3)
+    for (let i = 0; i < 3; i++) {
+      expect(station.greenHalf).toBeGreaterThan(levelData('soldering', i).greenHalf)
+    }
+    expect(station.overheatChance).toBe(0)
   })
 
   it('ідеальна ручна пайка лишається вигіднішою за будь-яку автоматику', () => {
     const kit  = KIT_TYPES.mini_drone
     const hand = calcPrice(kit.basePrice, 1, 1)
-    for (let i = 2; i < 4; i++) {
+    // Джерел авто-темпу лишилось одне (напівавтомат) — решта автоматизації це люди.
+    for (let i = 0; i < 4; i++) {
       const d = levelData('soldering', i)
+      if (d.qualityMax === undefined) continue
       expect(calcPrice(kit.basePrice, d.qualityMax, 1)).toBeLessThan(hand)
     }
   })

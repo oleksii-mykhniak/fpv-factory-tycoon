@@ -317,7 +317,7 @@ describe('фікси після тесту на телефоні', () => {
   })
 
   it('порожній верстак не працює, навіть з найкращим паяльником', () => {
-    const w = world({ upgrades: { solderingLevel: 3 } })
+    const w = world({ upgrades: { solderingLevel: 2 } })
     dispatch(w, 'order', { kitId: 'mini_drone' })
     run(w, 8000)
     dispatch(w, 'pickup', { deliveryId: w.game.deliveries[0].id })

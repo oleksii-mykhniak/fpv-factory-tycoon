@@ -143,7 +143,7 @@ describe('sim/zoneSystem — dwell', () => {
 // A bench holding a finished drone, with the player standing well clear.
 function readyBench() {
   const w = withArrivedBox(world({
-    upgrades: { ...createState().upgrades, solderingLevel: 3 },
+    upgrades: { ...createState().upgrades, solderingLevel: 2 },
   }))
   standAt(w, zone('slot0'))
   run(w, TICK_MS * 2)
@@ -158,7 +158,7 @@ function readyBench() {
 describe('sim/interactions — the full loop without a single tap', () => {
   it('slot → bench → mailbox pays out', () => {
     const w = withArrivedBox(world({
-      upgrades: { ...createState().upgrades, solderingLevel: 3 },   // bench solders itself
+      upgrades: { ...createState().upgrades, solderingLevel: 2 },   // bench solders itself
     }))
     const startMoney = w.game.money
 

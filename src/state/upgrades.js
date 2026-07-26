@@ -9,8 +9,7 @@ import {
   BETTER_IRON_GREEN_HALF, BETTER_IRON_OVERHEAT_CHANCE,
   SEMIAUTO_GREEN_HALF, SEMIAUTO_OVERHEAT_CHANCE,
   SEMIAUTO_QUALITY_MIN, SEMIAUTO_QUALITY_MAX, SEMIAUTO_POINT_DELAY_MS,
-  AUTO_GREEN_HALF, AUTO_OVERHEAT_CHANCE,
-  AUTO_QUALITY_MIN, AUTO_QUALITY_MAX, AUTO_POINT_DELAY_MS,
+  SOLDER_STATION_GREEN_HALF, SOLDER_STATION_OVERHEAT_CHANCE,
   SOLDERING_UPGRADE_COSTS,
   CONSUMABLES_UPGRADE_COSTS, FLUX_OVERHEAT_MULT, FLUX_QUALITY_BONUS,
   STORAGE_UPGRADE_COSTS, STORAGE_SLOTS_BY_LEVEL,
@@ -37,14 +36,15 @@ export const UPGRADE_TRACKS = Object.freeze({
     levels: [
       { name: 'Ручний паяльник', effect: 'Паяєте руками, стоячи біля верстака',
         greenHalf: SOLDER_GREEN_HALF, overheatChance: OVERHEAT_CHANCE },
-      { name: 'Кращий паяльник', effect: 'Ширша зона +47%, перегрів −60%',
+      { name: 'Кращий паяльник', effect: 'Ширша зона +83%, перегрів −75%',
         greenHalf: BETTER_IRON_GREEN_HALF, overheatChance: BETTER_IRON_OVERHEAT_CHANCE },
-      { name: 'Напівавтомат', effect: 'Верстак паяє сам 65–85%; руками — точніше',
+      { name: 'Напівавтомат', effect: 'Верстак паяє сам 60–75%; руками — точніше',
         greenHalf: SEMIAUTO_GREEN_HALF, overheatChance: SEMIAUTO_OVERHEAT_CHANCE,
         qualityMin: SEMIAUTO_QUALITY_MIN, qualityMax: SEMIAUTO_QUALITY_MAX, pointDelayMs: SEMIAUTO_POINT_DELAY_MS },
-      { name: 'Автопаяльник', effect: 'Паяє сам без участі; руками — ще краще',
-        greenHalf: AUTO_GREEN_HALF, overheatChance: AUTO_OVERHEAT_CHANCE,
-        qualityMin: AUTO_QUALITY_MIN, qualityMax: AUTO_QUALITY_MAX, pointDelayMs: AUTO_POINT_DELAY_MS },
+      // No qualityMin: this level deliberately has no unattended rate. Hands-off
+      // assembly is what a technician is for; this is what YOUR hands are for.
+      { name: 'Паяльна станція', effect: 'Найширша зона, перегріву немає — але паяєте ви',
+        greenHalf: SOLDER_STATION_GREEN_HALF, overheatChance: SOLDER_STATION_OVERHEAT_CHANCE },
     ],
   },
   consumables: {

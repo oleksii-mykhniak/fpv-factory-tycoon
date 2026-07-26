@@ -20,7 +20,7 @@ const assembling = { phase: Phase.ASSEMBLY, kitId: 'mini_drone', solderPoints: [
 
 describe('sim/settleOffline', () => {
   it('pays nothing for a short absence', () => {
-    const r = settleOffline(shop({ solderingLevel: 3, station: assembling }), 30_000)
+    const r = settleOffline(shop({ solderingLevel: 2, station: assembling }), 30_000)
     expect(r.earned).toBe(0)
     expect(r.state.stations[0].phase).toBe(Phase.ASSEMBLY)
   })
@@ -32,7 +32,7 @@ describe('sim/settleOffline', () => {
   })
 
   it('an automatic bench finishes the drone it was building', () => {
-    const r = settleOffline(shop({ solderingLevel: 3, station: assembling }), 2 * HOUR)
+    const r = settleOffline(shop({ solderingLevel: 2, station: assembling }), 2 * HOUR)
     expect(r.assembled).toBe(1)
     expect(r.state.stations[0].phase).toBe(Phase.READY)
     expect(r.earned).toBe(0)          // nobody to carry it to the mailbox
@@ -44,7 +44,7 @@ describe('sim/settleOffline', () => {
   })
 
   it('a seller banks the finished drone', () => {
-    const r = settleOffline(shop({ solderingLevel: 3, workers: ['seller'], station: assembling }), 2 * HOUR)
+    const r = settleOffline(shop({ solderingLevel: 2, workers: ['seller'], station: assembling }), 2 * HOUR)
     expect(r.sold).toBe(1)
     expect(r.earned).toBeGreaterThan(0)
     expect(r.state.money).toBeGreaterThan(500)
@@ -52,13 +52,13 @@ describe('sim/settleOffline', () => {
   })
 
   it('never invents work: an idle bench stays idle', () => {
-    const r = settleOffline(shop({ solderingLevel: 3, workers: ['seller'] }), 4 * HOUR)
+    const r = settleOffline(shop({ solderingLevel: 2, workers: ['seller'] }), 4 * HOUR)
     expect(r.assembled).toBe(0)
     expect(r.earned).toBe(0)
   })
 
   it('caps a very long absence', () => {
-    const r = settleOffline(shop({ solderingLevel: 3, station: assembling }), 40 * HOUR)
+    const r = settleOffline(shop({ solderingLevel: 2, station: assembling }), 40 * HOUR)
     expect(r.elapsedMs).toBe(OFFLINE_CAP_MS)
   })
 

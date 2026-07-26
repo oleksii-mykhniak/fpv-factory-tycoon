@@ -1,4 +1,5 @@
 import { UPGRADE_TRACKS } from './upgrades.js'
+import { STARTING_MONEY } from './config.js'
 
 // Location registry — data-driven. Each location defines which kits are available,
 // the maximum level allowed per upgrade track, and unlock conditions.
@@ -18,6 +19,7 @@ export const LOCATIONS = Object.freeze({
     workerCaps: { courier: 0, tech: 0, seller: 0, manager: 0 },
     unlockCost: 0,
     unlockReq: null,
+    startMoney: STARTING_MONEY,
     sceneConfig: { bgColor: '#0e0e18', floorColor: '#1a1a26' },
   },
   garage: {
@@ -35,6 +37,7 @@ export const LOCATIONS = Object.freeze({
     workerCaps: { courier: 1, tech: 1, seller: 1, manager: 0 },
     unlockCost: 800,
     unlockReq: { minUpgrades: { soldering: 2 } },
+    startMoney: 250,
     sceneConfig: { bgColor: '#0d1810', floorColor: '#1a2618' },
   },
   workshop: {
@@ -49,6 +52,7 @@ export const LOCATIONS = Object.freeze({
     workerCaps: { courier: 2, tech: 2, seller: 2, manager: 1 },
     unlockCost: 2500,
     unlockReq: { minUpgrades: { soldering: 3, consumables: 2 } },
+    startMoney: 800,
     sceneConfig: { bgColor: '#180d18', floorColor: '#261a26' },
   },
 })
@@ -68,6 +72,15 @@ export function kitsForLocation(state) {
 export function capFor(state, trackId) {
   const caps = currentLocation(state).upgradeCaps
   return caps[trackId] ?? Infinity
+}
+
+// The bank balance a location starts you on. Moving RESETS the cash to this
+// number rather than deducting a price: unlockCost is a threshold you have to
+// prove you can clear, not a bill. Without the reset, how the next chapter plays
+// depends entirely on whether you ground out $9000 in the garage first — the
+// balance of every location after the first would be untunable.
+export function startMoneyAt(locationId) {
+  return LOCATIONS[locationId]?.startMoney ?? STARTING_MONEY
 }
 
 // Returns { can: bool, reasons: string[] }.

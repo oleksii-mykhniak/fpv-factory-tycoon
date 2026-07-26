@@ -7,7 +7,9 @@ import {
 
 import { UPGRADE_TRACKS } from './upgrades.js'
 import { KIT_TYPES } from './kits.js'
-import { capFor, canMoveToLocation, LOCATIONS, hiringAllowed, roleCapHere } from './locations.js'
+import {
+  capFor, canMoveToLocation, LOCATIONS, hiringAllowed, roleCapHere, startMoneyAt,
+} from './locations.js'
 import { hireCost, roleDef } from '../defs/roles.js'
 
 // Re-export so existing consumers keep importing kit data from gameState.js.
@@ -419,10 +421,11 @@ export function moveToLocation(state, targetId) {
   const { can, reasons } = canMoveToLocation(state, targetId)
   if (!can)
     throw new Error(`moveToLocation: ${reasons.join('; ')}`)
-  const target = LOCATIONS[targetId]
+  // The cash RESETS rather than being charged: unlockCost proves you can afford
+  // the step up, startMoney decides how the next chapter opens. See startMoneyAt.
   return {
     ...state,
-    money:      state.money - target.unlockCost,
+    money:      startMoneyAt(targetId),
     locationId: targetId,
   }
 }

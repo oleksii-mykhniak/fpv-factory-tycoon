@@ -87,7 +87,7 @@ describe('sim/loop', () => {
 
   it('is deterministic — same inputs, same world', () => {
     const build = () => {
-      const w = world({ upgrades: { ...createState().upgrades, solderingLevel: 3 } }, { rng: seq([0.1, 0.9, 0.5]) })
+      const w = world({ upgrades: { ...createState().upgrades, solderingLevel: 2 } }, { rng: seq([0.1, 0.9, 0.5]) })
       dispatch(w, 'order', { kitId: 'mini_drone' })
       run(w, 60_000)
       return w
@@ -125,11 +125,11 @@ describe('sim/deliverySystem', () => {
 })
 
 describe('sim/stationSystem', () => {
-  const autoUpgrades = { ...createState().upgrades, solderingLevel: 3 }
+  const semiAutoUpgrades = { ...createState().upgrades, solderingLevel: 2 }
 
   // A bench only works while somebody is at it, so these need a real room with
   // zones and a character standing in front of the station.
-  function benchWithKit(kitId = 'mini_drone', upgrades = autoUpgrades, { attended = true } = {}) {
+  function benchWithKit(kitId = 'mini_drone', upgrades = semiAutoUpgrades, { attended = true } = {}) {
     const base = createState()
     const state = {
       ...base, money: 5000, upgrades,
@@ -148,13 +148,13 @@ describe('sim/stationSystem', () => {
   }
 
   it('an empty bench builds nothing, however good the iron', () => {
-    const w = benchWithKit('mini_drone', autoUpgrades, { attended: false })
+    const w = benchWithKit('mini_drone', semiAutoUpgrades, { attended: false })
     expect(types(run(w, 30_000))).not.toContain(EV.STAGE_STARTED)
     expect(bench(w).phase).toBe(Phase.ASSEMBLY)
   })
 
   it('it picks up again when someone comes back', () => {
-    const w = benchWithKit('mini_drone', autoUpgrades, { attended: false })
+    const w = benchWithKit('mini_drone', semiAutoUpgrades, { attended: false })
     run(w, 10_000)
     const zone = w.zones.find(z => z.kind === 'bench')
     const p = w.agents.find(a => a.kind === 'player')
@@ -162,7 +162,7 @@ describe('sim/stationSystem', () => {
     expect(types(run(w, 30_000))).toContain(EV.ASSEMBLY_DONE)
   })
 
-  it('AUTO arms itself and solders every point', () => {
+  it('the semi-auto bench solders every point on its own', () => {
     const w = benchWithKit()
     const kit = KIT_TYPES.mini_drone
     const events = run(w, 60_000)
@@ -271,7 +271,7 @@ describe('sim — full cycle, headless', () => {
   it('order → deliver → assemble → sell turns a profit with a full-auto shop', () => {
     const base = createState()
     const w = createWorld({
-      state: { ...base, money: 500, upgrades: { ...base.upgrades, solderingLevel: 3 } },
+      state: { ...base, money: 500, upgrades: { ...base.upgrades, solderingLevel: 2 } },
       salesLog: [],
     }, { now: T0, rng: seq([0.5]), layout: apartment })
     const startMoney = w.game.money

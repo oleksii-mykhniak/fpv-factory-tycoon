@@ -1,6 +1,7 @@
-import { busyStations } from '../state/gameState.js'
 import { UPGRADE_TRACKS } from '../state/upgrades.js'
-import { currentLocation, LOCATIONS, LOCATION_ORDER, capFor, canMoveToLocation } from '../state/locations.js'
+import {
+  currentLocation, LOCATIONS, LOCATION_ORDER, capFor, canMoveToLocation, startMoneyAt,
+} from '../state/locations.js'
 
 export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation }) {
   const overlay = document.createElement('div')
@@ -85,7 +86,11 @@ export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation }) {
     if (nextLocId) {
       const nextLoc        = LOCATIONS[nextLocId]
       const { can, reasons } = canMoveToLocation(state, nextLocId)
-      const moveEnabled    = can && busyStations(state).length === 0
+      // A bench mid-build no longer blocks the move: the station list carries
+      // its progress across (syncStations only ever grows it), so an unfinished
+      // drone travels with you. Waiting for an idle shop meant waiting forever
+      // once staff were working nonstop.
+      const moveEnabled    = can
       locationHTML = `
         <div class="shop-section shop-section--location">
           <div class="shop-section__title">Локація: ${loc.emoji} ${loc.name}</div>
@@ -100,8 +105,9 @@ export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation }) {
                 ? '<p class="upgrade-effect-hint">Умови виконані — готово до переїзду!</p>'
                 : ''
             }
-            ${!moveEnabled && busyStations(state).length > 0 && can
-              ? '<p class="upgrade-effect-hint">Переїзд між циклами</p>' : ''}
+            <p class="upgrade-effect-hint">
+              Після переїзду каса стане $${startMoneyAt(nextLocId)} — накопичене лишається тут
+            </p>
           </div>
         </div>
       `

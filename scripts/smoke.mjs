@@ -130,7 +130,7 @@ const seedState = (upgrades, extra = {}) => ({
 
 // ── A. The whole loop on foot, zero taps ──────────────────
 console.log('\n### A. Full cycle through trigger zones (no taps at all)')
-await boot(seedState({ solderingLevel: 3 }))   // bench solders itself; player hauls
+await boot(seedState({ solderingLevel: 2 }))   // bench solders itself; player hauls
 await log('boot')
 await orderFirstKit()
 await log('ordered')
@@ -182,7 +182,7 @@ const bTrash = await log('trash zone with salvage ordered')
 
 // ── D. Two stations at once (C3) ──────────────────────────
 console.log('\n### D. Two benches in parallel')
-await boot(seedState({ solderingLevel: 3, benchLevel: 1, storageLevel: 1 }, { locationId: 'garage' }))
+await boot(seedState({ solderingLevel: 2, benchLevel: 1, storageLevel: 1 }, { locationId: 'garage' }))
 const dCount = await page.evaluate(() => globalThis.__world.game.stations.length)
 const dZones = await page.evaluate(() =>
   globalThis.__world.zones.filter(z => z.kind === 'bench').map(z => z.id))
@@ -311,13 +311,13 @@ console.log(`  walked ${gBefore.x} → ${gAfterWalk.x} while soldering; strip st
 const gPhaseAway = await page.evaluate(() => globalThis.__world.game.stations[0].phase)
 
 // An upgraded bench runs unattended and does not need the player at all.
-await boot(seedState({ solderingLevel: 3 }))
+await boot(seedState({ solderingLevel: 2 }))
 await orderFirstKit()
 await page.waitForTimeout(5200)
 await goTo('slot0'); await page.waitForTimeout(700)
 await goTo('zone-station-0')
 await page.waitForTimeout(14000)
-const gUnattended = await log('level-3 bench, player standing there')
+const gUnattended = await log('semi-auto bench, player standing there')
 
 // ── H. Moving house rebuilds the shop (C7) ────────────────
 console.log('\n### H. A move is a different room')
@@ -418,8 +418,8 @@ const checks = [
   ['D: two stations were built',          dCount === 2],
   ['D: each station got its own zone',    dZones.length === 2],
   ['D: box picked up from a street slot',  dCarry.carrying.includes('kit_box')],
-  // After the C7 balance pass a level-3 bench finishes in ~3 s, so the first
-  // station is often already done by the time the second box arrives. What
+  // A semi-auto bench finishes in a few seconds, so the first station is often
+  // already done by the time the second box arrives. What
   // matters is that each was loaded and worked independently.
   ['D: both stations were loaded',        dBoth.stations.split('/').every(p => p !== 'IDLE')],
   // A bench only runs while somebody is at it, so the player cannot finish two
