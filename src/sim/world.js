@@ -93,11 +93,15 @@ export function rebuildStationGeometry(world) {
 
   world.placedStations = placed
   world.obstacles = [...layout.obstacles, ...placed.map(p => p.body)]
-  world.zones     = [
+  // Fixed zones: the layout's own plus one per built station. Kept separately
+  // because the promote zones (F5) follow people around and are rebuilt every
+  // tick on top of these.
+  world.staticZones = [
     ...layout.zones,
     ...placed.map(p => p.zone),
     ...placed.map(p => p.outZone).filter(Boolean),
   ]
+  world.zones = [...world.staticZones]
 
   // The nav grid is a rasterisation of exactly these obstacles, so it is
   // rebuilt here and nowhere else — a station added without a matching grid

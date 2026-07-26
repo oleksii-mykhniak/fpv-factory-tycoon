@@ -6,6 +6,7 @@
 
 import {
   HIRE_COST_BASE, HIRE_COST_GROWTH,
+  WORKER_UPGRADE_BASE, WORKER_UPGRADE_GROWTH,
   COURIER_SPEED_BY_LEVEL, TECH_POINT_MS_BY_LEVEL, TECH_QUALITY_BY_LEVEL,
   TECH_MISS_CHANCE_BY_LEVEL,
   SELLER_SPEED_BY_LEVEL, MANAGER_SPEED_BY_LEVEL, MANAGER_TIER_BY_LEVEL,
@@ -94,6 +95,19 @@ export function roleLevelData(roleId, level) {
 export function hireCost(roleId, alreadyHired) {
   const { hire } = roleDef(roleId)
   return Math.round(hire.base * Math.pow(hire.growth, alreadyHired))
+}
+
+// The top level a role can reach — the length of its own level table, so
+// giving a role a fourth level is a data change and nothing else.
+export function roleMaxLevel(roleId) {
+  return roleDef(roleId).levels.length - 1
+}
+
+// Promoting somebody from `level` to the next one (F5). Null at the top.
+export function promoteCost(roleId, level) {
+  if (level >= roleMaxLevel(roleId)) return null
+  const base = WORKER_UPGRADE_BASE[roleId] ?? 300
+  return Math.round(base * Math.pow(WORKER_UPGRADE_GROWTH, level))
 }
 
 // Which roles can take this task type.

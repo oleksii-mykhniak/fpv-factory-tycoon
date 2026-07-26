@@ -122,6 +122,17 @@ export const SELLER_SPEED_BY_LEVEL  = [170, 205, 240]
 export const TECH_POINT_MS_BY_LEVEL = [2600, 2000, 1500]
 export const TECH_QUALITY_BY_LEVEL  = [0.55, 0.65, 0.75]
 
+// Levelling somebody up, on the shop floor (F5). Cost is base × growth^level,
+// per role — the same shape as hiring, so a shop with three trained couriers is
+// visibly a bigger investment than one with three fresh ones.
+export const WORKER_UPGRADE_BASE   = { courier: 240, tech: 400, seller: 300, manager: 560 }
+export const WORKER_UPGRADE_GROWTH = 2.1
+// How long the player stands next to someone to promote them.
+export const ZONE_DWELL_PROMOTE_MS = 1000
+// How close counts as "next to". Deliberately tight: a wide one would fire on
+// anybody walking past a colleague, and promotions cost money.
+export const PROMOTE_ZONE_SIZE = 120
+
 // ── Procurement manager (S3) ─────────────────────────────
 // The manager sits at the laptop and orders kits so the player does not have
 // to. Deliberately the most expensive hire: it is the one that closes the loop

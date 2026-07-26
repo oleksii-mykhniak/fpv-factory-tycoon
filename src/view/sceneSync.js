@@ -14,7 +14,7 @@
 // as the character juddering while running. Actors now ease toward the sim
 // position instead, which is the standard fixed-step/variable-render fix.
 
-import { Phase, DeliveryStatus, KIT_TYPES, stationsOf } from '../state/gameState.js'
+import { Phase, DeliveryStatus, KIT_TYPES, stationsOf, workersOf } from '../state/gameState.js'
 import { getSprite } from '../scene/loader.js'
 import {
   ZONE_FILL_DIM, ZONE_FILL_LIVE, ZONE_EDGE_DIM, ZONE_EDGE_LIVE,
@@ -22,6 +22,7 @@ import {
 import { INTERACTIONS, carrySpriteKey, zoneWantsAttention } from '../defs/interactions.js'
 import { dwellProgress } from '../sim/systems/zone.js'
 import { piggyShouldShow, nextObjective } from '../sim/derive.js'
+import { promoteCost, roleMaxLevel } from '../defs/roles.js'
 import { CARRY_STACK_OFFSET_Y, VIEW_SMOOTHING } from '../state/config.js'
 import * as ex from 'excalibur'
 
@@ -174,6 +175,38 @@ function syncWorkers(refs, world) {
     view.actor.graphics.visible = true
     view.rig?.setMoving(agent.moving, agent.facing > 0)
     syncCarryStack(view.carrySlots, view.actor, agent)
+  }
+
+  // ── Promotion price tags (F5) ──────────────────────────
+  // Only over the player's own staff, only when the promotion is affordable and
+  // exists: a tag you cannot act on is noise, and this one is the whole upgrade
+  // UI on the factory.
+  for (const worker of workersOf(world.game)) {
+    const view = refs.workerViews?.get(worker.id)
+    if (!view?.promoteLabel) continue
+    const agent = (world.agents ?? []).find(a => a.id === worker.id)
+    const cost  = promoteCost(worker.role, worker.level ?? 0)
+    const max   = roleMaxLevel(worker.role)
+
+    if (!agent) {
+      view.promoteLabel.graphics.visible = false
+      view.levelLabel.graphics.visible = false
+      continue
+    }
+
+    const dots = '●'.repeat((worker.level ?? 0) + 1) + '○'.repeat(max - (worker.level ?? 0))
+    view.levelLabel.text = dots
+    view.levelLabel.pos.x = agent.x
+    view.levelLabel.pos.y = agent.y - 66
+    view.levelLabel.graphics.visible = true
+
+    const show = cost !== null && world.game.money >= cost
+    view.promoteLabel.graphics.visible = show
+    if (show) {
+      view.promoteLabel.text = `⬆️ $${cost}`
+      view.promoteLabel.pos.x = agent.x
+      view.promoteLabel.pos.y = agent.y - 86
+    }
   }
 
   // A worker that no longer exists (a future firing / a reload) must not leave

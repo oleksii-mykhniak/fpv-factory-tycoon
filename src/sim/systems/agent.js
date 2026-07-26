@@ -9,7 +9,7 @@
 // walking into a trigger zone is what actually picks things up and puts them
 // down, exactly as it does for the player.
 
-import { Phase, stationsOf, releaseOutput } from '../../state/gameState.js'
+import { Phase, stationsOf, releaseOutput, workersOf } from '../../state/gameState.js'
 import { taskDef } from '../../defs/tasks.js'
 import { roleDef, roleLevelData } from '../../defs/roles.js'
 import { WANDER_RADIUS, WANDER_PAUSE_MS } from '../../state/config.js'
@@ -222,7 +222,23 @@ export function postFor(world, agent) {
     ?? { x: agent.x, y: agent.y }
 }
 
+// The roster is the truth about who someone is. A promotion (F5) happens inside
+// a trigger zone, so the agent's speed and level are refreshed from it here
+// rather than at hire time — otherwise a promoted courier kept walking at the
+// pace they were hired at until the next reload.
+function syncLevels(world) {
+  const roster = workersOf(world.game)
+  for (const agent of world.agents ?? []) {
+    if (agent.kind !== 'worker') continue
+    const w = roster.find(r => r.id === agent.id)
+    if (!w || agent.level === w.level) continue
+    agent.level = w.level
+    agent.speed = roleLevelData(w.role, w.level).speed
+  }
+}
+
 export function agentSystem(world, dt, events) {
+  syncLevels(world)
   for (const agent of world.agents ?? []) {
     if (agent.kind !== 'worker') continue
     // An agent with no role cannot be on anyone's payroll — skip rather than

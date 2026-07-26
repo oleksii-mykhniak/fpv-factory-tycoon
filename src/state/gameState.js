@@ -11,7 +11,7 @@ import {
   capFor, canMoveToLocation, LOCATIONS, hiringAllowed, roleCapHere, roleCapInHall,
   startMoneyAt, freezeCapsFor, ruleAt,
 } from './locations.js'
-import { hireCost, roleDef, ROLE_ORDER } from '../defs/roles.js'
+import { hireCost, roleDef, ROLE_ORDER, promoteCost } from '../defs/roles.js'
 import { FACTORY_HALL_IDS, FIRST_HALL_ID, hallDef } from '../defs/layouts/factory.js'
 
 // Re-export so existing consumers keep importing kit data from gameState.js.
@@ -346,6 +346,29 @@ export function hireWorker(state, roleId, now = Date.now(), makeId = null, hallI
     ...state,
     money:   state.money - cost,
     workers: [...workersOf(state), { id, role: roleId, level: 0, hiredAt: now, hallId }],
+  }
+}
+
+export const workerById = (state, id) => workersOf(state).find(w => w.id === id) ?? null
+
+// Promote one person, on the shop floor (F5).
+//
+// On the factory this is the ONLY way to get stronger — the personal upgrade
+// tracks are frozen there — so it deliberately costs money and nothing else:
+// no bench to return to, no menu to open, just standing next to someone.
+export function promoteWorker(state, workerId) {
+  const worker = workerById(state, workerId)
+  if (!worker) throw new Error(`promoteWorker: робітника "${workerId}" не знайдено`)
+  const cost = promoteCost(worker.role, worker.level ?? 0)
+  if (cost === null)
+    throw new Error('promoteWorker: вже максимальний рівень')
+  if (state.money < cost)
+    throw new Error(`promoteWorker: недостатньо грошей (є ${Math.floor(state.money)}, потрібно ${cost})`)
+  return {
+    ...state,
+    money:   state.money - cost,
+    workers: workersOf(state).map(w =>
+      w.id === workerId ? { ...w, level: (w.level ?? 0) + 1 } : w),
   }
 }
 

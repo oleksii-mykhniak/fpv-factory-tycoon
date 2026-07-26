@@ -92,6 +92,13 @@ async function boot(seed) {
   // best-effort no-op.
   await page.click('#onboarding', { timeout: 1000 }).catch(() => {})
   await page.waitForTimeout(300)
+
+  // Pin the sim's luck. Since F1.6 an unattended bench can lay a cold joint or
+  // burn the kit, so the happy path is only PROBABLE — scenario A started
+  // failing about one run in ten. Relaxing the assertions would have thrown
+  // away what they check; fixing the dice keeps the test end-to-end and
+  // deterministic. 0.9 is a good roll: no misses, high quality.
+  await page.evaluate(() => { globalThis.__world.rng = () => 0.9 })
 }
 
 // Ordering can legitimately be impossible — every bench busy, every slot full.
@@ -506,6 +513,60 @@ const kInHand = await log('picked the box off the belt')
 await goTo('zone-station-0'); await page.waitForTimeout(2000)
 const kOnBench = await log('carried it to the bench')
 
+// ── L. Promoting somebody on the shop floor (F5) ──────────
+console.log('\n### L. The promotion tag')
+await boot(seedState({}, { locationId: 'factory', money: 20000 }))
+await openPanelAt('jobboard_hall-1')
+const lHireBtn = page.locator('.shop-upgrade', { hasText: 'Кур' }).locator('button').first()
+if (await lHireBtn.isEnabled().catch(() => false)) await lHireBtn.click()
+await page.waitForTimeout(300)
+await page.click('#hire-close').catch(() => {})
+await page.waitForTimeout(500)
+
+const lBefore = await page.evaluate(() => {
+  const w = globalThis.__world
+  const worker = w.game.workers[0]
+  const agent = w.agents.find(a => a.id === worker.id)
+  const view = globalThis.__refs.workerViews.get(worker.id)
+  return {
+    level: worker.level,
+    speed: agent.speed,
+    money: Math.round(w.game.money),
+    tag:   view?.promoteLabel?.text ?? '',
+    tagOn: view?.promoteLabel?.graphics?.visible ?? false,
+    dots:  view?.levelLabel?.text ?? '',
+    zone:  (w.zones ?? []).some(z => z.kind === 'promote'),
+  }
+})
+
+// Stand on top of them for a moment — that is the whole interaction.
+for (let i = 0; i < 30; i++) {
+  await page.evaluate(() => {
+    const w = globalThis.__world
+    const worker = w.agents.find(a => a.kind === 'worker')
+    const player = w.agents.find(a => a.kind === 'player')
+    player.x = worker.x; player.y = worker.y
+  })
+  await page.waitForTimeout(60)
+}
+await page.waitForTimeout(500)
+
+const lAfter = await page.evaluate(() => {
+  const w = globalThis.__world
+  const worker = w.game.workers[0]
+  const agent = w.agents.find(a => a.id === worker.id)
+  const view = globalThis.__refs.workerViews.get(worker.id)
+  return {
+    level: worker.level,
+    speed: agent.speed,
+    money: Math.round(w.game.money),
+    dots:  view?.levelLabel?.text ?? '',
+  }
+})
+console.log(`  tag "${lBefore.tag}" (visible ${lBefore.tagOn}); dots ${lBefore.dots} → ${lAfter.dots}; ` +
+            `level ${lBefore.level}→${lAfter.level}, speed ${lBefore.speed}→${lAfter.speed}, ` +
+            `money ${lBefore.money}→${lAfter.money}`)
+
 // ── C. Movement, collisions, camera (C1 regression) ───────
 console.log('\n### C. Movement (WASD)')
 await boot(seedState({}))
@@ -640,6 +701,12 @@ const checks = [
   ['K: the box is drawn on the belt',         kDropped.boxVisible === 1],
   ['K: a character takes it off the belt',    kInHand.carrying.includes('kit_box')],
   ['K: and carries it into a bench',          kOnBench.phase === 'ASSEMBLY'],
+  ['L: a zone follows the worker around',  lBefore.zone === true],
+  ['L: the price tag is drawn over them',  lBefore.tagOn && lBefore.tag.includes('$')],
+  ['L: standing next to them promotes',    lAfter.level === lBefore.level + 1],
+  ['L: it costs money',                    lAfter.money < lBefore.money],
+  ['L: they actually get faster',          lAfter.speed > lBefore.speed],
+  ['L: the level dots move on',            lAfter.dots !== lBefore.dots],
   ['no console errors',                   errors.length === 0],
 ]
 console.log('\n=== checks ===')

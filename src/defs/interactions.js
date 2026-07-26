@@ -20,11 +20,12 @@ import {
   Phase, DeliveryStatus, KIT_TYPES,
   pickupDelivery, startAssembly, startScrapAssembly, getStation,
   sell as sellStation, calcPrice, takeOutput, orderKit, abandonBurntDrone,
+  workerById, promoteWorker,
 } from '../state/gameState.js'
 import {
   ZONE_DWELL_INSTANT_MS, ZONE_DWELL_BENCH_MS, ZONE_DWELL_OUTPUT_MS,
   ZONE_DWELL_MAILBOX_MS, ZONE_DWELL_TRASH_MS, ZONE_DWELL_PANEL_MS,
-  CARRY_CAPACITY, MANAGER_COOLDOWN_MS, SALVAGE_RATE,
+  CARRY_CAPACITY, MANAGER_COOLDOWN_MS, SALVAGE_RATE, ZONE_DWELL_PROMOTE_MS,
 } from '../state/config.js'
 import { EV, emit } from '../sim/events.js'
 import {
@@ -33,6 +34,7 @@ import {
   managerOrderChoice,
 } from '../sim/derive.js'
 import { hiringAllowed } from '../state/locations.js'
+import { promoteCost } from './roles.js'
 
 // ── Carry helpers ─────────────────────────────────────────
 
@@ -275,6 +277,32 @@ export const INTERACTIONS = {
       emit(events, EV.PANEL_REQUESTED, {
         agentId: agent.id, panel: 'hire', hallId: zone.meta?.hallId ?? null,
       }),
+  },
+
+  // Standing next to one of your own people promotes them (F5). The zone moves
+  // with them, so there is nowhere to walk "to" — you catch them where they
+  // work, which is what makes the factory feel staffed rather than managed.
+  promote: {
+    dwellMs: ZONE_DWELL_PROMOTE_MS,
+    repeat:  false,
+    accepts: 'player',
+    enabled(world, zone) {
+      const worker = workerById(world.game, zone.meta?.workerId)
+      if (!worker) return false
+      const cost = promoteCost(worker.role, worker.level ?? 0)
+      return cost !== null && world.game.money >= cost
+    },
+    run(world, zone, _agent, events) {
+      const worker = workerById(world.game, zone.meta?.workerId)
+      if (!worker) return
+      const cost = promoteCost(worker.role, worker.level ?? 0)
+      world.game = promoteWorker(world.game, worker.id)
+      emit(events, EV.MONEY_SPENT, { amount: cost, reason: 'promote' })
+      emit(events, EV.WORKER_PROMOTED, {
+        workerId: worker.id, role: worker.role, level: (worker.level ?? 0) + 1,
+      })
+      emit(events, EV.STATE_DIRTY)
+    },
   },
 
   // Piggy bank: the rescue mini-game.

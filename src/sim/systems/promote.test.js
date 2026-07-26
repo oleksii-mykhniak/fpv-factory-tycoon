@@ -1,0 +1,121 @@
+import { describe, it, expect } from 'vitest'
+import { createWorld } from '../world.js'
+import { advance } from '../loop.js'
+import { dispatch } from '../commands.js'
+import { SYSTEMS } from './index.js'
+import { createState } from '../../state/gameState.js'
+import { layoutFor } from '../../defs/layouts/index.js'
+import { promoteCost, roleMaxLevel, roleLevelData } from '../../defs/roles.js'
+import { TICK_MS, ZONE_DWELL_PROMOTE_MS } from '../../state/config.js'
+import { EV } from '../events.js'
+
+const T0 = 1_000_000
+
+function shop({ money = 99999, role = 'courier' } = {}) {
+  const base = createState()
+  const state = { ...base, money, locationId: 'factory', unlockedHalls: ['hall-1'] }
+  const w = createWorld({ state, salesLog: [] },
+    { now: T0, rng: () => 0.5, layout: layoutFor('factory', state) })
+  dispatch(w, 'hireWorker', { role, hallId: 'hall-1' })
+  return w
+}
+
+const run = (w, ms) => {
+  const events = []
+  const target = w.now + ms
+  while (target - w.now >= TICK_MS) events.push(...advance(w, w.now + TICK_MS, SYSTEMS))
+  return events
+}
+
+const workerAgent = (w) => w.agents.find(a => a.kind === 'worker')
+const promoteZone = (w) => (w.zones ?? []).find(z => z.kind === 'promote')
+
+// Parks the player right on top of their colleague and holds them there:
+// the sim's own separation would otherwise push them apart mid-dwell.
+function standNextTo(w, ms) {
+  const player = w.agents.find(a => a.kind === 'player')
+  const target = w.now + ms
+  const events = []
+  while (target - w.now >= TICK_MS) {
+    const worker = workerAgent(w)
+    player.x = worker.x
+    player.y = worker.y
+    events.push(...advance(w, w.now + TICK_MS, SYSTEMS))
+  }
+  return events
+}
+
+describe('F5 — підвищення просто на підлозі', () => {
+  it('навколо кожного робітника є зона, і вона їде разом із ним', () => {
+    const w = shop()
+    run(w, 200)
+    const zone = promoteZone(w)
+    expect(zone).toBeTruthy()
+    expect(zone.meta.workerId).toBe(w.game.workers[0].id)
+
+    const agent = workerAgent(w)
+    agent.x += 300
+    run(w, 100)
+    expect(promoteZone(w).cx).toBeCloseTo(agent.x, 0)
+  })
+
+  it('постояти поруч — і рівень росте, гроші списуються', () => {
+    const w = shop()
+    const cost = promoteCost('courier', 0)
+    const before = w.game.money
+    const events = standNextTo(w, ZONE_DWELL_PROMOTE_MS + 400)
+
+    expect(events.map(e => e.t)).toContain(EV.WORKER_PROMOTED)
+    expect(w.game.workers[0].level).toBe(1)
+    expect(before - w.game.money).toBe(cost)
+  })
+
+  it('підвищення одразу змінює швидкість агента, а не після перезавантаження', () => {
+    const w = shop()
+    const was = workerAgent(w).speed
+    standNextTo(w, ZONE_DWELL_PROMOTE_MS + 400)
+    run(w, 200)
+    expect(workerAgent(w).speed).toBe(roleLevelData('courier', 1).speed)
+    expect(workerAgent(w).speed).toBeGreaterThan(was)
+  })
+
+  it('без грошей зона мовчить — стояти дарма не просять', () => {
+    const w = shop()
+    w.game = { ...w.game, money: 0 }
+    const events = standNextTo(w, ZONE_DWELL_PROMOTE_MS + 400)
+    expect(events.map(e => e.t)).not.toContain(EV.WORKER_PROMOTED)
+    expect(w.game.workers[0].level).toBe(0)
+  })
+
+  it('на максимальному рівні зона теж мовчить', () => {
+    const w = shop()
+    const max = roleMaxLevel('courier')
+    w.game = {
+      ...w.game,
+      workers: w.game.workers.map(x => ({ ...x, level: max })),
+    }
+    expect(promoteCost('courier', max)).toBeNull()
+    const events = standNextTo(w, ZONE_DWELL_PROMOTE_MS + 400)
+    expect(events.map(e => e.t)).not.toContain(EV.WORKER_PROMOTED)
+  })
+
+  it('кожен наступний рівень дорожчий', () => {
+    for (const role of ['courier', 'tech', 'seller', 'manager']) {
+      const max = roleMaxLevel(role)
+      for (let i = 1; i < max; i++) {
+        expect(promoteCost(role, i), `${role} ${i}`)
+          .toBeGreaterThan(promoteCost(role, i - 1))
+      }
+      expect(promoteCost(role, max)).toBeNull()
+    }
+  })
+
+  it('без найнятих людей динамічних зон немає взагалі', () => {
+    const base = createState()
+    const w = createWorld({ state: base, salesLog: [] },
+      { now: T0, rng: () => 0.5, layout: layoutFor('apartment') })
+    run(w, 200)
+    expect(promoteZone(w)).toBeUndefined()
+    expect(w.zones).toBe(w.staticZones)
+  })
+})

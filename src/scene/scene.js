@@ -743,6 +743,35 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
       // Colour and badge come from the role registry, so adding a role gives
       // its people a look without touching the scene.
       view = makeCharacter('worker_walk', roleColor(role), { badge: roleBadge(role), tint: true })
+
+      // Price tag over the head (F5): the promotion IS the upgrade menu on the
+      // factory, so it has to be visible on the floor rather than behind a
+      // panel. Level dots ride just under it, so progress reads without a tap.
+      view.promoteLabel = new ex.Label({
+        text: '',
+        pos:  ex.vec(-9999, -9999),
+        z: 26,
+        color: ex.Color.fromHex('#ffd76a'),
+        font: new ex.Font({
+          family: 'monospace', size: 15, unit: ex.FontUnit.Px,
+          textAlign: ex.TextAlign.Center, baseAlign: ex.BaseAlign.Middle,
+        }),
+      })
+      view.promoteLabel.graphics.visible = false
+      scene.add(track(view.promoteLabel))
+
+      view.levelLabel = new ex.Label({
+        text: '',
+        pos:  ex.vec(-9999, -9999),
+        z: 26,
+        color: ex.Color.fromHex('#cfe3ff'),
+        font: new ex.Font({
+          family: 'monospace', size: 13, unit: ex.FontUnit.Px,
+          textAlign: ex.TextAlign.Center, baseAlign: ex.BaseAlign.Middle,
+        }),
+      })
+      view.levelLabel.graphics.visible = false
+      scene.add(track(view.levelLabel))
       // Carried items ride above the head, same rig as the player's stack.
       view.carrySlots = Array.from({ length: 2 }, () => {
         const a = new ex.Actor({
