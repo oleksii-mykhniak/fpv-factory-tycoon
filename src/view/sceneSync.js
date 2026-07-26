@@ -101,6 +101,18 @@ export function syncScene(refs, world) {
   // stack. Kept parked so nothing stale shows through.
   box.graphics.visible = false
 
+  // ── Boxes riding the conveyor (F3) ─────────────────────
+  const belt = world.layout?.conveyor
+  const items = world.belt?.items ?? []
+  for (let i = 0; i < (refs.beltBoxes ?? []).length; i++) {
+    const actor = refs.beltBoxes[i]
+    const item  = items[i]
+    if (!belt || !item) { actor.graphics.visible = false; continue }
+    actor.graphics.visible = true
+    actor.pos.x = belt.x0 + item.t
+    actor.pos.y = belt.y
+  }
+
   // ── Attention pulses ───────────────────────────────────
   // Driven by the zones themselves now: whatever the character could act on if
   // they walked over pulses. One source of truth, so a pulsing object can never

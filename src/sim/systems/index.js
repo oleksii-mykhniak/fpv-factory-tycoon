@@ -2,6 +2,7 @@
 //
 //   intent   → input vector becomes agent velocity
 //   delivery → notices arrivals, so the worker can react to them in the same tick
+//   belt     → moves arrived boxes along the conveyor and drops them off (F3)
 //   job      → derives the board of work from the world
 //   agent    → hired workers claim jobs and run their step scripts
 //   path     → plans routes for agents that asked for one
@@ -15,6 +16,7 @@
 
 import { intentSystem }   from './intent.js'
 import { deliverySystem } from './delivery.js'
+import { beltSystem }     from './belt.js'
 import { jobSystem }      from './job.js'
 import { agentSystem }    from './agent.js'
 import { pathSystem }        from './path.js'
@@ -26,6 +28,7 @@ import { stationSystem }     from './station.js'
 export const SYSTEMS = Object.freeze([
   intentSystem,
   deliverySystem,
+  beltSystem,
   jobSystem,
   agentSystem,
   pathSystem,

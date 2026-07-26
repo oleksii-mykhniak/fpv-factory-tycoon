@@ -77,6 +77,11 @@ export const INTERACTIONS = {
     },
   },
 
+  // Belt drop: the box the conveyor left at this hall. Deliberately the SAME
+  // definition as a street slot — the courier's job did not change, only where
+  // the box is waiting (F3.4).
+  belt_drop: null,   // filled in below, from delivery_slot
+
   // Workbench, front side: drop a box to start assembly, or — while it is being
   // assembled — work at it. Collecting the result happens at `bench_out`.
   bench: {
@@ -281,6 +286,11 @@ export const INTERACTIONS = {
   },
 }
 
+// The belt drop IS the street slot, standing somewhere else. Aliasing rather
+// than copying is the point: if picking a box up ever changes, it changes in
+// one place and both keep agreeing.
+INTERACTIONS.belt_drop = INTERACTIONS.delivery_slot
+
 // Should this zone be lit up and pointed at? Defaults to "is there anything to
 // do here at all" — only the panels (S2) draw the distinction.
 export function zoneWantsAttention(def, world, zone, agent) {
@@ -293,10 +303,15 @@ function stationOf(world, zone) {
   try { return getStation(world.game, zone.meta?.stationId) } catch { return null }
 }
 
-// The arrived, unclaimed delivery sitting in this zone's slot, if any.
+// The arrived, unclaimed delivery waiting in this zone, if any.
+//
+// Two kinds of zone ask this: a street slot (matched by slotIndex) and a belt
+// drop (matched by dropIndex). Keeping it one function is what lets the belt
+// reuse the slot's interaction wholesale.
 function arrivedIn(world, zone) {
+  const wantDrop = zone.meta?.dropIndex !== undefined
   return (world.game.deliveries ?? []).find(d =>
-    d.slotIndex === zone.meta?.slotIndex &&
+    (wantDrop ? d.dropIndex === zone.meta.dropIndex : d.slotIndex === zone.meta?.slotIndex) &&
     d.status === DeliveryStatus.TRANSIT &&
     d.readyAt <= world.now
   )

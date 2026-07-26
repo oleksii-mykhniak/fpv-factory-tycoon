@@ -446,6 +446,48 @@ const jWalked = await page.evaluate(() => {
 })
 console.log(`  crossed the factory to the mailbox: ${jWalked.dist.toFixed(0)} units away`)
 
+// ── K. The conveyor carries the box, not the courier (F3) ──
+console.log('\n### K. The conveyor')
+await boot(seedState({ storageLevel: 2 }, { locationId: 'factory', money: 6000 }))
+await orderFirstKit()
+
+// While in transit there is nothing on the belt yet.
+await page.waitForTimeout(1200)
+const kTransit = await page.evaluate(() => ({
+  onBelt: (globalThis.__world.belt?.items ?? []).length,
+}))
+
+// Arrives at the dock and starts moving on its own.
+await page.waitForTimeout(4500)
+const kRidingA = await page.evaluate(() => ({
+  onBelt: (globalThis.__world.belt?.items ?? []).length,
+  t:      globalThis.__world.belt?.items?.[0]?.t ?? -1,
+  drop:   globalThis.__world.game.deliveries[0]?.dropIndex ?? null,
+}))
+await page.waitForTimeout(1500)
+const kRidingB = await page.evaluate(() => ({
+  t: globalThis.__world.belt?.items?.[0]?.t ?? -1,
+}))
+
+// Gets off at the hall, and only then is there anything to fetch.
+await page.waitForTimeout(6000)
+const kDropped = await page.evaluate(() => {
+  const w = globalThis.__world
+  return {
+    drop:  w.game.deliveries[0]?.dropIndex ?? null,
+    jobs:  (w.jobs ?? []).filter(j => j.type === 'haul_delivery').length,
+    boxVisible: (globalThis.__refs.beltBoxes ?? []).filter(a => a.graphics.visible).length,
+  }
+})
+console.log(`  transit=${kTransit.onBelt} on belt; rode ${kRidingA.t}→${kRidingB.t}; ` +
+            `dropped at hall ${kDropped.drop}, ${kDropped.jobs} haul job(s)`)
+
+// And the last few metres are still walked, by hand, into a bench.
+await goTo('drop0'); await page.waitForTimeout(1000)
+const kInHand = await log('picked the box off the belt')
+await goTo('zone-station-0'); await page.waitForTimeout(2000)
+const kOnBench = await log('carried it to the bench')
+
 // ── C. Movement, collisions, camera (C1 regression) ───────
 console.log('\n### C. Movement (WASD)')
 await boot(seedState({}))
@@ -569,6 +611,14 @@ const checks = [
   ['J: nav grid rebuilt for the wider floor', jAfter.grid > jBefore.grid],
   ['J: the player is still inside the world', jAfter.inside],
   ['J: a character can cross between halls', jWalked.dist < 120],
+  ['K: nothing on the belt while in transit', kTransit.onBelt === 0],
+  ['K: the box lands on the belt at the dock', kRidingA.onBelt === 1],
+  ['K: it moves along the belt on its own',   kRidingB.t > kRidingA.t],
+  ['K: it gets off at a hall',                kDropped.drop !== null],
+  ['K: only then does a haul job exist',      kDropped.jobs === 1],
+  ['K: the box is drawn on the belt',         kDropped.boxVisible === 1],
+  ['K: a character takes it off the belt',    kInHand.carrying.includes('kit_box')],
+  ['K: and carries it into a bench',          kOnBench.phase === 'ASSEMBLY'],
   ['no console errors',                   errors.length === 0],
 ]
 console.log('\n=== checks ===')

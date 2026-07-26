@@ -62,6 +62,9 @@ export function openHalls(hallIds) {
   return FACTORY_HALLS.slice(0, count)
 }
 
+// The belt runs along the line of the hall doorways, so it visibly threads
+// through the whole factory instead of stopping at every wall.
+const BELT_INSET = 40
 const ROOM_H     = 1400
 const STREET_H   = 500
 const DOOR_W     = 240      // street door, in hall 1
@@ -140,18 +143,43 @@ export function buildFactoryLayout(hallIds) {
     }
   }
 
+  // The dock: where an ordered kit lands. On the factory it lands ON THE BELT,
+  // so these are only the spots the countdown is drawn at — nobody walks out to
+  // the street here, which is the whole difference between a garage and a
+  // production floor (F3.2).
   const deliverySlots = [
-    { x: doorX - 280, y: 1540 },
-    { x: doorX,       y: 1540 },
-    { x: doorX + 280, y: 1540 },
+    { x: WALL_SIDE + BELT_INSET,       y: gapCy },
+    { x: WALL_SIDE + BELT_INSET + 110, y: gapCy },
+    { x: WALL_SIDE + BELT_INSET + 220, y: gapCy },
   ]
 
+  // The conveyor itself: a straight run at doorway height, with one drop point
+  // per hall. `t` is distance along the belt, so a box's position is a single
+  // number and the system that moves it needs no geometry at all.
+  const beltX0 = WALL_SIDE + BELT_INSET
+  const beltX1 = worldW - WALL_SIDE - BELT_INSET
+  const conveyor = {
+    y:      gapCy,
+    x0:     beltX0,
+    x1:     beltX1,
+    length: beltX1 - beltX0,
+    drops: placed.map((hall, i) => ({
+      index:  i,
+      hallId: hall.id,
+      x:      hall.cx,
+      t:      hall.cx - beltX0,
+    })),
+  }
+
   const zones = [
-    ...deliverySlots.map((slot, i) => ({
-      id: `slot${i}`,
-      kind: 'delivery_slot',
-      ...rect(slot.x, slot.y, 150, 140),
-      meta: { slotIndex: i },
+    // No street slots here: a box is taken off the BELT, at the hall that
+    // needed it. The zone behaves exactly like a street slot — same interaction,
+    // different place — which is why the courier's role did not have to change.
+    ...conveyor.drops.map(drop => ({
+      id:   `drop${drop.index}`,
+      kind: 'belt_drop',
+      ...rect(drop.x, conveyor.y + 120, 170, 150),
+      meta: { dropIndex: drop.index, hallId: drop.hallId },
     })),
     { id: 'mailbox',  kind: 'mailbox',  ...rect(props.mailbox.x, props.mailbox.y, 150, 150) },
     { id: 'desk',     kind: 'desk',     ...rect(props.desk.x, props.desk.y, 160, 150) },
@@ -182,10 +210,14 @@ export function buildFactoryLayout(hallIds) {
     // is why the `benches` upgrade track is frozen here — two ways to grow the
     // same number would only fight each other.
     stationsFromLayout: true,
+    conveyor,
     halls: placed.map(h => ({ id: h.id, name: h.name, x0: h.x0, w: h.w })),
     spawns: {
-      player:     { x: home.cx, y: 1100 },
-      workerIdle: { x: home.cx + 120, y: 1150 },
+      // Well clear of the belt drop zone: the first version put the player
+      // spawn inside it, so every box the conveyor delivered jumped straight
+      // into their hands the moment it arrived.
+      player:     { x: home.cx, y: 1250 },
+      workerIdle: { x: home.cx + 160, y: 1250 },
       posts: {
         courier: { x: doorX, y: 1270 },
         tech:    { x: home.cx, y: 560 },

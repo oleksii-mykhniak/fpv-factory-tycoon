@@ -78,6 +78,16 @@ export const SEMIAUTO_MISS_CHANCE      = 0.10
 // quality, or an unattended shop would spend its day on fire.
 export const AUTO_OVERHEAT_SHARE = 0.20
 
+// ── Conveyor (F3) ────────────────────────────────────────
+// Belt speed in world units per second. A courier walks at 170–240, so the belt
+// is deliberately slower than a person: it is not a shortcut, it is the thing
+// that removes the walk entirely — nobody has to escort the box.
+export const CONVEYOR_SPEED = 150
+// How many boxes may wait at one hall's drop point before the belt stops
+// offloading there. This is what turns "the hall cannot keep up" into a visible
+// queue riding past instead of a number in a panel.
+export const CONVEYOR_DROP_CAPACITY = 2
+
 // ── Camera (C1) ──────────────────────────────────────────
 // The world is now larger than the screen and measured in fixed world units,
 // so zoom is chosen to show a constant slice of the world regardless of device:

@@ -10,6 +10,12 @@ import { Phase, DeliveryStatus, stationsOf } from '../../state/gameState.js'
 import { taskDef } from '../../defs/tasks.js'
 import { managerOrderChoice } from '../derive.js'
 
+// Which hall a station stands in, when the layout has halls (F2).
+const stationHall = (world, stationId) => {
+  const i = stationsOf(world.game).findIndex(s => s.id === stationId)
+  return world.layout?.stationSlots?.[i]?.hallId ?? null
+}
+
 // The zone a station's work happens in.
 const stationZone = (world, stationId) =>
   (world.zones ?? []).find(z => z.kind === 'bench' && z.meta?.stationId === stationId)?.id
@@ -21,6 +27,16 @@ const stationOutZone = (world, stationId) =>
 
 const slotZone = (world, slotIndex) =>
   (world.zones ?? []).find(z => z.kind === 'delivery_slot' && z.meta?.slotIndex === slotIndex)?.id
+
+// Where this box is standing right now: a street slot, or the belt drop the
+// conveyor left it at (F3). A box still riding the belt has NO pickup zone, and
+// that is the whole gate — no job exists for it, so no courier sets off to meet
+// a box that has not arrived anywhere yet.
+const pickupZone = (world, delivery) =>
+  delivery.dropIndex !== undefined && delivery.dropIndex !== null
+    ? (world.zones ?? []).find(
+        z => z.kind === 'belt_drop' && z.meta?.dropIndex === delivery.dropIndex)?.id
+    : slotZone(world, delivery.slotIndex)
 
 // Stable ids: the same situation always produces the same job id, which is what
 // lets reconcile() recognise a job it has already handed out.
@@ -50,16 +66,26 @@ export function deriveJobs(world) {
   const targets = [...freeStationIds]
   // A box already in hand keeps its errand whether or not a bench is free —
   // the carrier waits at one until it clears, which is what a person would do.
-  const nextTarget = () => targets.shift() ?? allStationIds[0]
+  //
+  // Given a choice, send it to a bench in the hall the belt chose. Without this
+  // the belt's whole purpose leaks away: a box dropped at hall 3 could be
+  // assigned to a bench in hall 1 and walked back across the factory.
+  const nextTarget = (delivery) => {
+    const hall = (world.layout?.conveyor?.drops ?? [])
+      .find(dr => dr.index === delivery?.dropIndex)?.hallId ?? null
+    const i = hall ? targets.findIndex(id => stationHall(world, id) === hall) : -1
+    if (i >= 0) return targets.splice(i, 1)[0]
+    return targets.shift() ?? allStationIds[0]
+  }
 
   for (const d of inHand) {
-    const toZone = stationZone(world, nextTarget())
+    const toZone = stationZone(world, nextTarget(d))
     if (!toZone) continue
     jobs.push({
       id: `haul_delivery:${d.id}`,
       type: 'haul_delivery',
       deliveryId: d.id,
-      fromZone: slotZone(world, d.slotIndex),
+      fromZone: pickupZone(world, d),
       toZone,
     })
   }
@@ -67,8 +93,8 @@ export function deriveJobs(world) {
   // Only fetch a new box when there is somewhere to put it.
   for (const d of waiting) {
     if (!targets.length) break
-    const fromZone = slotZone(world, d.slotIndex)
-    const toZone   = stationZone(world, targets.shift())
+    const fromZone = pickupZone(world, d)
+    const toZone   = stationZone(world, nextTarget(d))
     if (!fromZone || !toZone) continue
     jobs.push({
       id: `haul_delivery:${d.id}`,

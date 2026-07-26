@@ -124,6 +124,24 @@ function buildRoom(scene, layout) {
     hex: theme.floorColor, z: 0,
   })
 
+  // ── Conveyor (F3) ──────────────────────────────────────
+  // Drawn on the floor rather than as an obstacle: characters walk over the
+  // belt, which is what keeps it out of the nav grid entirely.
+  const belt = layout.conveyor
+  if (belt) {
+    const beltW = belt.x1 - belt.x0
+    colorRect(scene, {
+      x: (belt.x0 + belt.x1) / 2, y: belt.y, w: beltW, h: 54, hex: '#232336', z: 0.4,
+    })
+    // Cross-slats, so the belt reads as moving even when it is empty.
+    for (let x = belt.x0 + 20; x < belt.x1; x += 46) {
+      colorRect(scene, { x, y: belt.y, w: 6, h: 46, hex: '#31314a', z: 0.5 })
+    }
+    for (const drop of belt.drops) {
+      colorRect(scene, { x: drop.x, y: belt.y + 44, w: 120, h: 10, hex: '#4a6a3a', z: 0.5 })
+    }
+  }
+
   // ── Walls + door opening ───────────────────────────────
   for (const wall of walls) {
     colorRect(scene, { x: wall.cx, y: wall.cy, w: wall.w, h: wall.h, hex: '#2e2e42', z: 1 })
@@ -563,12 +581,38 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
         ind.graphics.visible = false
         lbl.text = `${kit?.emoji ?? '📦'} ${fmtSlotTime(ms)}`
         lbl.graphics.visible = true
+      } else if (layout.conveyor) {
+        // Arrived on the factory means "on the belt", and the belt draws its
+        // own boxes. Showing the dock marker too would put the same box in two
+        // places at once — the bug the piggy bank taught us to look for.
+        ind.graphics.visible = false
+        lbl.graphics.visible = false
       } else {
         ind.graphics.visible = true
         lbl.graphics.visible = false
       }
     })
   })
+
+  // ── Boxes on the belt (F3) ─────────────────────────────
+  // One actor per delivery slot, since that is the hard cap on how many boxes
+  // can exist at once. Position comes from the sim's `t`, so what you see on
+  // the belt is exactly what the job board thinks is there.
+  const beltBoxes = layout.conveyor
+    ? Array.from({ length: 3 }, () => {
+        const a = new ex.Actor({
+          pos:    ex.vec(layout.conveyor.x0, layout.conveyor.y),
+          width:  sizes.box.w,
+          height: sizes.box.h,
+          z: 4,
+          color: ex.Color.fromHex('#c08a4a'),
+        })
+        a.graphics.visible = false
+        scene.add(track(a))
+        applySprite(a, 'delivery_box')
+        return a
+      })
+    : []
 
   // ── Piggy bank (built from the layout; only its behaviour lives here) ──
   // A location without the prop simply has no piggy bank — the rescue mechanic
@@ -769,6 +813,7 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     engine: { getFps: () => engine.clock.fpsSampler.fps, _ex: engine },
     scene,
     box, piggy, mailbox, trashbin, workbench,
+    beltBoxes,
     stations,
     player, playerRig, workerView, workerViews,
     carrySlotActors,

@@ -236,6 +236,9 @@ export function applyLayout(world, layout) {
   world.zoneState = {}
   world.triggers  = []
   world.jobs      = []
+  // The belt is runtime state derived from the deliveries, so a new floor plan
+  // simply rebuilds it on the next tick (F3).
+  world.belt      = null
   rebuildStationGeometry(world)
   return world
 }

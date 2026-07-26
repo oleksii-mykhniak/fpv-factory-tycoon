@@ -57,6 +57,7 @@ export const EV = Object.freeze({
   UPGRADE_BOUGHT:   'upgrade.bought',     // { trackId, level }
   LOCATION_CHANGED: 'location.changed',   // { locationId }
   HALL_UNLOCKED:    'factory.hallOpened', // { hallId }
+  BELT_DROPPED:     'belt.dropped',       // { deliveryId, hallId }
   COMMAND_REJECTED: 'command.rejected',   // { type, reason }
   STATE_DIRTY:      'state.dirty',        // {} — view/persistence should save
 })
