@@ -8,19 +8,23 @@
 // Rect helper — carries both representations so callers never convert by hand:
 //   cx/cy + w/h  → Excalibur actors (centre-based)
 //   x/y + w/h    → AABB collision and grid rasterisation (top-left)
+import { u } from '../../state/config.js'
+
 export function rect(cx, cy, w, h) {
   return { cx, cy, w, h, x: cx - w / 2, y: cy - h / 2 }
 }
 
-export const WALL_SIDE  = 24
-export const WALL_HORIZ = 28
+// Walls, also in character heights: a third of a person thick reads as a wall
+// without eating the room.
+export const WALL_SIDE  = u(0.32)
+export const WALL_HORIZ = u(0.38)
 
-// Sizes of the entities that live in a world. Shared: a drone is a drone
-// whichever room it is built in.
+// Sizes of the entities that live in a world, in character heights (V1).
+// Shared: a drone is a drone whichever room it is built in.
 export const SIZES = {
-  character: 74,
-  box:       { w: 52, h: 34 },
-  drone:     { w: 40, h: 22 },
+  character: u(1),
+  box:       { w: u(0.70), h: u(0.46) },
+  drone:     { w: u(0.54), h: u(0.30) },
 }
 
 export function buildLayout({

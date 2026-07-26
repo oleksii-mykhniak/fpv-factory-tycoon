@@ -8,15 +8,17 @@
 // stageSource: 'kit' — the work is the kit's own assemblySteps, so a station
 // serves every drone type without listing them.
 
-import { ZONE_DWELL_BENCH_MS } from '../state/config.js'
+import { ZONE_DWELL_BENCH_MS, u } from '../state/config.js'
 
 export const STATION_DEFS = Object.freeze({
   workbench: {
     id:   'workbench',
     name: 'Верстак',
 
-    // Physical footprint (world units). Solid: characters walk around it.
-    size:   { w: 300, h: 80 },
+    // Physical footprint, in character heights (V1). It was 300×80 — four times
+    // the width of the person standing at it, which read as a market stall
+    // rather than a desk. A workbench is about two people wide.
+    size:   { w: u(1.7), h: u(0.72) },
     sprite: 'workbench',
     color:  '#6b4226',
 
@@ -34,14 +36,16 @@ export const STATION_DEFS = Object.freeze({
 
     // Interaction zone, placed relative to the station's centre. In front of
     // it, never on top — the station itself blocks movement.
-    zone: { w: 330, h: 120, offsetY: 100, dwellMs: ZONE_DWELL_BENCH_MS },
+    // The zone sits clear of the footprint: a bench you stand ON is a bench you
+    // cannot walk up to. Offset must exceed (zone.h + size.h) / 2.
+    zone: { w: u(2.0), h: u(1.24), offsetY: u(1.02), dwellMs: ZONE_DWELL_BENCH_MS },
 
     // Output table, on the FAR side of the bench (S1.2). Work goes in at the
     // front and comes out at the back, so finishing a drone and collecting it
     // are two different places to stand: the technician who just soldered it
     // cannot also scoop it up without walking round, and a seller collecting
     // one never stands in the technician's spot.
-    outZone: { w: 300, h: 110, offsetY: -100 },
+    outZone: { w: u(1.75), h: u(1.14), offsetY: u(-1.02) },
 
     // Upgrade tracks that affect this station's output.
     upgrades: ['soldering', 'consumables'],

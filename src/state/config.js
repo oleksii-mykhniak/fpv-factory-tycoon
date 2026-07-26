@@ -106,12 +106,22 @@ export const CAMERA_ZOOM_MAX   = 1.60
 export const CAMERA_ELASTICITY = 0.20
 export const CAMERA_FRICTION   = 0.28
 
+// ── Scale (V1) ───────────────────────────────────────────
+// The character is the ruler. Every size in the game is written as a fraction
+// of their height, because sizes picked by eye drift apart: the workbench spent
+// four stages at 300 units — four times the width of the person standing at it —
+// and nothing in the code could notice.
+//
+// Change this number and the whole world scales together.
+export const CHARACTER_U = 74
+export const u = (n) => Math.round(n * CHARACTER_U)
+
 // ── Player movement (C1) ─────────────────────────────────
 export const PLAYER_SPEED  = 240   // world units per second
 // Collision box — deliberately smaller than the sprite and biased to the feet,
 // so the character's head can overlap furniture drawn behind it.
-export const PLAYER_HALF_W = 20
-export const PLAYER_HALF_H = 14
+export const PLAYER_HALF_W = u(0.27)
+export const PLAYER_HALF_H = u(0.19)
 // Longest displacement resolved in one collision substep. Must stay below the
 // thinnest obstacle (walls are 24) or a fast agent tunnels straight through it.
 export const MOVE_MAX_STEP = 8
@@ -163,7 +173,7 @@ export const OFFLINE_CAP_MS = 4 * 60 * 60 * 1000
 // standing frozen, which is what makes the shop look alive.
 // Small enough that a worker reads as standing at their own post rather than
 // roaming the shop (S1.5).
-export const WANDER_RADIUS   = 120
+export const WANDER_RADIUS   = u(1.6)
 export const WANDER_PAUSE_MS = 2600
 
 // ── Navigation (C4) ──────────────────────────────────────
@@ -173,7 +183,7 @@ export const NAV_CELL = 24
 // Obstacles are grown by this much before rasterising, so a path planned for a
 // point never scrapes a character's shoulder along a wall. Should match the
 // agent's larger half-extent.
-export const NAV_INFLATE = 20
+export const NAV_INFLATE = u(0.27)
 // Hard ceiling on A* work per search — returns null instead of freezing a frame.
 export const ASTAR_MAX_NODES = 4000
 // How many searches may run in one tick. Pathfinding is the most expensive
@@ -185,7 +195,7 @@ export const PATH_CACHE_SIZE = 64
 export const WAYPOINT_ARRIVE_R = 14
 // Soft separation between agents — deliberately NOT cell reservation, which
 // deadlocks crowds of this size (plan §6.6).
-export const AGENT_SEPARATION_R = 46
+export const AGENT_SEPARATION_R = u(0.62)
 export const AGENT_SEPARATION_W = 0.55
 // No progress for this long while following a path = re-plan.
 export const STUCK_TIMEOUT_MS = 700
@@ -231,7 +241,7 @@ export const ZONE_REPEAT_MS = 260
 // Items a character can hold at once. An upgrade track raises this in C5.
 export const CARRY_CAPACITY = 1
 // Vertical gap between stacked items floating above a character's head.
-export const CARRY_STACK_OFFSET_Y = 26
+export const CARRY_STACK_OFFSET_Y = u(0.35)
 
 // ── Input (C1) ───────────────────────────────────────────
 export const INPUT_DEADZONE = 0.18   // below this magnitude the stick reads as centred
