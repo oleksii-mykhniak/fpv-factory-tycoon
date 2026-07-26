@@ -5,6 +5,7 @@ import {
   CAMERA_ELASTICITY, CAMERA_FRICTION,
   PIGGY_COOLDOWN_MS,
   PULSE_FREQ_HZ, PULSE_SCALE_AMP,
+  CHARACTER_U as TILE_U,
 } from '../state/config.js'
 import { loadSprites, getSprite } from './loader.js'
 import { createCharacterSprite, createTileCharacter } from './character.js'
@@ -119,10 +120,19 @@ function buildRoom(scene, layout) {
   })
 
   // ── Room floor ─────────────────────────────────────────
+  // The painted rectangle stays underneath as the backdrop: the tile grid can
+  // only cover whole tiles, and a room whose size is not a round number of them
+  // would otherwise show through to the background at the edges.
   const floor = colorRect(scene, {
     x: room.w / 2, y: room.h / 2, w: room.w, h: room.h,
     hex: theme.floorColor, z: 0,
   })
+
+  // Tiled floors (V6). ex.TileMap rather than one actor per tile: it culls to
+  // the camera, so the three-hall factory draws the dozen tiles on screen
+  // instead of the thirteen hundred that exist.
+  tileFloor(scene, theme.floorTile, 0, 0, room.w, room.h, 0.2, theme.floorTint)
+  tileFloor(scene, theme.streetTile, 0, street.y, world.w, street.h, 0.2, theme.streetTint)
 
   // ── Conveyor (F3) ──────────────────────────────────────
   // Drawn on the floor rather than as an obstacle: characters walk over the
@@ -198,6 +208,36 @@ function buildRoom(scene, layout) {
   }
 
   return { floor, ...actors }
+}
+
+// Lays `spriteKey` over a rectangle as a culled tile map. One tile is one
+// character height (V4), so the grid reads at the same scale as everything
+// standing on it. No-ops when the sprite is missing — the painted floor below
+// is a complete picture on its own.
+function tileFloor(scene, spriteKey, x, y, w, h, z, tintHex) {
+  if (!spriteKey) return null
+  const src = getSprite(spriteKey)
+  if (!src) return null
+
+  const size = TILE_U
+  const map = new ex.TileMap({
+    pos: ex.vec(x, y),
+    tileWidth: size, tileHeight: size,
+    // Floor, not ceil: a partial tile would hang over the edge of the world.
+    // The painted rectangle underneath covers the leftover strip.
+    columns: Math.max(1, Math.floor(w / size)), rows: Math.max(1, Math.floor(h / size)),
+  })
+  map.z = z
+
+  const sprite = src.toSprite()
+  sprite.width = size
+  sprite.height = size
+  if (tintHex) sprite.tint = ex.Color.fromHex(tintHex)
+
+  for (const tile of map.tiles) tile.addGraphic(sprite)
+  scene.add(map)
+  track(map)
+  return map
 }
 
 // ── Sprite swap ───────────────────────────────────────────

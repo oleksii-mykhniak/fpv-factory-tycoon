@@ -76,6 +76,12 @@ const THEME = {
   wallColor:     '#7a6480',
   streetColor:   '#302430',
   pavementColor: '#463646',
+  // Plain concrete, not the striped tile: at three halls wide the stripes lined
+  // up into bands across the whole floor and read as a rendering fault.
+  floorTile:     'k_floor_concrete',
+  floorTint:     '#a892ae',
+  streetTile:    'k_asphalt',
+  streetTint:    '#8a7a90',
 }
 
 export function buildFactoryLayout(hallIds) {

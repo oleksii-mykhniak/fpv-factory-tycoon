@@ -119,6 +119,12 @@ export const apartment = buildLayout({
     wallColor:     '#6f6790',
     streetColor:   '#2a2a3c',
     pavementColor: '#3d3d54',
+    // Wooden boards indoors, asphalt outside. Tinted rather than redrawn, so
+    // one tile serves every location and they still read as different places.
+    floorTile:     'k_floor_wood',
+    floorTint:     '#c9a582',
+    streetTile:    'k_asphalt',
+    streetTint:    '#8e8ea6',
   },
 })
 
@@ -182,6 +188,10 @@ export const garage = buildLayout({
     wallColor:     '#63795c',
     streetColor:   '#26302a',
     pavementColor: '#3a4a3c',
+    floorTile:     'k_floor_concrete',
+    floorTint:     '#8fa686',
+    streetTile:    'k_asphalt',
+    streetTint:    '#7e8a80',
   },
 })
 

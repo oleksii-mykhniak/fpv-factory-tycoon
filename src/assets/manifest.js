@@ -38,6 +38,10 @@ export const SPRITES = Object.freeze({
   // One tile = one character height (74 world units). Everything drawn from
   // these packs shares that ratio, which is what keeps the pixel size uniform
   // across the whole game — see docs/plan_stage6_visual.md, V4.
+  k_asphalt: { url: `${BASE}sprites/kenney/k_asphalt.png`, anchors: {} },
+  k_floor_concrete: { url: `${BASE}sprites/kenney/k_floor_concrete.png`, anchors: {} },
+  k_floor_tile: { url: `${BASE}sprites/kenney/k_floor_tile.png`, anchors: {} },
+  k_floor_wood: { url: `${BASE}sprites/kenney/k_floor_wood.png`, anchors: {} },
   k_bag: { url: `${BASE}sprites/kenney/k_bag.png`, anchors: {} },
   k_barrier: { url: `${BASE}sprites/kenney/k_barrier.png`, anchors: {} },
   k_bed_foot: { url: `${BASE}sprites/kenney/k_bed_foot.png`, anchors: {} },
