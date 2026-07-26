@@ -7,7 +7,7 @@ import {
 
 import { UPGRADE_TRACKS } from './upgrades.js'
 import { KIT_TYPES } from './kits.js'
-import { capFor, canMoveToLocation, LOCATIONS, hiringAllowed, maxWorkersHere } from './locations.js'
+import { capFor, canMoveToLocation, LOCATIONS, hiringAllowed, roleCapHere } from './locations.js'
 import { hireCost, roleDef } from '../defs/roles.js'
 
 // Re-export so existing consumers keep importing kit data from gameState.js.
@@ -323,9 +323,10 @@ export function hireWorker(state, roleId, now = Date.now(), makeId = null) {
   roleDef(roleId)   // throws on an unknown role
   if (!hiringAllowed(state))
     throw new Error('hireWorker: у цій локації немає де тримати робітників')
-  const room = maxWorkersHere(state)
-  if (workersOf(state).length >= room)
-    throw new Error(`hireWorker: у цій локації більше ${room} робітників не поміститься`)
+  const room = roleCapHere(state, roleId)
+  if (workersInRole(state, roleId).length >= room)
+    throw new Error(
+      `hireWorker: у цій локації більше ${room} робітників ролі "${roleId}" не поміститься`)
   const cost = nextHireCost(state, roleId)
   if (state.money < cost)
     throw new Error(`hireWorker: недостатньо грошей (є ${Math.floor(state.money)}, потрібно ${cost})`)

@@ -46,7 +46,10 @@ export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation }) {
       const nextInfo     = level < effectiveMax ? track.levels[level + 1] : null
       const nextCost     = level < effectiveMax ? track.costs[level]      : null
       const capLocked    = level >= cap && cap < maxLevel  // hit location cap before absolute max
-      const canBuy       = nextCost !== null && busyStations(state).length === 0 && state.money >= nextCost
+      // Money is the only gate. A busy bench used to block this too, from when
+      // one bench was the whole game; with staff working nonstop that read as
+      // "upgrades are broken".
+      const canBuy       = nextCost !== null && state.money >= nextCost
 
       let footer = ''
       if (nextInfo) {
@@ -55,8 +58,6 @@ export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation }) {
             → ${nextInfo.name} — $${nextCost}
           </button>
           <p class="upgrade-effect-hint">${nextInfo.effect}</p>
-          ${!canBuy && busyStations(state).length > 0
-            ? '<p class="upgrade-effect-hint">Купівля між циклами</p>' : ''}
         `
       } else if (capLocked) {
         footer = '<p class="upgrade-effect-hint">Ліміт локації — переїдьте далі</p>'

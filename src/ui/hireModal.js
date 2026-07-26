@@ -6,7 +6,7 @@
 // makes "walk to the board to hire" mean anything.
 
 import { workersInRole, nextHireCost } from '../state/gameState.js'
-import { hiringAllowed, maxWorkersHere } from '../state/locations.js'
+import { hiringAllowed, maxWorkersHere, roleCapHere } from '../state/locations.js'
 import { ROLES, ROLE_ORDER } from '../defs/roles.js'
 
 export function createHireModal(root, { onHire }) {
@@ -46,7 +46,6 @@ export function createHireModal(root, { onHire }) {
     const canHire = hiringAllowed(state)
     const room    = maxWorkersHere(state)
     const onStaff = (state.workers ?? []).length
-    const full    = onStaff >= room
 
     body.innerHTML = `
       <div class="shop-section">
@@ -59,23 +58,29 @@ export function createHireModal(root, { onHire }) {
               У квартирі ви працюєте самі. Переїдьте до гаража, щоб наймати людей.
             </p>
           </div>` : ''}
-        ${canHire && full ? `
+        ${canHire && onStaff >= room ? `
           <div class="shop-upgrade">
             <p class="upgrade-effect-hint">Більше людей сюди не поміститься — переїдьте далі.</p>
           </div>` : ''}
         ${!canHire ? '' : ROLE_ORDER.map(id => {
           const role  = ROLES[id]
           const count = workersInRole(state, id).length
+          const cap   = roleCapHere(state, id)
           const cost  = nextHireCost(state, id)
+          const full  = count >= cap
           const can   = state.money >= cost && !full
           return `
             <div class="shop-upgrade">
               <span class="shop-upgrade__current" style="color:${role.color}">
-                ${role.emoji} ${role.name}${count ? ` ×${count}` : ''}
+                ${role.emoji} ${role.name} — ${count}/${cap}
               </span>
-              <button class="btn btn--upgrade" data-hire="${id}" ${can ? '' : 'disabled'}>
-                Найняти — $${cost}
-              </button>
+              ${full
+                ? `<p class="upgrade-effect-hint">${cap === 0
+                    ? 'Не наймається в цій локації — переїдьте далі'
+                    : 'Місць для цієї ролі більше немає'}</p>`
+                : `<button class="btn btn--upgrade" data-hire="${id}" ${can ? '' : 'disabled'}>
+                     Найняти — $${cost}
+                   </button>`}
               <p class="upgrade-effect-hint">${role.hint}</p>
             </div>
           `

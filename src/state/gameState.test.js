@@ -12,7 +12,7 @@ import {
   applyColdSolderPenalty as _applyColdSolderPenalty,
   calcPrice, calcQuality,
   canOpenPiggy, collectPiggy,
-  moveToLocation,
+  moveToLocation, hireWorker, workersInRole,
 } from './gameState.js'
 import {
   SOLDERING_UPGRADE_COSTS, CONSUMABLES_UPGRADE_COSTS,
@@ -22,7 +22,10 @@ import {
 } from './config.js'
 import { trackMaxLevel, nextCost, levelData, UPGRADE_TRACKS } from './upgrades.js'
 import { roleLevelData } from '../defs/roles.js'
-import { LOCATIONS, LOCATION_ORDER, capFor, canMoveToLocation, currentLocation } from './locations.js'
+import {
+  LOCATIONS, LOCATION_ORDER, capFor, canMoveToLocation, currentLocation,
+  roleCapHere, maxWorkersHere,
+} from './locations.js'
 
 const SOLDERING_MAX_LEVEL = trackMaxLevel('soldering')
 
@@ -1132,5 +1135,59 @@ describe('C7: прогресія апгрейдів монотонна', () => {
   it('найм дешевшає відносно доходу лише через зростання цеху, не через баг', () => {
     // Друга людина тієї ж ролі коштує дорожче, але перша ролі — за своєю кривою.
     expect(nextHireCost(createState(), 'tech')).toBeGreaterThan(nextHireCost(createState(), 'courier'))
+  })
+})
+
+// ── Fix pass (2026-07-26) ─────────────────────────────────
+
+describe('Апгрейди не чекають на вільний верстак', () => {
+  it('buyUpgrade проходить, поки станція в ASSEMBLY', () => {
+    const s = inAssembly(1)
+    expect(bench(s).phase).toBe(Phase.ASSEMBLY)
+    const after = buyUpgrade(s, 'soldering')
+    expect(after.upgrades.solderingLevel).toBe(s.upgrades.solderingLevel + 1)
+    // Недобудований дрон не постраждав
+    expect(bench(after).phase).toBe(Phase.ASSEMBLY)
+    expect(bench(after).activeKit).toEqual(bench(s).activeKit)
+  })
+})
+
+describe('Ліміт персоналу — на роль, не на цех', () => {
+  const at = (locationId) => ({ ...createState(), locationId, money: 99999 })
+
+  it('гараж: по одному на роль, менеджер — ні', () => {
+    const s = at('garage')
+    expect(roleCapHere(s, 'courier')).toBe(1)
+    expect(roleCapHere(s, 'tech')).toBe(1)
+    expect(roleCapHere(s, 'seller')).toBe(1)
+    expect(roleCapHere(s, 'manager')).toBe(0)
+  })
+
+  it('другий кур\'єр у гаражі відхиляється, а технік — ні', () => {
+    let s = hireWorker(at('garage'), 'courier')
+    expect(() => hireWorker(s, 'courier')).toThrow('не поміститься')
+    s = hireWorker(s, 'tech')
+    expect(workersInRole(s, 'tech')).toHaveLength(1)
+  })
+
+  it('менеджер наймається лише в майстерні', () => {
+    expect(() => hireWorker(at('garage'), 'manager')).toThrow('не поміститься')
+    expect(workersInRole(hireWorker(at('workshop'), 'manager'), 'manager')).toHaveLength(1)
+  })
+
+  it('повний штат ролі не блокує інші ролі (те, чого не вмів загальний ліміт)', () => {
+    let s = at('workshop')
+    s = hireWorker(s, 'courier'); s = hireWorker(s, 'courier')
+    expect(() => hireWorker(s, 'courier')).toThrow('не поміститься')
+    s = hireWorker(s, 'seller')
+    expect(workersInRole(s, 'seller')).toHaveLength(1)
+  })
+
+  it('maxWorkersHere = сума кепів ролей (єдине джерело правди)', () => {
+    for (const id of LOCATION_ORDER) {
+      const s = at(id)
+      const sum = Object.values(LOCATIONS[id].workerCaps).reduce((a, b) => a + b, 0)
+      expect(maxWorkersHere(s)).toBe(sum)
+    }
   })
 })

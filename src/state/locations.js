@@ -15,7 +15,7 @@ export const LOCATIONS = Object.freeze({
     upgradeCaps: { soldering: 2, storage: 0, logistics: 0, consumables: 2, benches: 0 },
     // The first location is deliberately hands-on: you are the whole workforce.
     hiring: false,
-    maxWorkers: 0,
+    workerCaps: { courier: 0, tech: 0, seller: 0, manager: 0 },
     unlockCost: 0,
     unlockReq: null,
     sceneConfig: { bgColor: '#0e0e18', floorColor: '#1a1a26' },
@@ -27,10 +27,12 @@ export const LOCATIONS = Object.freeze({
     kitIds: ['mini_drone', 'racing_drone', 'cinematic_drone', 'longrange_drone'],
     upgradeCaps: { soldering: 3, storage: 1, logistics: 1, consumables: 2, benches: 1 },
     hiring: true,
-    // Two benches fit here, so two pairs of hands are all there is work for.
-    // Four roles for two slots is the point: the garage is where you have to
-    // choose what to automate first (S3).
-    maxWorkers: 2,
+    // Room is counted per role, not as one pool: a shop with two couriers and
+    // nobody at the bench is not a staffing choice, it is a dead end. One of
+    // each hands-on role fits in the garage; the manager — the role that makes
+    // the shop order for itself — is workshop-only, so "runs without me" stays
+    // something you move for (S3).
+    workerCaps: { courier: 1, tech: 1, seller: 1, manager: 0 },
     unlockCost: 800,
     unlockReq: { minUpgrades: { soldering: 2 } },
     sceneConfig: { bgColor: '#0d1810', floorColor: '#1a2618' },
@@ -42,9 +44,9 @@ export const LOCATIONS = Object.freeze({
     kitIds: ['mini_drone', 'racing_drone', 'cinematic_drone', 'longrange_drone'],
     upgradeCaps: { soldering: 3, storage: 2, logistics: 2, consumables: 2, benches: 2 },
     hiring: true,
-    // Enough for one of each role plus a spare pair of hands: the workshop is
-    // where the shop can finally run itself (S3).
-    maxWorkers: 5,
+    // Doubled hands-on roles plus the manager: the workshop is where the shop
+    // can finally run itself (S3).
+    workerCaps: { courier: 2, tech: 2, seller: 2, manager: 1 },
     unlockCost: 2500,
     unlockReq: { minUpgrades: { soldering: 3, consumables: 2 } },
     sceneConfig: { bgColor: '#180d18', floorColor: '#261a26' },
@@ -75,9 +77,18 @@ export function hiringAllowed(state) {
   return currentLocation(state).hiring === true
 }
 
-// How many people this location has room for. Moving on is what raises it.
+// How many people of THIS role the location has room for. The cap is per role
+// so that composition is the decision — two couriers and no technician is not a
+// strategy, it is a stalled shop. Moving on is what raises every number.
+export function roleCapHere(state, roleId) {
+  return currentLocation(state).workerCaps?.[roleId] ?? 0
+}
+
+// Total room = the sum of the role caps. Kept as a derived value (never as its
+// own field) so a second limit can never quietly disagree with the first.
 export function maxWorkersHere(state) {
-  return currentLocation(state).maxWorkers ?? 0
+  return Object.values(currentLocation(state).workerCaps ?? {})
+    .reduce((sum, n) => sum + n, 0)
 }
 
 export function canMoveToLocation(state, targetId) {

@@ -8,11 +8,12 @@
 
 import {
   KIT_TYPES, busyStations, idleStations, Phase, stationsOf, nextHireCost, freeSlots,
+  workersInRole,
 } from '../state/gameState.js'
 import { GUIDANCE_ORDERS, GUIDANCE_SCRAP_RUNS, MANAGER_RESERVE } from '../state/config.js'
 import { levelData, UPGRADE_TRACKS } from '../state/upgrades.js'
 import {
-  kitsForLocation, hiringAllowed, maxWorkersHere, capFor,
+  kitsForLocation, hiringAllowed, roleCapHere, capFor,
   canMoveToLocation, LOCATION_ORDER,
 } from '../state/locations.js'
 import { ROLE_ORDER, roleLevelData } from '../defs/roles.js'
@@ -48,11 +49,13 @@ export function shopNeedsAttention(game) {
   return affordable
 }
 
-// The rack: an upgrade (or a move) is affordable, and no bench is mid-build —
-// both are between-cycles purchases.
+// The rack: an upgrade (or a move) is affordable.
+//
+// This used to go quiet while any bench was mid-build — a rule from the era of
+// a single bench that WAS the game. With parallel stations and hired staff the
+// shop is essentially never idle, so "between cycles" meant "never": buying a
+// better iron is not something that has to wait for the current drone.
 export function upgradeNeedsAttention(game) {
-  if (busyStations(game).length > 0) return false
-
   const currentIdx = LOCATION_ORDER.indexOf(game.locationId ?? 'apartment')
   const nextLocId  = LOCATION_ORDER[currentIdx + 1]
   if (nextLocId && canMoveToLocation(game, nextLocId).can) return true
@@ -64,11 +67,14 @@ export function upgradeNeedsAttention(game) {
   })
 }
 
-// The board: hiring is allowed here, there is room, and somebody is affordable.
+// The board: hiring is allowed here, and some role has both room and a price
+// the player can meet. Room is per role now, so a full courier bench no longer
+// hides the fact that a technician could still be taken on.
 export function hireNeedsAttention(game) {
   if (!hiringAllowed(game)) return false
-  if ((game.workers ?? []).length >= maxWorkersHere(game)) return false
-  return ROLE_ORDER.some(id => game.money >= nextHireCost(game, id))
+  return ROLE_ORDER.some(id =>
+    workersInRole(game, id).length < roleCapHere(game, id) &&
+    game.money >= nextHireCost(game, id))
 }
 
 // ── Procurement (S3) ──────────────────────────────────────

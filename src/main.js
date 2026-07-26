@@ -23,7 +23,7 @@ import { playerStation, guidanceActive, ironIsHandsOff } from './sim/derive.js'
 import { SYSTEMS } from './sim/systems/index.js'
 
 import { createHUD } from './ui/hud.js'
-import { createActionBar } from './ui/actionBar.js'
+import { createSettingsButton } from './ui/settingsButton.js'
 import { createShopModal } from './ui/shopModal.js'
 import { createUpgradeModal } from './ui/upgradeModal.js'
 import { createHireModal } from './ui/hireModal.js'
@@ -294,9 +294,9 @@ const hireModal = createHireModal(uiRoot, {
   onHire: (role) => send('hireWorker', { role }),
 })
 
-// The bar is down to settings: everything that used to sit here is a place in
-// the room now (S2).
-const actionBar = createActionBar(uiRoot, {
+// The bar is gone entirely: everything that used to sit there is a place in the
+// room now (S2), and settings moved to the top-right corner.
+createSettingsButton(uiRoot, {
   onSettingsOpen: () => settingsModal.open(),
 })
 
@@ -330,7 +330,6 @@ function renderUI() {
 
   const player = (world.agents ?? []).find(a => a.kind === 'player')
   hud.update(world.game, (player?.carrying ?? []).map(i => i.type), guidanceActive(world.game))
-  actionBar.update(world.game)
   shopModal.update(world.game)
   upgradeModal.update(world.game)
   hireModal.update(world.game)
