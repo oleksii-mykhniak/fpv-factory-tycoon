@@ -168,13 +168,15 @@ function buildRoom(scene, layout) {
     actors[name] = actor
   }
 
-  // Small hand-placed details that read better than a flat rectangle.
-  const mb = props.mailbox
-  colorRect(scene, { x: mb.cx, y: mb.cy - mb.h * 0.34, w: mb.w, h: 5, hex: '#2244a0', z: 4 })
-  // Not every location has a bin (F1.3) — the detail follows the prop.
-  const tb = props.trashbin
-  if (tb)
-    colorRect(scene, { x: tb.cx, y: tb.cy - tb.h * 0.46, w: tb.w * 1.1, h: 6, hex: '#3a5a2a', z: 4 })
+  // Small hand-placed details that read better than a flat rectangle. Matched by
+  // prefix, not by exact name: the factory has one post box per hall (F4), and
+  // looking up a single `props.mailbox` is what made the whole scene throw there.
+  for (const [name, p] of Object.entries(props)) {
+    if (name.startsWith('mailbox'))
+      colorRect(scene, { x: p.cx, y: p.cy - p.h * 0.34, w: p.w, h: 5, hex: '#2244a0', z: 4 })
+    if (name.startsWith('trashbin'))
+      colorRect(scene, { x: p.cx, y: p.cy - p.h * 0.46, w: p.w * 1.1, h: 6, hex: '#3a5a2a', z: 4 })
+  }
 
   return { floor, ...actors }
 }
@@ -424,7 +426,7 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
   const engine = _engine
   const scene  = _scene
 
-  const { floor, mailbox, trashbin, piggy, desk, rack, jobboard } = buildRoom(scene, layout)
+  const { floor, piggy, ...propActors } = buildRoom(scene, layout)
   _floorActor = floor
 
   // ── Stations (C3) ──────────────────────────────────────
@@ -506,14 +508,13 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
   const { spawns, sizes } = layout
 
   // ── Key positions (world units, straight from the layout) ──
+
   const slotSpawns   = spawns.deliverySlots.map(p => ex.vec(p.x, p.y))
   const BOX_SPAWN    = slotSpawns[0]
   const DOOR         = ex.vec(spawns.door.x, spawns.door.y)
   const TABLE        = ex.vec(spawns.benchTop.x, spawns.benchTop.y)
   const IDLE_POS     = ex.vec(spawns.workerIdle.x, spawns.workerIdle.y)
   const BENCH_POS    = ex.vec(spawns.bench.x, spawns.bench.y)
-  const MAILBOX_POS  = mailbox.pos.clone()
-  const TRASHBIN_POS = trashbin?.pos.clone() ?? null
 
   // ── Delivery box — spawns in the street ────────────────
   const BOX_W = sizes.box.w
@@ -801,18 +802,22 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
 
   // ── Pulse controllers ──────────────────────────────────
   const boxPulse      = addPulse(box)
-  const mailboxPulse  = addPulse(mailbox)
-  const trashbinPulse = addPulse(trashbin)
   // The panel objects (S2) pulse for exactly the reason the bottom bar used to
   // show a "!" badge — the notice moved to where the thing is.
-  const deskPulse     = addPulse(desk)
-  const rackPulse     = addPulse(rack)
-  const boardPulse    = addPulse(jobboard)
+  // A pulse per ZONE, looked up by the zone's own id. The factory has several
+  // post boxes and several boards (F4), so a fixed list of named pulses would
+  // quietly leave all but the first one dark.
+  const zonePulses = Object.fromEntries(
+    (layout.zones ?? [])
+      .filter(z => propActors[z.id])
+      .map(z => [z.id, addPulse(propActors[z.id])]),
+  )
 
   return {
     engine: { getFps: () => engine.clock.fpsSampler.fps, _ex: engine },
     scene,
-    box, piggy, mailbox, trashbin, workbench,
+    box, piggy, workbench,
+    ...propActors,
     beltBoxes,
     stations,
     player, playerRig, workerView, workerViews,
@@ -822,10 +827,7 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     slotSpawns,
     zonePaints,
     boxSpawn: BOX_SPAWN,
-    _pulses: {
-      box: boxPulse, mailbox: mailboxPulse, trashbin: trashbinPulse,
-      desk: deskPulse, rack: rackPulse, jobboard: boardPulse,
-    },
+    _pulses: { box: boxPulse, ...zonePulses },
   }
 }
 

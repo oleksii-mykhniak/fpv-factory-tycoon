@@ -104,6 +104,27 @@ describe('C7 — locations are floor plans, not palettes', () => {
     expect(() => dispatch(w, 'unlockHall', { hallId: 'hall-3' })).toThrow('по черзі')
   })
 
+  // Found the hard way in F4: the factory's job board sat close enough to the
+  // upgrade rack that their zones overlapped, so walking up to the rack opened
+  // the hiring panel on top of it — indistinguishable from a broken button.
+  it('no two panel zones overlap — one spot, one panel', () => {
+    const PANELS = ['desk', 'rack', 'jobboard']
+    const all = [...Object.values(LAYOUTS), layoutFor('factory'),
+                 layoutFor('factory', { unlockedHalls: ['hall-1', 'hall-2', 'hall-3'] })]
+    for (const layout of all) {
+      const panels = layout.zones.filter(z => PANELS.includes(z.kind))
+      for (let i = 0; i < panels.length; i++) {
+        for (let j = i + 1; j < panels.length; j++) {
+          const a = panels[i], b = panels[j]
+          const overlaps =
+            Math.abs(a.cx - b.cx) < (a.w + b.w) / 2 &&
+            Math.abs(a.cy - b.cy) < (a.h + b.h) / 2
+          expect(overlaps, `${layout.id}: ${a.id} ↔ ${b.id}`).toBe(false)
+        }
+      }
+    }
+  })
+
   it('no station footprint blocks its own interaction zone', () => {
     for (const id of [...Object.keys(LAYOUTS), 'factory']) {
       const w = boot(id, { upgrades: { ...createState().upgrades, benchLevel: 2 } })

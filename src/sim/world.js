@@ -173,9 +173,12 @@ export function createWorld({ state, salesLog = [] } = {}, { now = Date.now(), r
 // are the sim's view of it.
 // Where a worker of this role belongs when idle (S1.5). Each role has its own
 // post, so a new hire walks to their station instead of joining a huddle.
-export function postSpawn(layout, role) {
+export function postSpawn(layout, role, hallId = null) {
   const spawns = layout?.spawns ?? {}
-  return spawns.posts?.[role] ?? spawns.workerIdle ?? { x: 0, y: 0 }
+  return spawns.postsByHall?.[hallId]?.[role]
+    ?? spawns.posts?.[role]
+    ?? spawns.workerIdle
+    ?? { x: 0, y: 0 }
 }
 
 export function syncWorkerAgents(world) {
@@ -187,7 +190,7 @@ export function syncWorkerAgents(world) {
   const players = (world.agents ?? []).filter(a => a.kind !== 'worker')
 
   const workers = hired.map((w, i) => {
-    const spawn = postSpawn(world.layout, w.role)
+    const spawn = postSpawn(world.layout, w.role, w.hallId ?? null)
     const agent = existing.get(w.id) ?? createAgent({
       id:   w.id,
       kind: 'worker',
@@ -196,8 +199,9 @@ export function syncWorkerAgents(world) {
       y:    spawn.y + Math.floor(i / 3) * 40,
       speed: roleLevelData(w.role, w.level).speed,
     })
-    agent.role  = w.role
-    agent.level = w.level
+    agent.role   = w.role
+    agent.level  = w.level
+    agent.hallId = w.hallId ?? null
     agent.speed = roleLevelData(w.role, w.level).speed
     return agent
   })
@@ -222,7 +226,9 @@ export function applyLayout(world, layout) {
 
   const spawn = layout.spawns.player
   for (const agent of world.agents ?? []) {
-    const home = agent.kind === 'player' ? spawn : postSpawn(layout, agent.role)
+    const home = agent.kind === 'player'
+      ? spawn
+      : postSpawn(layout, agent.role, agent.hallId ?? null)
     agent.x = home.x
     agent.y = home.y
     agent.vx = 0

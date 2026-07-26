@@ -181,7 +181,7 @@ const effects = createEffects({
   onSaleMade:      () => offerSaleBonus(),
   onMinigame:      ({ game, agentId }) => openMinigame(game, agentId),
   // Walking up to the laptop / rack / board is what opens these now (S2).
-  onPanel:         ({ panel }) => openPanel(panel),
+  onPanel:         ({ panel, hallId }) => openPanel(panel, hallId),
 })
 
 // Applies a player command and pushes the result through the presentation layer.
@@ -306,7 +306,7 @@ const trashModal = createTrashModal(uiRoot, {
 })
 
 const hireModal = createHireModal(uiRoot, {
-  onHire: (role) => send('hireWorker', { role }),
+  onHire: (role, hallId) => send('hireWorker', { role, hallId }),
 })
 
 // The bar is gone entirely: everything that used to sit there is a place in the
@@ -317,10 +317,10 @@ createSettingsButton(uiRoot, {
 
 // Which panel a zone asked for. One place, so adding an object with a panel
 // behind it is a line here and an entry in defs/interactions.js.
-function openPanel(panel) {
+function openPanel(panel, hallId = null) {
   if (panel === 'shop')    shopModal.open(world.game)
   if (panel === 'upgrade') upgradeModal.open(world.game)
-  if (panel === 'hire')    hireModal.open(world.game)
+  if (panel === 'hire')    hireModal.open(world.game, hallId)
 }
 
 let _lastRendered = null

@@ -20,6 +20,14 @@ const stationHall = (world, stationId) => {
 const stationZone = (world, stationId) =>
   (world.zones ?? []).find(z => z.kind === 'bench' && z.meta?.stationId === stationId)?.id
 
+// The post box this hall ships from. Each hall has its own (F4): a seller bound
+// to hall 3 carrying every drone back to hall 1 would be exactly the walk the
+// conveyor was built to delete.
+const mailboxZone = (world, hallId) => {
+  const boxes = (world.zones ?? []).filter(z => z.kind === 'mailbox')
+  return (hallId && boxes.find(z => z.meta?.hallId === hallId))?.id ?? boxes[0]?.id
+}
+
 // The output side of a station — where a finished drone is collected (S1.2).
 const stationOutZone = (world, stationId) =>
   (world.zones ?? []).find(z => z.kind === 'bench_out' && z.meta?.stationId === stationId)?.id ??
@@ -79,7 +87,8 @@ export function deriveJobs(world) {
   }
 
   for (const d of inHand) {
-    const toZone = stationZone(world, nextTarget(d))
+    const target = nextTarget(d)
+    const toZone = stationZone(world, target)
     if (!toZone) continue
     jobs.push({
       id: `haul_delivery:${d.id}`,
@@ -94,12 +103,14 @@ export function deriveJobs(world) {
   for (const d of waiting) {
     if (!targets.length) break
     const fromZone = pickupZone(world, d)
-    const toZone   = stationZone(world, nextTarget(d))
+    const target   = nextTarget(d)
+    const toZone   = stationZone(world, target)
     if (!fromZone || !toZone) continue
     jobs.push({
       id: `haul_delivery:${d.id}`,
       type: 'haul_delivery',
       deliveryId: d.id,
+      hallId: stationHall(world, target),
       fromZone,
       toZone,
     })
@@ -109,7 +120,9 @@ export function deriveJobs(world) {
   // walking to the same laptop for the same purchase would each place one.
   const deskZone = (world.zones ?? []).find(z => z.kind === 'desk')?.id
   if (deskZone && world.now >= (world.managerNextOrderAt ?? 0) && managerOrderChoice(game, 0)) {
-    jobs.push({ id: 'order_kit:desk', type: 'order_kit', atZone: deskZone })
+    // The laptop serves the whole factory, so this job belongs to no hall and
+    // any manager may take it.
+    jobs.push({ id: 'order_kit:desk', type: 'order_kit', atZone: deskZone, hallId: null })
   }
 
   for (const station of stationsOf(game)) {
@@ -119,6 +132,7 @@ export function deriveJobs(world) {
       if (atZone) {
         jobs.push({
           id: `clear_burnt:${station.id}`, type: 'clear_burnt', stationId: station.id, atZone,
+          hallId: stationHall(world, station.id),
         })
       }
     }
@@ -127,7 +141,10 @@ export function deriveJobs(world) {
     if (station.phase === Phase.ASSEMBLY) {
       const atZone = stationZone(world, station.id)
       if (atZone) {
-        jobs.push({ id: `assemble:${station.id}`, type: 'assemble', stationId: station.id, atZone })
+        jobs.push({
+          id: `assemble:${station.id}`, type: 'assemble', stationId: station.id, atZone,
+          hallId: stationHall(world, station.id),
+        })
       }
     }
 
@@ -140,13 +157,15 @@ export function deriveJobs(world) {
     // the untaken state would instead cancel the errand mid-walk.
     const takenByWorker = station.takenBy && station.takenBy !== 'player'
     if (station.phase === Phase.READY && (!station.takenBy || takenByWorker)) {
+      const hallId   = stationHall(world, station.id)
       const fromZone = stationOutZone(world, station.id)
-      const toZone   = (world.zones ?? []).find(z => z.kind === 'mailbox')?.id
+      const toZone   = mailboxZone(world, hallId)
       if (fromZone && toZone) {
         jobs.push({
           id: `sell_drone:${station.id}`,
           type: 'sell_drone',
           stationId: station.id,
+          hallId,
           // A drone already in hand belongs to the one holding it: nobody else
           // may claim the errand and walk to an output table that is now empty.
           onlyAgent: takenByWorker ? station.takenBy : null,

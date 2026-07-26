@@ -29,6 +29,11 @@ function pickJob(world, agent) {
     if (job.claimedBy || !accepts.includes(job.type)) continue
     // Half-finished errands belong to whoever is holding the goods.
     if (job.onlyAgent && job.onlyAgent !== agent.id) continue
+    // Staff are hired into a hall and work that hall (F4). Without this, hiring
+    // for hall 3 changes nothing: everyone races to whichever bench frees up
+    // first, and the new hall stands empty next to a queue.
+    // A job with no hall (the laptop) is everyone's.
+    if (job.hallId && agent.hallId && job.hallId !== agent.hallId) continue
     const zone = zoneById(world, job.fromZone ?? job.atZone)
     if (!zone) continue
     const d = Math.hypot(zone.cx - agent.x, zone.cy - agent.y)
@@ -209,7 +214,12 @@ function idleWander(world, agent, dt) {
 // staffed rather than as a queue.
 export function postFor(world, agent) {
   const spawns = world.layout?.spawns ?? {}
-  return spawns.posts?.[agent.role] ?? spawns.workerIdle ?? { x: agent.x, y: agent.y }
+  // Staff idle in the hall they were hired into (F4) — otherwise everyone
+  // drifts back to hall 1 the moment there is nothing to do.
+  return spawns.postsByHall?.[agent.hallId]?.[agent.role]
+    ?? spawns.posts?.[agent.role]
+    ?? spawns.workerIdle
+    ?? { x: agent.x, y: agent.y }
 }
 
 export function agentSystem(world, dt, events) {

@@ -13,7 +13,7 @@ import {
 import { GUIDANCE_ORDERS, GUIDANCE_SCRAP_RUNS, MANAGER_RESERVE } from '../state/config.js'
 import { levelData, UPGRADE_TRACKS } from '../state/upgrades.js'
 import {
-  kitsForLocation, hiringAllowed, roleCapHere, capFor, ruleAt,
+  kitsForLocation, hiringAllowed, roleCapHere, roleCapInHall, capFor, ruleAt,
   canMoveToLocation, LOCATION_ORDER,
 } from '../state/locations.js'
 import { ROLE_ORDER, roleLevelData } from '../defs/roles.js'
@@ -75,10 +75,10 @@ export function upgradeNeedsAttention(game) {
 // The board: hiring is allowed here, and some role has both room and a price
 // the player can meet. Room is per role now, so a full courier bench no longer
 // hides the fact that a technician could still be taken on.
-export function hireNeedsAttention(game) {
+export function hireNeedsAttention(game, hallId = null) {
   if (!hiringAllowed(game)) return false
   return ROLE_ORDER.some(id =>
-    workersInRole(game, id).length < roleCapHere(game, id) &&
+    workersInRole(game, id, hallId).length < roleCapInHall(game, hallId, id) &&
     game.money >= nextHireCost(game, id))
 }
 

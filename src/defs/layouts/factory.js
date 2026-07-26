@@ -127,19 +127,30 @@ export function buildFactoryLayout(hallIds) {
     })),
   )
 
-  // The panels live in the first hall: it is the one you always own, and the
-  // one the street door opens into.
+  // The desk and the rack live in the first hall: one laptop orders for the
+  // whole factory and the rack is the player's own business.
   const home = placed[0]
   const props = {
-    mailbox:  { x: home.x0 + 300, y: 1650, w: 50, h: 40, sprite: 'mailbox',  color: '#3a5db8' },
-    desk:     { x: home.x0 + home.w - 200, y: 860, w: 96, h: 58, sprite: 'desk',     color: '#5a4a7a' },
-    rack:     { x: home.x0 + 220, y: 720, w: 62, h: 92, sprite: 'rack',     color: '#3a6a72' },
-    jobboard: { x: home.x0 + 220, y: 900, w: 60, h: 78, sprite: 'jobboard', color: '#7a5a3a' },
+    desk: { x: home.x0 + home.w - 200, y: 860, w: 96, h: 58, sprite: 'desk', color: '#5a4a7a' },
+    rack: { x: home.x0 + 220, y: 720, w: 62, h: 92, sprite: 'rack', color: '#3a6a72' },
   }
-  // One lamp per hall, so an opened hall is visibly lit rather than just wider.
+
+  // A board and a post box PER HALL (F4). Both follow from binding staff to a
+  // hall: the board is where you hire INTO this hall, and without a local post
+  // box a seller bound to hall 3 would carry every drone back across the whole
+  // factory — exactly the walk the conveyor was built to remove.
   for (const hall of placed) {
     props[`lamp_${hall.id}`] = {
       x: hall.cx, y: 130, w: 56, h: 56, sprite: 'lamp', color: '#d4c060', z: 2,
+    }
+    props[`mailbox_${hall.id}`] = {
+      x: hall.x0 + 300, y: 1240, w: 50, h: 40, sprite: 'mailbox', color: '#3a5db8',
+    }
+    // Well below the rack: at y=700 the board's zone overlapped the rack's, so
+    // walking up to buy an upgrade opened the hiring panel on top of it. Two
+    // panels behind one spot is indistinguishable from a broken button.
+    props[`jobboard_${hall.id}`] = {
+      x: hall.x0 + 150, y: 1050, w: 60, h: 78, sprite: 'jobboard', color: '#7a5a3a',
     }
   }
 
@@ -181,10 +192,20 @@ export function buildFactoryLayout(hallIds) {
       ...rect(drop.x, conveyor.y + 120, 170, 150),
       meta: { dropIndex: drop.index, hallId: drop.hallId },
     })),
-    { id: 'mailbox',  kind: 'mailbox',  ...rect(props.mailbox.x, props.mailbox.y, 150, 150) },
-    { id: 'desk',     kind: 'desk',     ...rect(props.desk.x, props.desk.y, 160, 150) },
-    { id: 'rack',     kind: 'rack',     ...rect(props.rack.x, props.rack.y, 150, 150) },
-    { id: 'jobboard', kind: 'jobboard', ...rect(props.jobboard.x, props.jobboard.y, 150, 150) },
+    ...placed.flatMap(hall => [
+      {
+        id: `mailbox_${hall.id}`, kind: 'mailbox',
+        ...rect(props[`mailbox_${hall.id}`].x, props[`mailbox_${hall.id}`].y, 150, 150),
+        meta: { hallId: hall.id },
+      },
+      {
+        id: `jobboard_${hall.id}`, kind: 'jobboard',
+        ...rect(props[`jobboard_${hall.id}`].x, props[`jobboard_${hall.id}`].y, 150, 150),
+        meta: { hallId: hall.id },
+      },
+    ]),
+    { id: 'desk', kind: 'desk', ...rect(props.desk.x, props.desk.y, 160, 150) },
+    { id: 'rack', kind: 'rack', ...rect(props.rack.x, props.rack.y, 150, 150) },
   ]
 
   const propRects = Object.fromEntries(
@@ -224,6 +245,14 @@ export function buildFactoryLayout(hallIds) {
         seller:  { x: home.x0 + 380, y: 1280 },
         manager: { x: props.desk.x - 40, y: props.desk.y + 160 },
       },
+      // A post per role PER HALL, so staff stand where they work instead of
+      // gathering in hall 1 (F4.3).
+      postsByHall: Object.fromEntries(placed.map(hall => [hall.id, {
+        courier: { x: hall.cx - 200, y: conveyor.y + 190 },
+        tech:    { x: hall.cx,       y: 560 },
+        seller:  { x: hall.x0 + 420, y: 1180 },
+        manager: { x: props.desk.x - 40, y: props.desk.y + 160 },
+      }])),
       door:          { x: doorX, y: ROOM_H - WALL_HORIZ - 30 },
       deliverySlots,
       bench:    { x: stationSlots[0].x, y: stationSlots[0].y + 86 },

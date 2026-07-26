@@ -151,6 +151,14 @@ export function roleCapHere(state, roleId) {
     .reduce((sum, hall) => sum + (hall.workerCaps?.[roleId] ?? 0), 0)
 }
 
+// Room for this role in ONE hall (F4). Hiring happens at a hall's own board, so
+// the cap that matters is the hall's — the location total is only ever a sum.
+export function roleCapInHall(state, hallId, roleId) {
+  if (!hallId) return roleCapHere(state, roleId)
+  const open = openHalls(state.unlockedHalls).find(h => h.id === hallId)
+  return open?.workerCaps?.[roleId] ?? 0
+}
+
 // Total room = the sum of the role caps. Kept as a derived value (never as its
 // own field) so a second limit can never quietly disagree with the first.
 export function maxWorkersHere(state) {

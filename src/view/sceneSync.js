@@ -118,12 +118,7 @@ export function syncScene(refs, world) {
   // they walked over pulses. One source of truth, so a pulsing object can never
   // turn out to be a dead end.
   if (_pulses && player) {
-    _pulses.box.stop()
-    _pulses.mailbox.stop()
-    _pulses.trashbin?.stop()
-    _pulses.desk?.stop()
-    _pulses.rack?.stop()
-    _pulses.jobboard?.stop()
+    for (const pulse of Object.values(_pulses)) pulse.stop()
     for (const view of refs.stations ?? []) view.pulse.stop()
     for (const paint of refs.zonePaints ?? []) setZonePaint(paint, false)
 
@@ -137,7 +132,8 @@ export function syncScene(refs, world) {
       // A station zone pulses its own station; fixed zones use a named pulse.
       const stationView = (refs.stations ?? []).find(v => v.id === zone.meta?.stationId)
       if (stationView) { stationView.pulse.start(); continue }
-      _pulses[ZONE_PULSE[zone.id]]?.start()
+      // Keyed by zone id, because a layout may hold several of the same kind.
+      _pulses[zone.id]?.start()
     }
   }
 
@@ -189,16 +185,6 @@ function syncWorkers(refs, world) {
   }
 }
 
-
-// Which pulse controller belongs to which zone.
-const ZONE_PULSE = {
-  bench:    'bench',
-  mailbox:  'mailbox',
-  trashbin: 'trashbin',
-  desk:     'desk',
-  rack:     'rack',
-  jobboard: 'jobboard',
-}
 
 // Items float above the head, stacked upward in pickup order. Shared by the
 // player and every hired worker.

@@ -184,12 +184,13 @@ const HANDLERS = {
 
   // Hire a worker (C5): the roster is game state, the agent that walks around
   // is derived from it.
-  hireWorker(world, { role }, events) {
+  hireWorker(world, { role, hallId = null }, events) {
     const cost = nextHireCost(world.game, role)
-    world.game = hireWorkerState(world.game, role, world.now, () => `${role}-${world.seq++}`)
+    world.game = hireWorkerState(
+      world.game, role, world.now, () => `${role}-${world.seq++}`, hallId)
     syncWorkerAgents(world)
     emit(events, EV.MONEY_SPENT, { amount: cost, reason: 'hire' })
-    emit(events, EV.WORKER_HIRED, { role })
+    emit(events, EV.WORKER_HIRED, { role, hallId })
   },
 
   addMoney(world, { amount }, events) {

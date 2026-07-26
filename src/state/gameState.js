@@ -8,8 +8,8 @@ import {
 import { UPGRADE_TRACKS } from './upgrades.js'
 import { KIT_TYPES } from './kits.js'
 import {
-  capFor, canMoveToLocation, LOCATIONS, hiringAllowed, roleCapHere, startMoneyAt,
-  freezeCapsFor, ruleAt,
+  capFor, canMoveToLocation, LOCATIONS, hiringAllowed, roleCapHere, roleCapInHall,
+  startMoneyAt, freezeCapsFor, ruleAt,
 } from './locations.js'
 import { hireCost, roleDef, ROLE_ORDER } from '../defs/roles.js'
 import { FACTORY_HALL_IDS, FIRST_HALL_ID, hallDef } from '../defs/layouts/factory.js'
@@ -316,8 +316,9 @@ function _afterStationClear(state, stationId, newMoney) {
 
 export const workersOf = (state) => state.workers ?? []
 
-export function workersInRole(state, roleId) {
-  return workersOf(state).filter(w => w.role === roleId)
+export function workersInRole(state, roleId, hallId = null) {
+  return workersOf(state).filter(w =>
+    w.role === roleId && (hallId === null || (w.hallId ?? null) === hallId))
 }
 
 // Cost of the next worker of this role — the curve is per-role, so hiring a
@@ -326,14 +327,16 @@ export function nextHireCost(state, roleId) {
   return hireCost(roleId, workersInRole(state, roleId).length)
 }
 
-export function hireWorker(state, roleId, now = Date.now(), makeId = null) {
+// hallId: which hall this person is taken on for (F4). Null everywhere the
+// location has no halls — the board by the door hires for the whole shop.
+export function hireWorker(state, roleId, now = Date.now(), makeId = null, hallId = null) {
   roleDef(roleId)   // throws on an unknown role
   if (!hiringAllowed(state))
     throw new Error('hireWorker: у цій локації немає де тримати робітників')
-  const room = roleCapHere(state, roleId)
-  if (workersInRole(state, roleId).length >= room)
+  const room = roleCapInHall(state, hallId, roleId)
+  if (workersInRole(state, roleId, hallId).length >= room)
     throw new Error(
-      `hireWorker: у цій локації більше ${room} робітників ролі "${roleId}" не поміститься`)
+      `hireWorker: тут більше ${room} робітників ролі "${roleId}" не поміститься`)
   const cost = nextHireCost(state, roleId)
   if (state.money < cost)
     throw new Error(`hireWorker: недостатньо грошей (є ${Math.floor(state.money)}, потрібно ${cost})`)
@@ -342,7 +345,7 @@ export function hireWorker(state, roleId, now = Date.now(), makeId = null) {
   return {
     ...state,
     money:   state.money - cost,
-    workers: [...workersOf(state), { id, role: roleId, level: 0, hiredAt: now }],
+    workers: [...workersOf(state), { id, role: roleId, level: 0, hiredAt: now, hallId }],
   }
 }
 

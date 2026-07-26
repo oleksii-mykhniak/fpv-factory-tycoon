@@ -6,7 +6,8 @@
 // makes "walk to the board to hire" mean anything.
 
 import { workersInRole, nextHireCost } from '../state/gameState.js'
-import { hiringAllowed, maxWorkersHere, roleCapHere } from '../state/locations.js'
+import { hiringAllowed, maxWorkersHere, roleCapInHall } from '../state/locations.js'
+import { hallDef } from '../defs/layouts/factory.js'
 import { ROLES, ROLE_ORDER } from '../defs/roles.js'
 
 export function createHireModal(root, { onHire }) {
@@ -28,7 +29,12 @@ export function createHireModal(root, { onHire }) {
   overlay.querySelector('#hire-close').addEventListener('click', close)
   overlay.addEventListener('click', e => { if (e.target === overlay) close() })
 
-  function open(state) {
+  // hallId: which hall's board was walked up to (F4). Null where the location
+  // has no halls — then the board hires for the whole shop.
+  let hallId = null
+
+  function open(state, atHall = null) {
+    hallId = atHall
     overlay.removeAttribute('hidden')
     render(state)
   }
@@ -44,13 +50,17 @@ export function createHireModal(root, { onHire }) {
   function render(state) {
     const body    = overlay.querySelector('#hire-body')
     const canHire = hiringAllowed(state)
-    const room    = maxWorkersHere(state)
-    const onStaff = (state.workers ?? []).length
+    const room    = hallId ? null : maxWorkersHere(state)
+    const onStaff = hallId
+      ? (state.workers ?? []).filter(w => (w.hallId ?? null) === hallId).length
+      : (state.workers ?? []).length
+    const hallName = hallId ? (hallDef(hallId)?.name ?? hallId) : null
 
     body.innerHTML = `
       <div class="shop-section">
         <div class="shop-section__title">
-          Робітники${canHire ? ` — ${onStaff}/${room}` : ''}
+          ${hallName ? `Робітники ${hallName}` : 'Робітники'}${
+            canHire && room !== null ? ` — ${onStaff}/${room}` : ''}
         </div>
         ${!canHire ? `
           <div class="shop-upgrade">
@@ -58,14 +68,14 @@ export function createHireModal(root, { onHire }) {
               У квартирі ви працюєте самі. Переїдьте до гаража, щоб наймати людей.
             </p>
           </div>` : ''}
-        ${canHire && onStaff >= room ? `
+        ${canHire && room !== null && onStaff >= room ? `
           <div class="shop-upgrade">
             <p class="upgrade-effect-hint">Більше людей сюди не поміститься — переїдьте далі.</p>
           </div>` : ''}
         ${!canHire ? '' : ROLE_ORDER.map(id => {
           const role  = ROLES[id]
-          const count = workersInRole(state, id).length
-          const cap   = roleCapHere(state, id)
+          const count = workersInRole(state, id, hallId).length
+          const cap   = roleCapInHall(state, hallId, id)
           const cost  = nextHireCost(state, id)
           const full  = count >= cap
           const can   = state.money >= cost && !full
@@ -76,7 +86,7 @@ export function createHireModal(root, { onHire }) {
               </span>
               ${full
                 ? `<p class="upgrade-effect-hint">${cap === 0
-                    ? 'Не наймається в цій локації — переїдьте далі'
+                    ? (hallName ? `Не наймається в ${hallName}` : 'Не наймається в цій локації — переїдьте далі')
                     : 'Місць для цієї ролі більше немає'}</p>`
                 : `<button class="btn btn--upgrade" data-hire="${id}" ${can ? '' : 'disabled'}>
                      Найняти — $${cost}
@@ -89,7 +99,7 @@ export function createHireModal(root, { onHire }) {
     `
 
     body.querySelectorAll('[data-hire]').forEach(btn => {
-      btn.addEventListener('click', () => onHire?.(btn.dataset.hire))
+      btn.addEventListener('click', () => onHire?.(btn.dataset.hire, hallId))
     })
   }
 

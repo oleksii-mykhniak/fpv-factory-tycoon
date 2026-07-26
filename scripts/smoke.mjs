@@ -400,7 +400,8 @@ const jBefore = await page.evaluate(() => {
 })
 
 // A hall will not open while the open ones are short-staffed, so hire first.
-await openPanelAt('jobboard')
+// Each hall has its own board since F4 — this is hall 1's.
+await openPanelAt('jobboard_hall-1')
 for (const role of ['Кур', 'Технік', 'Продавець', 'Менеджер']) {
   const btn = page.locator('.shop-upgrade', { hasText: role }).locator('button').first()
   if (await btn.isEnabled().catch(() => false)) await btn.click()
@@ -411,7 +412,8 @@ await page.waitForTimeout(400)
 
 await openPanelAt('rack')
 const jBtnText = await page.locator('#hall-btn').textContent().catch(() => '(no button)')
-await page.click('#hall-btn').catch(() => {})
+
+await page.click('#hall-btn')
 await page.waitForTimeout(1500)
 const jAfter = await page.evaluate(() => {
   const w = globalThis.__world
@@ -429,6 +431,21 @@ console.log(`  ${jBtnText.trim()}`)
 console.log(`  halls ${jBefore.halls}→${jAfter.halls}, world ${jBefore.world}→${jAfter.world}w, ` +
             `benches ${jBefore.stations}→${jAfter.stations}, grid ${jBefore.grid}→${jAfter.grid}`)
 
+// F4: the new hall has its own board, and hiring there binds the person to it.
+await openPanelAt('jobboard_hall-2')
+const jBoardTitle = await page.textContent('#hire-modal .shop-section__title').catch(() => '')
+const jTechBtn = page.locator('.shop-upgrade', { hasText: 'Технік' }).locator('button').first()
+if (await jTechBtn.isEnabled().catch(() => false)) await jTechBtn.click()
+await page.waitForTimeout(400)
+await page.click('#hire-close').catch(() => {})
+const jHired = await page.evaluate(() => {
+  const w = globalThis.__world
+  const last = w.game.workers[w.game.workers.length - 1]
+  const agent = w.agents.find(a => a.id === last?.id)
+  return { role: last?.role, hallId: last?.hallId, agentHall: agent?.hallId }
+})
+console.log(`  board title: "${jBoardTitle.trim()}"; hired ${jHired.role} into ${jHired.hallId}`)
+
 // Can a character actually walk from the new hall back to the first one?
 await page.evaluate(() => {
   const w = globalThis.__world
@@ -436,12 +453,13 @@ await page.evaluate(() => {
   p.x = w.bounds.w - 300; p.y = 700
 })
 await page.waitForTimeout(200)
-await goTo('mailbox')
+// Each hall ships from its own post box since F4, so aim at hall 1's.
+await goTo('mailbox_hall-1')
 await page.waitForTimeout(6000)
 const jWalked = await page.evaluate(() => {
   const w = globalThis.__world
   const p = w.agents.find(a => a.kind === 'player')
-  const mb = w.zones.find(z => z.kind === 'mailbox')
+  const mb = w.zones.find(z => z.id === 'mailbox_hall-1')
   return { dist: Math.hypot(p.x - mb.cx, p.y - mb.cy) }
 })
 console.log(`  crossed the factory to the mailbox: ${jWalked.dist.toFixed(0)} units away`)
@@ -611,6 +629,9 @@ const checks = [
   ['J: nav grid rebuilt for the wider floor', jAfter.grid > jBefore.grid],
   ['J: the player is still inside the world', jAfter.inside],
   ['J: a character can cross between halls', jWalked.dist < 120],
+  ['J: each hall has its own job board',  jBoardTitle.includes('Цех 2')],
+  ['J: hiring there binds the person to that hall',
+   jHired.hallId === 'hall-2' && jHired.agentHall === 'hall-2'],
   ['K: nothing on the belt while in transit', kTransit.onBelt === 0],
   ['K: the box lands on the belt at the dock', kRidingA.onBelt === 1],
   ['K: it moves along the belt on its own',   kRidingB.t > kRidingA.t],

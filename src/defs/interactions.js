@@ -270,9 +270,11 @@ export const INTERACTIONS = {
     repeat:  false,
     accepts: 'player',
     enabled: (world) => hiringAllowed(world.game),
-    attention: (world) => hireNeedsAttention(world.game),
-    run: (_world, _zone, agent, events) =>
-      emit(events, EV.PANEL_REQUESTED, { agentId: agent.id, panel: 'hire' }),
+    attention: (world, zone) => hireNeedsAttention(world.game, zone.meta?.hallId ?? null),
+    run: (_world, zone, agent, events) =>
+      emit(events, EV.PANEL_REQUESTED, {
+        agentId: agent.id, panel: 'hire', hallId: zone.meta?.hallId ?? null,
+      }),
   },
 
   // Piggy bank: the rescue mini-game.
