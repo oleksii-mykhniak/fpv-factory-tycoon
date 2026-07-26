@@ -7,43 +7,58 @@
 import { buildLayout } from './buildLayout.js'
 import { buildFactoryLayout } from './factory.js'
 
-// ── Квартира — one bench, everything within a few steps.
-// Deliberately small: with a single station and no staff, a big room is just
-// walking. The garage is where space starts to matter.
+// ── Квартира — where it starts, and it looks like somewhere someone lives.
+//
+// It was one empty hall (V1 made it emptier still). Now it is a flat: a room
+// with the bench, a kitchen nook with the laptop, and a hallway that runs to
+// the front door. Same builder — the rooms are interior partitions, which are
+// walls with holes in them and nothing more (V2).
 export const apartment = buildLayout({
   id:    'apartment',
-  world: { w: 820, h: 1250 },
-  roomH: 880,
-  door:  { x: 360, w: 170 },
+  world: { w: 1000, h: 1350 },
+  roomH: 950,
+  door:  { x: 500, w: 180 },
+  partitions: [
+    // Between the room and the kitchen, with a doorway in the middle.
+    { axis: 'v', at: 620, from: 0, to: 600, gaps: [{ at: 300, size: 170 }] },
+    // Between both rooms and the hallway: one opening each, so neither room is
+    // reached only by walking through the other.
+    { axis: 'h', at: 600, from: 0, to: 1000, gaps: [
+      { at: 280, size: 190 },
+      { at: 830, size: 190 },
+    ] },
+  ],
   stationSlots: [
-    // Deep enough into the room that the output side behind the bench is a
-    // corridor a character can actually walk down (S1.2).
-    { def: 'workbench', x: 420, y: 330 },
+    // In the room, far enough down the wall that the output side behind it is a
+    // corridor a character can actually walk along (S1.2).
+    { def: 'workbench', x: 300, y: 300 },
   ],
   props: {
-    lamp:     { x: 420, y: 110, w: 40, h: 40, sprite: 'lamp',     color: '#d4c060', z: 2 },
-    piggy:    { x: 130, y: 700, w: 46, h: 46, sprite: 'piggy',    color: '#d4607a' },
-    mailbox:  { x: 150, y: 1090, w: 42, h: 34, sprite: 'mailbox',  color: '#3a5db8' },
-    trashbin: { x: 690, y: 1090, w: 42, h: 46, sprite: 'trashbin', color: '#4a6a3a' },
-    desk:     { x: 720, y: 470, w: 86, h: 52, sprite: 'desk',     color: '#5a4a7a' },
-    rack:     { x: 120, y: 330, w: 58, h: 84, sprite: 'rack',     color: '#3a6a72' },
-    jobboard: { x: 120, y: 520, w: 56, h: 72, sprite: 'jobboard', color: '#7a5a3a' },
+    lamp:     { x: 300, y: 90,  w: 40, h: 40, sprite: 'lamp',     color: '#d4c060', z: 2 },
+    rack:     { x: 110, y: 470, w: 58, h: 84, sprite: 'rack',     color: '#3a6a72' },
+    jobboard: { x: 110, y: 180, w: 56, h: 72, sprite: 'jobboard', color: '#7a5a3a' },
+    // The laptop lives on the kitchen table — this is a shop run from home.
+    desk:     { x: 820, y: 300, w: 86, h: 52, sprite: 'desk',     color: '#5a4a7a' },
+    piggy:    { x: 120, y: 790, w: 46, h: 46, sprite: 'piggy',    color: '#d4607a' },
+    // Post box and bin are outside the front door, like anybody's.
+    mailbox:  { x: 250, y: 1180, w: 42, h: 34, sprite: 'mailbox',  color: '#3a5db8' },
+    trashbin: { x: 780, y: 1180, w: 42, h: 46, sprite: 'trashbin', color: '#4a6a3a' },
   },
   deliverySlots: [
-    { x: 360, y: 1000 },
-    { x: 530, y: 1000 },
-    { x: 680, y: 1000 },
+    { x: 420, y: 1090 },
+    { x: 590, y: 1090 },
+    { x: 750, y: 1090 },
   ],
   spawns: {
-    player:     { x: 600, y: 700 },
-    workerIdle: { x: 640, y: 730 },
+    player:     { x: 500, y: 780 },
+    workerIdle: { x: 560, y: 800 },
     // No hiring in the apartment, but the posts keep the shape of the data the
     // same everywhere — a location never has to be a special case.
     posts: {
-      courier: { x: 420, y: 780 },
-      tech:    { x: 570, y: 500 },
-      seller:  { x: 200, y: 830 },
-      manager: { x: 690, y: 600 },
+      courier: { x: 480, y: 800 },
+      tech:    { x: 300, y: 430 },
+      seller:  { x: 220, y: 830 },
+      manager: { x: 820, y: 430 },
     },
   },
   theme: { bgColor: '#0e0e18', floorColor: '#1a1a26' },

@@ -27,11 +27,57 @@ export const SIZES = {
   drone:     { w: u(0.54), h: u(0.30) },
 }
 
+// Interior partitions (V2) — what turns one hall into a flat with rooms.
+//
+// A partition is a wall segment with holes in it, not a separate concept: it
+// produces the same rects as the outer walls and the same painted gaps as the
+// front door, so obstacles, the nav grid and the scene all handle it already.
+//
+//   { axis: 'v'|'h', at, from, to, gaps: [{ at, size }] }
+//
+// `from`/`to` let a wall stop halfway, which is how a room opens onto a hallway
+// without needing a doorway at all — the safest kind of opening, because there
+// is nothing narrow for the pathfinder to miss.
+function partitionRects(part) {
+  const vertical  = part.axis === 'v'
+  const thickness = vertical ? WALL_SIDE : WALL_HORIZ
+  const gaps = [...(part.gaps ?? [])].sort((a, b) => a.at - b.at)
+
+  const walls = []
+  const voids = []
+  let cursor = part.from
+
+  for (const gap of gaps) {
+    const gapStart = gap.at - gap.size / 2
+    const gapEnd   = gap.at + gap.size / 2
+    if (gapStart > cursor) {
+      const len = gapStart - cursor
+      walls.push(vertical
+        ? rect(part.at, cursor + len / 2, thickness, len)
+        : rect(cursor + len / 2, part.at, len, thickness))
+    }
+    voids.push(vertical
+      ? rect(part.at, gap.at, thickness, gap.size)
+      : rect(gap.at, part.at, gap.size, thickness))
+    cursor = gapEnd
+  }
+
+  if (cursor < part.to) {
+    const len = part.to - cursor
+    walls.push(vertical
+      ? rect(part.at, cursor + len / 2, thickness, len)
+      : rect(cursor + len / 2, part.at, len, thickness))
+  }
+
+  return { walls, voids }
+}
+
 export function buildLayout({
   id,
   world,          // { w, h } total world size in units
   roomH,          // interior height; the street fills the rest
   door,           // { x, w } gap in the bottom wall
+  partitions = [],// interior walls — see partitionRects
   stationSlots,   // [{ def, x, y }] where benches may stand
   props,          // { name: { x, y, w, h, sprite, color, z } }
   deliverySlots,  // [{ x, y }] street positions, indexed by delivery.slotIndex
@@ -51,6 +97,9 @@ export function buildLayout({
       WALL_HORIZ,
     ),
   ]
+
+  const interior = partitions.map(partitionRects)
+  walls.push(...interior.flatMap(p => p.walls))
 
   const propRects = Object.fromEntries(
     Object.entries(props).map(([name, p]) => [
@@ -97,7 +146,10 @@ export function buildLayout({
     obstacles: [...walls],
     // Painted gaps in the walls. An array because the factory has one per
     // hall divider as well as the street door (F2).
-    doorVoids: [rect(door.x, roomH - WALL_HORIZ / 2, door.w, WALL_HORIZ)],
+    doorVoids: [
+      rect(door.x, roomH - WALL_HORIZ / 2, door.w, WALL_HORIZ),
+      ...interior.flatMap(p => p.voids),
+    ],
     stationSlots,
     props: propRects,
     zones,

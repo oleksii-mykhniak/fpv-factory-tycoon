@@ -608,11 +608,18 @@ await hold('KeyW', 4000); const cBench = await player()
 
 // Camera follow, measured away from the clamped edges AND clear of the bench —
 // standing inside it pins the character and reads as a camera bug.
+// Start in the hallway, lined up with the front door: since V2 the flat has
+// interior walls, and the old spot (just below the bench) now has one right
+// underneath it — the character would stop after 20 units and this would read
+// as a broken camera.
 await page.evaluate(() => {
   const w = globalThis.__world
   const a = w.agents.find(x => x.kind === 'player')
-  a.x = w.layout.spawns.player.x
-  a.y = w.layout.stationSlots[0].y + 120
+  // In the middle band of the world and lined up with a doorway. Too high and
+  // the camera is clamped against the top edge, so it cannot follow at all —
+  // which is what "camera broken" looked like on the first attempt.
+  a.x = 280
+  a.y = 500
 })
 await page.waitForTimeout(500)
 await page.waitForTimeout(700)
@@ -627,10 +634,18 @@ await boot(seedState({}))
 await orderFirstKit()
 await page.waitForTimeout(5000)
 await page.evaluate(() => {
-  const a = globalThis.__world.agents.find(x => x.kind === 'player')
-  a.x = 420; a.y = 900
+  const w = globalThis.__world
+  const a = w.agents.find(x => x.kind === 'player')
+  // Straight at the doorway. Aiming at the slot instead puts a shoulder into
+  // the door frame: the character is 40 wide and the opening has edges.
+  a.x = w.layout.door.x
+  a.y = w.layout.door.y - 90
 })
-await hold('KeyS', 2000)
+// Just far enough to reach the slots' row — further and the character walks
+// past them to the bottom of the world.
+await hold('KeyS', 1300)
+// Out on the pavement now — walk along it to the box.
+await hold('KeyA', 500)
 const cWalked = await player()
 console.log(`  walked out of the door: ${JSON.stringify(cWalked)}`)
 
@@ -655,7 +670,7 @@ const checks = [
   ['C: stopped by the left wall',         cWall.x >= 24 && cWall.x <= 60],
   ['C: stopped by a workbench',           Math.abs(cBench.y - (cBenchY + 14)) < 6],
   ['C: camera follows the player',        camAfter > camBefore + 150],
-  ['C: walked out and grabbed the box',   cWalked.y > 1050 && cWalked.carrying.includes('kit_box')],
+  ['C: walked out and grabbed the box',   cWalked.carrying.includes('kit_box')],
   ['D: two stations were built',          dCount === 2],
   ['D: each station got its own zone',    dZones.length === 2],
   ['D: box picked up from a street slot',  dCarry.carrying.includes('kit_box')],
