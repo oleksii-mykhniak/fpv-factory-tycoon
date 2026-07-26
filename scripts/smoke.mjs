@@ -111,8 +111,11 @@ async function orderFirstKit() {
   return ok
 }
 
+// Must match SAVE_VERSION in src/save/storage.js — a seed written with an older
+// version is now discarded on load, which would silently boot every scenario
+// into a fresh apartment instead of the state it meant to test.
 const seedState = (upgrades, extra = {}) => ({
-  version: 1,
+  version: 2,
   savedAt: Date.now(),
   state: {
     money: 1000, lastPiggyAt: null, locationId: 'apartment', onboarded: true,

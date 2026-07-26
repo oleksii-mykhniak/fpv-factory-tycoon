@@ -1,8 +1,23 @@
 // Thin storage wrapper — today: localStorage; later: @capacitor/preferences.
 // main.js only calls saveGame / loadGame / clearSave and never touches the key directly.
 
-const SAVE_KEY     = 'fpv_factory_save'
-const SAVE_VERSION = 1
+const SAVE_KEY = 'fpv_factory_save'
+
+// The schema this build writes. Bump it whenever the saved shape changes.
+//
+// Bumping this ALONE does not throw a save away: migrateState() in main.js has
+// been carrying old shapes forward since D6 and there is no reason to discard a
+// save we can still read. What throws a save away is raising the floor below.
+export const SAVE_VERSION = 2
+
+// The oldest schema this build will still load. Raise it — deliberately, and
+// only alongside a comment saying why — when a change is too structural to
+// migrate honestly, and starting over is better than a save that half works.
+//
+// 2 (Stage 5 / F1): the third location changed id, upgrade tracks began
+// freezing, and the failure model moved onto the unattended path. A version-1
+// save is a shop built under rules the game no longer plays by.
+export const MIN_LOADABLE_VERSION = 2
 
 export function saveGame(state, salesLog) {
   const payload = {
@@ -18,13 +33,34 @@ export function saveGame(state, salesLog) {
   }
 }
 
-// Returns { state, salesLog } or null if no valid save exists.
+// Returns { state, salesLog, savedAt } or null when there is nothing loadable.
+//
+// A save that is too old is DELETED here rather than merely ignored: leaving it
+// in place means every launch pays to parse it and, worse, a later build that
+// lowers the floor would resurrect a shop the player has long since replaced.
 export function loadGame() {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     if (!raw) return null
+
     const payload = JSON.parse(raw)
-    if (payload.version !== SAVE_VERSION) return null
+    const version = payload.version ?? 0
+
+    if (version < MIN_LOADABLE_VERSION) {
+      console.info(
+        `[save] версія ${version} старіша за мінімальну ${MIN_LOADABLE_VERSION} — починаємо з нуля`,
+      )
+      clearSave()
+      return null
+    }
+    // A save from a NEWER build (the player downgraded, or two devices share a
+    // browser profile) is left alone rather than deleted: this build cannot
+    // read it, but it is not ours to destroy.
+    if (version > SAVE_VERSION) {
+      console.warn(`[save] версія ${version} новіша за цю збірку (${SAVE_VERSION}) — ігноруємо`)
+      return null
+    }
+
     return { state: payload.state, salesLog: payload.salesLog ?? [], savedAt: payload.savedAt ?? null }
   } catch {
     return null
@@ -32,5 +68,9 @@ export function loadGame() {
 }
 
 export function clearSave() {
-  localStorage.removeItem(SAVE_KEY)
+  try {
+    localStorage.removeItem(SAVE_KEY)
+  } catch {
+    // nothing we can do, and nothing that should stop the game booting
+  }
 }
