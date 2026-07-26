@@ -79,6 +79,7 @@ export function buildLayout({
   door,           // { x, w } gap in the bottom wall
   partitions = [],// interior walls — see partitionRects
   decor = [],     // furniture that does nothing — see below
+  street = [],    // the same thing, outside the front door
   stationSlots,   // [{ def, x, y }] where benches may stand
   props,          // { name: { x, y, w, h, sprite, color, z } }
   deliverySlots,  // [{ x, y }] street positions, indexed by delivery.slotIndex
@@ -109,7 +110,10 @@ export function buildLayout({
   // `solid: false` is the default on purpose. A rug or a poster that quietly
   // narrowed a doorway would break pathing in the one way that never shows up
   // on screen — the courier just stops.
-  const decorRects = decor.map((d, i) => ({
+  // Street dressing is decor that happens to stand outside. Same rules, same
+  // rendering — keeping it a separate argument only so a floor plan reads as
+  // "inside" then "outside" rather than as one long list.
+  const decorRects = [...decor, ...street].map((d, i) => ({
     id:     d.id ?? `decor-${i}`,
     ...rect(d.x, d.y, d.w, d.h),
     sprite: d.sprite,

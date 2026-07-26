@@ -22,8 +22,19 @@ different sets look worse side by side than two placeholders.
 
 None yet. When adding a CC0 sprite (Kenney.nl etc.), record it here:
 
-| File | Source | License | Author |
+| Files | Source | License | Author |
 |---|---|---|---|
-| — | — | — | — |
+| `public/sprites/kenney/k_{tree,bush,hedge,bench,bin,bag,postbox,lamppost,bicycle,car_red,barrier,hydrant,crate,crate_veg,pallet,vending,shelf_shop}.png` | [RPG Urban Pack](https://kenney.nl/assets/rpg-urban-pack) | CC0 1.0 | Kenney Vleugels (kenney.nl) |
+| `public/sprites/kenney/k_{player,courier,tech,seller,manager}_{front,side}.png` | [RPG Urban Pack](https://kenney.nl/assets/rpg-urban-pack) | CC0 1.0 | Kenney Vleugels (kenney.nl) |
+| `public/sprites/kenney/k_{bed_head,bed_foot,sofa_l,sofa_r,table,chair,rug,counter,stove,sink,cabinet,plant,painting,bookshelf,mirror,desk}.png` | [Roguelike Indoors](https://kenney.nl/assets/roguelike-indoors) | CC0 1.0 | Kenney Vleugels (kenney.nl) |
+
+CC0 asks for nothing, not even attribution. Recorded anyway: in six months
+nobody remembers where a file came from, and a sprite of unknown origin is a
+sprite you cannot ship.
+
+**Scale rule:** one Kenney tile = 74 world units = one character height. Every
+piece of art in the game is drawn at that ratio. Mixing ratios is what made the
+first attempt look wrong — furniture whose pixels were four times the size of
+the character's.
 
 Kenney (kenney.nl) and Quaternius (quaternius.com) assets are CC0 1.0 Universal.

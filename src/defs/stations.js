@@ -19,7 +19,7 @@ export const STATION_DEFS = Object.freeze({
     // the width of the person standing at it, which read as a market stall
     // rather than a desk. A workbench is about two people wide.
     size:   { w: u(1.7), h: u(0.72) },
-    sprite: 'workbench',
+    sprite: 'k_table',
     color:  '#6b4226',
 
     // What it consumes and produces. C2's carry system moves both.

@@ -7,7 +7,7 @@ import {
   PULSE_FREQ_HZ, PULSE_SCALE_AMP,
 } from '../state/config.js'
 import { loadSprites, getSprite } from './loader.js'
-import { createCharacterSprite } from './character.js'
+import { createCharacterSprite, createTileCharacter } from './character.js'
 import { roleColor, roleBadge } from '../defs/roles.js'
 
 // How many carried items the stack can show at once. The gameplay limit is
@@ -694,7 +694,18 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
   // Position is owned by the sim (world.agents); these actors only render it.
   // One factory for both, because a worker is now an agent exactly like the
   // player — the difference is who writes its velocity.
-  function makeCharacter(spriteKey, color, { badge = null, tint = false } = {}) {
+  // Which Kenney tiles a role wears. Roles are told apart by the sprite itself
+  // now rather than by tinting one shared sheet — Kenney's characters already
+  // come in distinct outfits, and tinting a coloured sprite only muddies it.
+  const TILE_CHARACTER = {
+    player:  ['k_player_front',  'k_player_side'],
+    courier: ['k_courier_front', 'k_courier_side'],
+    tech:    ['k_tech_front',    'k_tech_side'],
+    seller:  ['k_seller_front',  'k_seller_side'],
+    manager: ['k_manager_front', 'k_manager_side'],
+  }
+
+  function makeCharacter(spriteKey, color, { badge = null, tint = false, tiles = null } = {}) {
     // A soft ellipse under the feet: without it characters look pasted onto the
     // floor rather than standing on it.
     const shadow = new ex.Actor({
@@ -727,7 +738,14 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
       color:  ex.Color.fromHex(color),
     })
     scene.add(track(actor))
-    const rig = createCharacterSprite(actor, getSprite(spriteKey), tint ? color : null)
+
+    // Kenney tiles when we have them for this role, the generated walk sheet
+    // otherwise. Both rigs answer the same `setMoving(moving, facingRight)`.
+    const pair = tiles && TILE_CHARACTER[tiles]
+    const frontImg = pair && getSprite(pair[0])
+    const rig = frontImg
+      ? createTileCharacter(actor, frontImg, getSprite(pair[1]))
+      : createCharacterSprite(actor, getSprite(spriteKey), tint ? color : null)
 
     // Role badge above the head — the emoji says what the colour means.
     let badgeLabel = null
@@ -763,7 +781,7 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     return { actor, rig, shadow, ring, badge: badgeLabel }
   }
 
-  const { actor: player, rig: playerRig } = makeCharacter('player_walk', '#1f9e92')
+  const { actor: player, rig: playerRig } = makeCharacter('player_walk', '#1f9e92', { tiles: 'player' })
 
   // ── The cat (V5) ───────────────────────────────────────
   // Its own tiny rig: five cells (four walking, one sitting) rather than the
@@ -814,7 +832,9 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     if (!view) {
       // Colour and badge come from the role registry, so adding a role gives
       // its people a look without touching the scene.
-      view = makeCharacter('worker_walk', roleColor(role), { badge: roleBadge(role), tint: true })
+      view = makeCharacter('worker_walk', roleColor(role), {
+        badge: roleBadge(role), tint: true, tiles: role,
+      })
 
       // Price tag over the head (F5): the promotion IS the upgrade menu on the
       // factory, so it has to be visible on the floor rather than behind a

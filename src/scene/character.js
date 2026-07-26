@@ -12,6 +12,55 @@ const FRAME_H = 64
 // Attaches 'walk' and 'idle' graphics to an actor from a 4-frame sheet.
 // Returns a setter for the animation state; no-ops safely when the sprite is
 // missing (loader.js resolves absent files to null on purpose).
+// Kenney characters are four separate tiles — front, front-step, back, side —
+// not a walk-cycle strip. There is no animation to play, so movement is read
+// from a bob: the sprite lifts and drops as they walk. It costs one sine and
+// says "walking" as clearly as swapping legs does at this size.
+//
+// Kept beside the old rig rather than replacing it: the generated sheets are
+// still in the repo and still work (V4 switch to Kenney art).
+export function createTileCharacter(actor, frontImage, sideImage) {
+  if (!frontImage) return { setMoving: () => {} }
+
+  const front = frontImage.toSprite()
+  const side  = sideImage ? sideImage.toSprite() : front
+  for (const s of [front, side]) {
+    s.width  = actor.width
+    s.height = actor.height
+  }
+
+  actor.graphics.use(front)
+  let moving = false
+  let facingRight = true
+  let phase = 0
+  const baseAnchor = actor.anchor.y
+
+  actor.on('preupdate', (evt) => {
+    if (moving) {
+      phase += (evt.delta ?? 16) / 90
+      // Lift by a fraction of the sprite's own height, so it scales with zoom.
+      actor.graphics.offset = ex.vec(0, -Math.abs(Math.sin(phase)) * actor.height * 0.10)
+    } else {
+      phase = 0
+      actor.graphics.offset = ex.vec(0, 0)
+    }
+  })
+
+  return {
+    setMoving(isMoving, right) {
+      if (isMoving !== moving) {
+        moving = isMoving
+        actor.graphics.use(moving ? side : front)
+      }
+      if (right !== undefined && right !== facingRight) {
+        facingRight = right
+      }
+      actor.graphics.flipHorizontal = moving && !facingRight
+      actor.anchor.y = baseAnchor
+    },
+  }
+}
+
 export function createCharacterSprite(actor, imageSource, tintHex = null) {
   if (!imageSource) return { setMoving: () => {} }
 

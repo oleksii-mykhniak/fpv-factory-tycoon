@@ -10,6 +10,7 @@
 // discipline that let C7 turn a move into a rebuild instead of a special case.
 
 import { rect, SIZES, WALL_SIDE, WALL_HORIZ } from './buildLayout.js'
+import { u } from '../../state/config.js'
 
 // A hall is a slice of floor with its own benches and its own payroll.
 //
@@ -137,8 +138,8 @@ export function buildFactoryLayout(hallIds) {
   // whole factory and the rack is the player's own business.
   const home = placed[0]
   const props = {
-    desk: { x: home.x0 + home.w - 200, y: 860, w: 96, h: 58, sprite: 'desk', color: '#5a4a7a' },
-    rack: { x: home.x0 + 220, y: 720, w: 62, h: 92, sprite: 'rack', color: '#3a6a72' },
+    desk: { x: home.x0 + home.w - 200, y: 860, w: u(1.3), h: u(1), sprite: 'k_desk', color: '#5a4a7a' },
+    rack: { x: home.x0 + 220, y: 720, w: u(1), h: u(1.4), sprite: 'k_bookshelf', color: '#3a6a72' },
   }
 
   // A board and a post box PER HALL (F4). Both follow from binding staff to a
@@ -147,16 +148,16 @@ export function buildFactoryLayout(hallIds) {
   // factory — exactly the walk the conveyor was built to remove.
   for (const hall of placed) {
     props[`lamp_${hall.id}`] = {
-      x: hall.cx, y: 130, w: 56, h: 56, sprite: 'lamp', color: '#d4c060', z: 2,
+      x: hall.cx, y: 130, w: u(1), h: u(1), sprite: 'k_painting', color: '#d4c060', z: 2,
     }
     props[`mailbox_${hall.id}`] = {
-      x: hall.x0 + 300, y: 1240, w: 50, h: 40, sprite: 'mailbox', color: '#3a5db8',
+      x: hall.x0 + 300, y: 1240, w: u(0.8), h: u(1), sprite: 'k_postbox', color: '#3a5db8',
     }
     // Well below the rack: at y=700 the board's zone overlapped the rack's, so
     // walking up to buy an upgrade opened the hiring panel on top of it. Two
     // panels behind one spot is indistinguishable from a broken button.
     props[`jobboard_${hall.id}`] = {
-      x: hall.x0 + 150, y: 1050, w: 60, h: 78, sprite: 'jobboard', color: '#7a5a3a',
+      x: hall.x0 + 150, y: 1050, w: u(1), h: u(1), sprite: 'k_mirror', color: '#7a5a3a',
     }
   }
 
@@ -216,13 +217,14 @@ export function buildFactoryLayout(hallIds) {
 
   // Decor (V3): what a working floor has lying about. Pallets and crates are
   // solid — you walk round them; markings and shadows are not.
+  const T = u(1)
   const decor = placed.flatMap(hall => [
-    { sprite: 'floor_mark', x: hall.cx, y: 300, w: hall.w * 0.7, h: 8, color: '#d2c25e', z: 0.4 },
-    { sprite: 'pallet', x: hall.x0 + 120, y: 1240, w: 90, h: 60, color: '#b58d55', z: 2, solid: true },
-    { sprite: 'pallet', x: hall.x0 + 120, y: 1150, w: 90, h: 60, color: '#b58d55', z: 2, solid: true },
-    { sprite: 'crate',  x: hall.x0 + hall.w - 140, y: 250, w: 70, h: 70, color: '#9e7c4c', z: 2, solid: true },
-    { sprite: 'crate',  x: hall.x0 + hall.w - 220, y: 250, w: 70, h: 70, color: '#8a6b40', z: 2, solid: true },
-    { sprite: 'shelf',  x: hall.cx + 240, y: 120, w: 200, h: 54, color: '#8e8eae', z: 2, solid: true },
+    { sprite: 'floor_mark',  x: hall.cx, y: 300, w: hall.w * 0.7, h: 8, color: '#d2c25e', z: 0.4 },
+    { sprite: 'k_pallet',    x: hall.x0 + 120, y: 1240, w: T, h: T, color: '#b58d55', z: 2, solid: true },
+    { sprite: 'k_pallet',    x: hall.x0 + 120, y: 1150, w: T, h: T, color: '#b58d55', z: 2, solid: true },
+    { sprite: 'k_crate',     x: hall.x0 + hall.w - 140, y: 250, w: T, h: T, color: '#9e7c4c', z: 2, solid: true },
+    { sprite: 'k_crate_veg', x: hall.x0 + hall.w - 220, y: 250, w: T, h: T, color: '#8a6b40', z: 2, solid: true },
+    { sprite: 'k_shelf_shop',x: hall.cx + 240, y: 120, w: T*1.4, h: T, color: '#8e8eae', z: 2, solid: true },
   ])
 
   const decorRects = decor.map((d, i) => ({
