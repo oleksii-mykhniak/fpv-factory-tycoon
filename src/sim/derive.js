@@ -10,7 +10,9 @@ import {
   KIT_TYPES, busyStations, idleStations, Phase, stationsOf, nextHireCost, freeSlots,
   workersInRole, nextHallId, canUnlockHall,
 } from '../state/gameState.js'
-import { GUIDANCE_ORDERS, GUIDANCE_SCRAP_RUNS, MANAGER_RESERVE } from '../state/config.js'
+import {
+  GUIDANCE_ORDERS, GUIDANCE_SCRAP_RUNS, MANAGER_RESERVE, INCOME_WINDOW_MS,
+} from '../state/config.js'
 import { levelData, UPGRADE_TRACKS } from '../state/upgrades.js'
 import {
   kitsForLocation, hiringAllowed, roleCapHere, roleCapInHall, capFor, ruleAt,
@@ -131,6 +133,23 @@ export function managerKitChoice(game, level = 0) {
 export function managerOrderChoice(game, level = 0) {
   return managerKitChoice(game, level)
     ?? (rescueKitAvailable(game) ? KIT_TYPES[RESCUE_KIT_ID] : null)
+}
+
+// ── Income on screen (F7) ─────────────────────────────────
+//
+// Money actually banked in the last minute, divided by that minute. Not a
+// forecast and not a capacity model: the player can watch a sale land and see
+// the number move, which is the only reason to trust it.
+//
+// Sales older than the window are not pruned from the log — it is also the
+// history the game shows elsewhere — they are simply filtered out here.
+export function incomePerSec(salesLog = [], now = Date.now(), hallId = undefined) {
+  const since = now - INCOME_WINDOW_MS
+  const total = salesLog
+    .filter(s => (s.at ?? 0) >= since)
+    .filter(s => hallId === undefined || (s.hallId ?? null) === hallId)
+    .reduce((sum, s) => sum + s.price, 0)
+  return total / (INCOME_WINDOW_MS / 1000)
 }
 
 // The station the player is standing at, if it has a kit on it (C6).

@@ -8,6 +8,9 @@ export function createHUD(root) {
     <div class="hud__money-wrap">
       <span class="hud__money" id="hud-money">$0.00</span>
     </div>
+    <div class="hud__rate-wrap">
+      <span class="hud__rate" id="hud-rate" hidden></span>
+    </div>
     <div class="hud__hint" id="hud-hint"></div>
   `
   root.appendChild(el)
@@ -16,9 +19,20 @@ export function createHUD(root) {
   // physical step rather than a tap target (C2).
   // guidance: the running "what to do next" line is training wheels and stops
   // after the first few orders (C7), leaving just the money on screen.
-  function update(state, carrying = [], guidance = true) {
+  // rate: $/sec over the last minute of actual sales (F7). Hidden until the
+  // shop has actually earned something — a permanent "$0.00/сек" is noise, and
+  // the first sale making it appear is a moment worth having.
+  function update(state, carrying = [], guidance = true, rate = 0) {
     el.querySelector('#hud-money').textContent = `$${state.money.toFixed(2)}`
     el.querySelector('#hud-hint').textContent  = guidance ? hint(state, carrying) : ''
+
+    const rateEl = el.querySelector('#hud-rate')
+    if (rate > 0) {
+      rateEl.textContent = `+$${rate.toFixed(2)}/сек`
+      rateEl.removeAttribute('hidden')
+    } else {
+      rateEl.setAttribute('hidden', '')
+    }
   }
 
   return { update }

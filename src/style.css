@@ -66,6 +66,27 @@ body {
   letter-spacing: 0.02em;
 }
 
+.hud__rate-wrap {
+  /* Top-left corner, balancing the settings button on the right. Under the
+     money would collide with the delivery strip (top: 58px) and the soldering
+     bar (top: 78px), both of which already share that band. */
+  position: absolute;
+  top: calc(16px + env(safe-area-inset-top));
+  left: calc(14px + env(safe-area-inset-left));
+  pointer-events: none;
+}
+
+.hud__rate {
+  font-family: monospace;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  color: #7de07d;
+  opacity: 0.85;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+}
+
+.hud__rate[hidden] { display: none; }
+
 .hud__hint {
   position: absolute;
   /* The bottom bar used to hold this clear of the screen edge; without it the

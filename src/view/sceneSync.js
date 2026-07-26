@@ -21,7 +21,7 @@ import {
 } from '../scene/scene.js'
 import { INTERACTIONS, carrySpriteKey, zoneWantsAttention } from '../defs/interactions.js'
 import { dwellProgress } from '../sim/systems/zone.js'
-import { piggyShouldShow, nextObjective } from '../sim/derive.js'
+import { piggyShouldShow, nextObjective, incomePerSec } from '../sim/derive.js'
 import { promoteCost, roleMaxLevel } from '../defs/roles.js'
 import { CARRY_STACK_OFFSET_Y, VIEW_SMOOTHING } from '../state/config.js'
 import * as ex from 'excalibur'
@@ -175,6 +175,17 @@ function syncWorkers(refs, world) {
     view.actor.graphics.visible = true
     view.rig?.setMoving(agent.moving, agent.facing > 0)
     syncCarryStack(view.carrySlots, view.actor, agent)
+  }
+
+  // ── What each hall is earning (F7) ─────────────────────
+  for (const entry of refs.hallEarnings ?? []) {
+    const rate = incomePerSec(world.salesLog ?? [], world.now, entry.hallId)
+    if (rate > 0) {
+      entry.label.text = `+$${(rate * 60).toFixed(0)}/хв`
+      entry.label.graphics.visible = true
+    } else {
+      entry.label.graphics.visible = false
+    }
   }
 
   // ── Promotion price tags (F5) ──────────────────────────

@@ -183,7 +183,10 @@ export const INTERACTIONS = {
       const quality = station.quality
       const price   = calcPrice(kit.basePrice, quality, world.game.upgrades.priceMultiplier)
 
-      world.salesLog.push({ quality, price })
+      // `at` and `hallId` are what make income measurable (F7): a rolling
+      // window needs times, and "which hall paid for itself" needs a place.
+      // Both are cheap to record and impossible to reconstruct later.
+      world.salesLog.push({ quality, price, at: world.now, hallId: stationHallOf(world, stationId) })
       world.game = sellStation(world.game, stationId)
 
       emit(events, EV.SALE_MADE, { kitId: kit.id, quality, price, stationId, agentId: agent.id })
@@ -326,6 +329,12 @@ INTERACTIONS.belt_drop = INTERACTIONS.delivery_slot
 export function zoneWantsAttention(def, world, zone, agent) {
   if (!def?.enabled(world, zone, agent)) return false
   return def.attention ? def.attention(world, zone, agent) : true
+}
+
+// Which hall a station stands in (F2). Null where the layout has no halls.
+function stationHallOf(world, stationId) {
+  const i = (world.game.stations ?? []).findIndex(s => s.id === stationId)
+  return world.layout?.stationSlots?.[i]?.hallId ?? null
 }
 
 // The station a bench zone belongs to.

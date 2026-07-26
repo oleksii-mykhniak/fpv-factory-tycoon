@@ -21,8 +21,9 @@ import {
   LOGISTICS_UPGRADE_COSTS, LOGISTICS_DELIVERY_MULT,
 } from './config.js'
 import { trackMaxLevel, nextCost, levelData, UPGRADE_TRACKS } from './upgrades.js'
-import { roleLevelData, ROLE_ORDER } from '../defs/roles.js'
-import { rescueKitAvailable, managerOrderChoice } from '../sim/derive.js'
+import { roleLevelData, ROLE_ORDER, promoteCost } from '../defs/roles.js'
+import { FACTORY_HALLS } from '../defs/layouts/factory.js'
+import { rescueKitAvailable, managerOrderChoice, incomePerSec } from '../sim/derive.js'
 import {
   LOCATIONS, LOCATION_ORDER, capFor, canMoveToLocation, currentLocation,
   roleCapHere, maxWorkersHere, isTerminal, ruleAt,
@@ -1308,5 +1309,79 @@ describe('F1.5 — аварійна партія за $0', () => {
   it('менеджер бере справжній кіт, коли може, і аварійний, коли ні', () => {
     expect(managerOrderChoice(stuckAt('factory', 100000), 0).id).not.toBe('scrap_drone')
     expect(managerOrderChoice(stuckAt('factory', 0), 0).id).toBe('scrap_drone')
+  })
+})
+
+// ── F7 — дохід на очах і баланс ──────────────────────────
+
+describe('F7 — $/сек рахується з реальних продажів', () => {
+  const T = 10_000_000
+
+  it('порожній журнал — нуль, без ділення на нуль і NaN', () => {
+    expect(incomePerSec([], T)).toBe(0)
+  })
+
+  it('рахує лише останню хвилину', () => {
+    const log = [
+      { price: 100, at: T - 30_000 },   // у вікні
+      { price: 100, at: T - 90_000 },   // випало
+    ]
+    expect(incomePerSec(log, T)).toBeCloseTo(100 / 60, 5)
+  })
+
+  it('старі записи без часу не рахуються як щойно продані', () => {
+    expect(incomePerSec([{ price: 500 }], T)).toBe(0)
+  })
+
+  it('розбивається по цехах, і сума частин дорівнює цілому', () => {
+    const log = [
+      { price: 60, at: T - 1000, hallId: 'hall-1' },
+      { price: 30, at: T - 2000, hallId: 'hall-2' },
+    ]
+    expect(incomePerSec(log, T, 'hall-1')).toBeCloseTo(1, 5)
+    expect(incomePerSec(log, T, 'hall-2')).toBeCloseTo(0.5, 5)
+    expect(incomePerSec(log, T, 'hall-1') + incomePerSec(log, T, 'hall-2'))
+      .toBeCloseTo(incomePerSec(log, T), 5)
+  })
+})
+
+describe('F7 — інваріанти балансу фабрики', () => {
+  it('кожен наступний цех дорожчий', () => {
+    for (let i = 1; i < FACTORY_HALLS.length; i++) {
+      expect(FACTORY_HALLS[i].cost).toBeGreaterThan(FACTORY_HALLS[i - 1].cost)
+    }
+  })
+
+  it('цех коштує більше, ніж укомплектувати його людьми', () => {
+    // Інакше «відкрий ще зал» завжди вигідніше за «найми когось у цей», і
+    // фабрика перетворюється на порожні кімнати.
+    for (const hall of FACTORY_HALLS.slice(1)) {
+      const staff = ROLE_ORDER.reduce(
+        (sum, role) => sum + (hall.workerCaps[role] ?? 0) * nextHireCost(createState(), role), 0)
+      expect(hall.cost, hall.id).toBeGreaterThan(staff)
+    }
+  })
+
+  it('стартова каса фабрики не купує другий цех одразу', () => {
+    expect(LOCATIONS.factory.startMoney).toBeLessThan(FACTORY_HALLS[1].cost)
+  })
+
+  it('навіть найгірша автоматика лишає маржу на кожному кіті', () => {
+    // Технік 0 рівня, якість 0.55: якби маржа була відʼємною, цех, який працює
+    // сам, повільно розорював би гравця — і це виглядало б як баг економіки.
+    const q = roleLevelData('tech', 0).quality
+    for (const kit of Object.values(KIT_TYPES)) {
+      if (!kit.cost) continue
+      expect(calcPrice(kit.basePrice, q, 1), kit.id).toBeGreaterThan(kit.cost)
+    }
+  })
+
+  it('підвищити людину дешевше, ніж найняти ще одну тієї ж ролі', () => {
+    // Прокачка має бути першим інстинктом, а не запасним планом.
+    for (const role of ROLE_ORDER) {
+      const promote = promoteCost(role, 0)
+      if (promote === null) continue
+      expect(promote, role).toBeLessThan(nextHireCost(createState(), role))
+    }
   })
 })

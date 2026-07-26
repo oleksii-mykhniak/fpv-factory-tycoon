@@ -513,6 +513,25 @@ const kInHand = await log('picked the box off the belt')
 await goTo('zone-station-0'); await page.waitForTimeout(2000)
 const kOnBench = await log('carried it to the bench')
 
+// ── M. Income on screen (F7) ──────────────────────────────
+console.log('\n### M. $/сек')
+await boot(seedState({ solderingLevel: 2 }))
+const mBefore = await page.locator('#hud-rate').isVisible().catch(() => false)
+await orderFirstKit()
+await page.waitForTimeout(5200)
+await goTo('slot0'); await page.waitForTimeout(700)
+await goTo('zone-station-0'); await page.waitForTimeout(9000)
+await goTo('zone-out-station-0'); await page.waitForTimeout(1200)
+await goTo('mailbox'); await page.waitForTimeout(1200)
+const mAfter = await page.evaluate(() => ({
+  visible: !document.querySelector('#hud-rate').hasAttribute('hidden'),
+  text:    document.querySelector('#hud-rate').textContent,
+  logged:  globalThis.__world.salesLog.length,
+  stamped: globalThis.__world.salesLog.every(s => typeof s.at === 'number'),
+}))
+console.log(`  before: rate shown=${mBefore}; after a sale: "${mAfter.text}" ` +
+            `(${mAfter.logged} sale(s), timestamped: ${mAfter.stamped})`)
+
 // ── L. Promoting somebody on the shop floor (F5) ──────────
 console.log('\n### L. The promotion tag')
 await boot(seedState({}, { locationId: 'factory', money: 20000 }))
@@ -707,6 +726,10 @@ const checks = [
   ['L: it costs money',                    lAfter.money < lBefore.money],
   ['L: they actually get faster',          lAfter.speed > lBefore.speed],
   ['L: the level dots move on',            lAfter.dots !== lBefore.dots],
+  ['M: no rate before anything is sold', mBefore === false],
+  ['M: the rate appears after a sale',   mAfter.visible === true],
+  ['M: and it reads as $/сек',           /\$\d/.test(mAfter.text) && mAfter.text.includes('сек')],
+  ['M: every sale is timestamped',       mAfter.logged > 0 && mAfter.stamped],
   ['no console errors',                   errors.length === 0],
 ]
 console.log('\n=== checks ===')

@@ -19,7 +19,7 @@ import { createWorld, serializeWorld } from './sim/world.js'
 import { advance } from './sim/loop.js'
 import { dispatch, piggyAvailable } from './sim/commands.js'
 import { settleOffline } from './sim/offline.js'
-import { playerStation, guidanceActive, ironIsHandsOff } from './sim/derive.js'
+import { playerStation, guidanceActive, ironIsHandsOff, incomePerSec } from './sim/derive.js'
 import { SYSTEMS } from './sim/systems/index.js'
 
 import { createHUD } from './ui/hud.js'
@@ -344,7 +344,12 @@ function renderUI() {
   uiDirty = false
 
   const player = (world.agents ?? []).find(a => a.kind === 'player')
-  hud.update(world.game, (player?.carrying ?? []).map(i => i.type), guidanceActive(world.game))
+  hud.update(
+    world.game,
+    (player?.carrying ?? []).map(i => i.type),
+    guidanceActive(world.game),
+    incomePerSec(world.salesLog, world.now),
+  )
   shopModal.update(world.game)
   upgradeModal.update(world.game)
   hireModal.update(world.game)

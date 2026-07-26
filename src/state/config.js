@@ -78,6 +78,12 @@ export const SEMIAUTO_MISS_CHANCE      = 0.10
 // quality, or an unattended shop would spend its day on fire.
 export const AUTO_OVERHEAT_SHARE = 0.20
 
+// ── Income readout (F7) ──────────────────────────────────
+// Rolling window for the $/sec figure. Deliberately actual sales in the last
+// minute rather than a projection: a tycoon number the player cannot check
+// against what just happened is a number they stop believing.
+export const INCOME_WINDOW_MS = 60_000
+
 // ── Conveyor (F3) ────────────────────────────────────────
 // Belt speed in world units per second. A courier walks at 170–240, so the belt
 // is deliberately slower than a person: it is not a shortcut, it is the thing

@@ -595,6 +595,27 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     })
   })
 
+  // ── Per-hall earnings (F7) ─────────────────────────────
+  // A label over each hall's post box: what that hall has actually banked in
+  // the last minute. This is what makes opening a third hall legible — you can
+  // see which floor is paying for itself and which one is short a technician.
+  const hallEarnings = (layout.halls ?? []).map(hall => {
+    const box = layout.props[`mailbox_${hall.id}`]
+    const lbl = new ex.Label({
+      text: '',
+      pos:  ex.vec(box?.cx ?? hall.x0, (box?.cy ?? 1200) - 52),
+      z: 26,
+      color: ex.Color.fromHex('#7de07d'),
+      font: new ex.Font({
+        family: 'monospace', size: 14, unit: ex.FontUnit.Px,
+        textAlign: ex.TextAlign.Center, baseAlign: ex.BaseAlign.Middle,
+      }),
+    })
+    lbl.graphics.visible = false
+    scene.add(track(lbl))
+    return { hallId: hall.id, label: lbl }
+  })
+
   // ── Boxes on the belt (F3) ─────────────────────────────
   // One actor per delivery slot, since that is the hard cap on how many boxes
   // can exist at once. Position comes from the sim's `t`, so what you see on
@@ -848,6 +869,7 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     box, piggy, workbench,
     ...propActors,
     beltBoxes,
+    hallEarnings,
     stations,
     player, playerRig, workerView, workerViews,
     carrySlotActors,
