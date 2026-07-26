@@ -47,6 +47,10 @@ export function createAgent({ id, kind, x, y, speed = PLAYER_SPEED }) {
 // How many stations this save should have: the `benches` upgrade level, capped
 // by the slots the location actually provides.
 export function stationCountFor(game, layout) {
+  // The factory's benches come with the hall (F2), so the layout is the whole
+  // answer there — the `benches` upgrade track is frozen for exactly this
+  // reason. Everywhere else a bench is bought and the slot merely permits it.
+  if (layout?.stationsFromLayout) return layout.stationSlots.length
   const level = game.upgrades?.benchLevel ?? 0
   const want  = levelData('benches', level)?.count ?? 1
   return Math.min(want, layout?.stationSlots?.length ?? 1)

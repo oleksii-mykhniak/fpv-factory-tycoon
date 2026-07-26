@@ -1,10 +1,12 @@
 import { UPGRADE_TRACKS } from '../state/upgrades.js'
+import { openHallIds, nextHallId, canUnlockHall } from '../state/gameState.js'
+import { FACTORY_HALLS, hallDef } from '../defs/layouts/factory.js'
 import {
   currentLocation, LOCATIONS, LOCATION_ORDER, capFor, canMoveToLocation, startMoneyAt,
   isTerminal,
 } from '../state/locations.js'
 
-export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation }) {
+export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation, onUnlockHall }) {
   const overlay = document.createElement('div')
   overlay.id = 'upgrade-modal'
   overlay.className = 'modal-overlay'
@@ -89,15 +91,32 @@ export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation }) {
 
     let locationHTML = ''
     if (isTerminal(state)) {
-      // The last location. There is no move to offer, so the panel says what
-      // grows here instead — rooms and people (F2, F5).
+      // The last location. There is no move to offer — what grows here is the
+      // factory itself, one hall at a time (F2).
+      const open   = openHallIds(state)
+      const nextId = nextHallId(state)
+      const hall   = nextId ? hallDef(nextId) : null
+      const { can, reasons } = nextId ? canUnlockHall(state, nextId) : { can: false, reasons: [] }
+
       locationHTML = `
         <div class="shop-section shop-section--location">
-          <div class="shop-section__title">Локація: ${loc.emoji} ${loc.name}</div>
+          <div class="shop-section__title">
+            ${loc.emoji} ${loc.name} — цехів ${open.length}/${FACTORY_HALLS.length}
+          </div>
           <div class="shop-upgrade">
-            <p class="upgrade-effect-hint">
-              Остання локація — далі росте сама фабрика: нові цехи й рівні персоналу.
-            </p>
+            ${hall ? `
+              <span class="shop-upgrade__current">Наступний: ${hall.name}</span>
+              <button class="btn btn--upgrade" id="hall-btn" ${can ? '' : 'disabled'}>
+                Відкрити ${hall.name} — $${hall.cost}
+              </button>
+              ${reasons.length
+                ? `<p class="upgrade-effect-hint">${reasons.join(' · ')}</p>`
+                : '<p class="upgrade-effect-hint">Умови виконані — цех готовий до відкриття!</p>'}
+              <p class="upgrade-effect-hint">
+                +${hall.benches} верстаки й місця для ${
+                  Object.values(hall.workerCaps).reduce((a, b) => a + b, 0)} людей
+              </p>
+            ` : '<p class="upgrade-effect-hint">Уся фабрика відкрита</p>'}
           </div>
         </div>
       `
@@ -147,6 +166,12 @@ export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation }) {
     body.querySelectorAll('[data-upgrade]').forEach(btn => {
       btn.addEventListener('click', () => onBuyUpgrade(btn.dataset.upgrade))
     })
+    const hallBtn = body.querySelector('#hall-btn')
+    if (hallBtn) hallBtn.addEventListener('click', () => {
+      const nextId = nextHallId(state)
+      if (nextId) { onUnlockHall?.(nextId); close() }
+    })
+
     const moveBtn = body.querySelector('#move-btn')
     if (moveBtn) moveBtn.addEventListener('click', () => {
       if (nextLocId) { onMoveToLocation(nextLocId); close() }

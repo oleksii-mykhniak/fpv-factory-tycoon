@@ -15,6 +15,7 @@ function world({ benchLevel = 0 } = {}) {
     ...base,
     money: 5000,
     locationId: 'factory',
+    unlockedHalls: ['hall-1', 'hall-2', 'hall-3'],
     upgrades: { ...base.upgrades, benchLevel },
   }
   return createWorld({ state, salesLog: [] }, { now: 1e6, rng: () => 0.5, layout: apartment })

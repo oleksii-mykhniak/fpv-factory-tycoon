@@ -1,5 +1,7 @@
 import { UPGRADE_TRACKS } from './upgrades.js'
 import { STARTING_MONEY } from './config.js'
+import { openHalls } from '../defs/layouts/factory.js'
+import { ROLE_ORDER } from '../defs/roles.js'
 
 // Location registry — data-driven. Each location defines which kits are available,
 // the maximum level allowed per upgrade track, and unlock conditions.
@@ -51,9 +53,9 @@ export const LOCATIONS = Object.freeze({
     kitIds: ['mini_drone', 'racing_drone', 'cinematic_drone', 'longrange_drone'],
     upgradeCaps: { soldering: 3, storage: 2, logistics: 2, consumables: 2, benches: 2 },
     hiring: true,
-    // Doubled hands-on roles plus the manager: the factory is where the shop
-    // can finally run itself (S3).
-    workerCaps: { courier: 2, tech: 2, seller: 2, manager: 1 },
+    // Headcount is per HALL here, not per location: opening a hall is what
+    // buys the people to run it (F2). Summed over open halls by roleCapHere.
+    workerCaps: null,
     unlockCost: 2500,
     unlockReq: { minUpgrades: { soldering: 3, consumables: 2 } },
     startMoney: 800,
@@ -67,7 +69,10 @@ export const LOCATIONS = Object.freeze({
     // whatever level you arrived with (see frozenCaps) rather than vanishing:
     // the iron you paid for in the garage is still yours. From here on the
     // thing that gets better is the payroll (F5).
-    freezeTracks: ['soldering', 'consumables'],
+    // `benches` freezes too: a hall arrives with its benches already in it, so
+    // buying tables separately would be a second way to grow the same number,
+    // and the two would spend the whole stage disagreeing.
+    freezeTracks: ['soldering', 'consumables', 'benches'],
     // No further move exists. The upgrade panel must not offer one — and there
     // is nothing to gate, because the button is gone.
     terminal: true,
@@ -133,18 +138,23 @@ export function hiringAllowed(state) {
   return currentLocation(state).hiring === true
 }
 
-// How many people of THIS role the location has room for. The cap is per role
+// How many people of THIS role there is room for right now. The cap is per role
 // so that composition is the decision — two couriers and no technician is not a
-// strategy, it is a stalled shop. Moving on is what raises every number.
+// strategy, it is a stalled shop.
+//
+// On the factory the room is per hall and adds up as halls open, which is what
+// makes opening one feel like hiring capacity rather than buying floor space.
 export function roleCapHere(state, roleId) {
-  return currentLocation(state).workerCaps?.[roleId] ?? 0
+  const loc = currentLocation(state)
+  if (loc.workerCaps) return loc.workerCaps[roleId] ?? 0
+  return openHalls(state.unlockedHalls)
+    .reduce((sum, hall) => sum + (hall.workerCaps?.[roleId] ?? 0), 0)
 }
 
 // Total room = the sum of the role caps. Kept as a derived value (never as its
 // own field) so a second limit can never quietly disagree with the first.
 export function maxWorkersHere(state) {
-  return Object.values(currentLocation(state).workerCaps ?? {})
-    .reduce((sum, n) => sum + n, 0)
+  return ROLE_ORDER.reduce((sum, id) => sum + roleCapHere(state, id), 0)
 }
 
 export function canMoveToLocation(state, targetId) {

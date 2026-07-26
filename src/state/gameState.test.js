@@ -21,7 +21,7 @@ import {
   LOGISTICS_UPGRADE_COSTS, LOGISTICS_DELIVERY_MULT,
 } from './config.js'
 import { trackMaxLevel, nextCost, levelData, UPGRADE_TRACKS } from './upgrades.js'
-import { roleLevelData } from '../defs/roles.js'
+import { roleLevelData, ROLE_ORDER } from '../defs/roles.js'
 import { rescueKitAvailable, managerOrderChoice } from '../sim/derive.js'
 import {
   LOCATIONS, LOCATION_ORDER, capFor, canMoveToLocation, currentLocation,
@@ -1195,7 +1195,7 @@ describe('Ліміт персоналу — на роль, не на цех', ()
   })
 
   it('повний штат ролі не блокує інші ролі (те, чого не вмів загальний ліміт)', () => {
-    let s = at('factory')
+    let s = { ...at('factory'), unlockedHalls: ['hall-1', 'hall-2'] }
     s = hireWorker(s, 'courier'); s = hireWorker(s, 'courier')
     expect(() => hireWorker(s, 'courier')).toThrow('не поміститься')
     s = hireWorker(s, 'seller')
@@ -1205,9 +1205,19 @@ describe('Ліміт персоналу — на роль, не на цех', ()
   it('maxWorkersHere = сума кепів ролей (єдине джерело правди)', () => {
     for (const id of LOCATION_ORDER) {
       const s = at(id)
-      const sum = Object.values(LOCATIONS[id].workerCaps).reduce((a, b) => a + b, 0)
-      expect(maxWorkersHere(s)).toBe(sum)
+      const sum = ROLE_ORDER.reduce((acc, role) => acc + roleCapHere(s, role), 0)
+      expect(maxWorkersHere(s), id).toBe(sum)
     }
+  })
+
+  it('на фабриці кеп росте з кожним відкритим цехом', () => {
+    const one = { ...at('factory'), unlockedHalls: ['hall-1'] }
+    const two = { ...at('factory'), unlockedHalls: ['hall-1', 'hall-2'] }
+    expect(roleCapHere(one, 'courier')).toBe(1)
+    expect(roleCapHere(two, 'courier')).toBe(2)
+    expect(maxWorkersHere(two)).toBeGreaterThan(maxWorkersHere(one))
+    // Другий менеджер не потрібен: один тримає замовлення всієї фабрики.
+    expect(roleCapHere(two, 'manager')).toBe(1)
   })
 })
 
@@ -1239,7 +1249,7 @@ describe('F1 — фабрика', () => {
 
   it('особисті треки заморожуються на рівні, з яким приїхав', () => {
     const f = toFactory()
-    expect(f.frozenCaps).toEqual({ soldering: 3, consumables: 2 })
+    expect(f.frozenCaps).toEqual({ soldering: 3, consumables: 2, benches: 0 })
     expect(capFor(f, 'soldering')).toBe(3)
     expect(() => buyUpgrade({ ...f, money: 99999 }, 'soldering'))
       .toThrow('максимальному рівні')
@@ -1256,10 +1266,12 @@ describe('F1 — фабрика', () => {
     expect(capFor(dropped, 'soldering')).toBe(3)
   })
 
-  it('facility-треки на фабриці не заморожені', () => {
+  it('верстаки теж заморожені — на фабриці їх дає цех, а не покупка', () => {
     const f = toFactory()
-    expect(capFor(f, 'benches')).toBe(2)
+    expect(capFor(f, 'benches')).toBe(0)
+    // Склад і логістика лишаються звичайними покупками.
     expect(capFor(f, 'storage')).toBe(2)
+    expect(capFor(f, 'logistics')).toBe(2)
   })
 
   it('менеджер зʼявляється саме на фабриці — раніше його ніде не найняти', () => {

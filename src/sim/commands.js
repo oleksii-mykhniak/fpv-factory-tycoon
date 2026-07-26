@@ -14,7 +14,7 @@ import {
   burnKit, abandonBurntDrone,
   buyUpgrade as buyUpgradeState, moveToLocation as moveToLocationState,
   canOpenPiggy, collectPiggy as collectPiggyState,
-  startScrap as startScrapState, cancelScrap,
+  startScrap as startScrapState, cancelScrap, unlockHall as unlockHallState,
   calcPrice, getStation, focusStation, idleStations, syncStations,
   hireWorker as hireWorkerState, nextHireCost,
 } from '../state/gameState.js'
@@ -137,10 +137,22 @@ const HANDLERS = {
   moveToLocation(world, { locationId }, events) {
     world.game = moveToLocationState(world.game, locationId)
     // The new location has more bench slots; build the ones already paid for.
-    applyLayout(world, layoutFor(locationId))
+    applyLayout(world, layoutFor(locationId, world.game))
     world.game = syncStations(world.game, stationCountFor(world.game, world.layout))
     rebuildStationGeometry(world)
     emit(events, EV.LOCATION_CHANGED, { locationId })
+  },
+
+  // Open the next factory hall (F2). Structurally identical to a move — a
+  // different floor plan, rebuilt the same way — which is exactly why the map
+  // can grow without any new machinery.
+  unlockHall(world, { hallId }, events) {
+    world.game = unlockHallState(world.game, hallId)
+    applyLayout(world, layoutFor('factory', world.game))
+    world.game = syncStations(world.game, stationCountFor(world.game, world.layout))
+    rebuildStationGeometry(world)
+    emit(events, EV.HALL_UNLOCKED, { hallId })
+    emit(events, EV.STATE_DIRTY)
   },
 
   collectPiggy(world, { taps }, events) {

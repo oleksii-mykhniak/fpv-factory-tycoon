@@ -126,7 +126,7 @@ const _offline = _boot.savedAt
 if (_offline && _offline.state !== _boot.state) _boot.state = _offline.state
 const world = createWorld(_boot, {
   now: Date.now(),
-  layout: layoutFor(_boot.state.locationId),
+  layout: layoutFor(_boot.state.locationId, _boot.state),
 })
 
 // Dev-only inspection hook: lets the browser smoke test read the sim without
@@ -233,6 +233,15 @@ const upgradeModal = createUpgradeModal(uiRoot, {
       uiDirty = true
       present()
     }
+  },
+  // Opening a hall is a different floor plan, exactly like a move — so it is
+  // rebuilt exactly like one.
+  onUnlockHall: (hallId) => {
+    send('unlockHall', { hallId })
+    sceneRefs = rebuildScene({ getWorld: () => world, onIntent, layout: world.layout, world })
+    resetSceneSync()
+    uiDirty = true
+    present()
   },
   onMoveToLocation: (id) => {
     send('moveToLocation', { locationId: id })

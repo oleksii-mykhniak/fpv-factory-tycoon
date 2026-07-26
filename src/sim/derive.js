@@ -8,7 +8,7 @@
 
 import {
   KIT_TYPES, busyStations, idleStations, Phase, stationsOf, nextHireCost, freeSlots,
-  workersInRole,
+  workersInRole, nextHallId, canUnlockHall,
 } from '../state/gameState.js'
 import { GUIDANCE_ORDERS, GUIDANCE_SCRAP_RUNS, MANAGER_RESERVE } from '../state/config.js'
 import { levelData, UPGRADE_TRACKS } from '../state/upgrades.js'
@@ -60,6 +60,10 @@ export function upgradeNeedsAttention(game) {
   const currentIdx = LOCATION_ORDER.indexOf(game.locationId ?? 'apartment')
   const nextLocId  = LOCATION_ORDER[currentIdx + 1]
   if (nextLocId && canMoveToLocation(game, nextLocId).can) return true
+
+  // On the factory the rack is also where a new hall is bought (F2).
+  const hallId = nextHallId(game)
+  if (hallId && canUnlockHall(game, hallId).can) return true
 
   return Object.entries(UPGRADE_TRACKS).some(([id, track]) => {
     const level = game.upgrades[track.stateKey] ?? 0

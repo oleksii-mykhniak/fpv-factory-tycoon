@@ -18,6 +18,9 @@ function world({ money = 20000, hire = [], upgrades = {}, benchLevel = 0 } = {})
     ...base,
     money,
     locationId: 'factory',
+    // Every hall open: these tests are about a fully staffed shop, and hall-1
+    // alone has room for one of each role (F2).
+    unlockedHalls: ['hall-1', 'hall-2', 'hall-3'],
     upgrades: { ...base.upgrades, benchLevel, ...upgrades },
   }
   const w = createWorld({ state, salesLog: [] }, { now: T0, rng: () => 0.5, layout: apartment })

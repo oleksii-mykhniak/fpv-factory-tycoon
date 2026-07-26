@@ -385,6 +385,67 @@ await goTo('zone-station-0')
 await page.waitForTimeout(2500)
 const iCleared = await log('stood at the burnt bench')
 
+// ── J. A hall is a floor plan, and opening one grows the map (F2) ──
+console.log('\n### J. Opening a factory hall')
+await boot(seedState({}, { locationId: 'factory', money: 20000 }))
+const jBefore = await page.evaluate(() => {
+  const w = globalThis.__world
+  return {
+    halls:    w.game.unlockedHalls.length,
+    world:    w.bounds.w,
+    stations: w.game.stations.length,
+    grid:     w.navGrid.cols,
+    zones:    w.zones.filter(z => z.kind === 'bench').length,
+  }
+})
+
+// A hall will not open while the open ones are short-staffed, so hire first.
+await openPanelAt('jobboard')
+for (const role of ['Кур', 'Технік', 'Продавець', 'Менеджер']) {
+  const btn = page.locator('.shop-upgrade', { hasText: role }).locator('button').first()
+  if (await btn.isEnabled().catch(() => false)) await btn.click()
+  await page.waitForTimeout(250)
+}
+await page.click('#hire-close').catch(() => {})
+await page.waitForTimeout(400)
+
+await openPanelAt('rack')
+const jBtnText = await page.locator('#hall-btn').textContent().catch(() => '(no button)')
+await page.click('#hall-btn').catch(() => {})
+await page.waitForTimeout(1500)
+const jAfter = await page.evaluate(() => {
+  const w = globalThis.__world
+  const p = w.agents.find(a => a.kind === 'player')
+  return {
+    halls:    w.game.unlockedHalls.length,
+    world:    w.bounds.w,
+    stations: w.game.stations.length,
+    grid:     w.navGrid.cols,
+    zones:    w.zones.filter(z => z.kind === 'bench').length,
+    inside:   p.x < w.bounds.w && p.y < w.bounds.h,
+  }
+})
+console.log(`  ${jBtnText.trim()}`)
+console.log(`  halls ${jBefore.halls}→${jAfter.halls}, world ${jBefore.world}→${jAfter.world}w, ` +
+            `benches ${jBefore.stations}→${jAfter.stations}, grid ${jBefore.grid}→${jAfter.grid}`)
+
+// Can a character actually walk from the new hall back to the first one?
+await page.evaluate(() => {
+  const w = globalThis.__world
+  const p = w.agents.find(a => a.kind === 'player')
+  p.x = w.bounds.w - 300; p.y = 700
+})
+await page.waitForTimeout(200)
+await goTo('mailbox')
+await page.waitForTimeout(6000)
+const jWalked = await page.evaluate(() => {
+  const w = globalThis.__world
+  const p = w.agents.find(a => a.kind === 'player')
+  const mb = w.zones.find(z => z.kind === 'mailbox')
+  return { dist: Math.hypot(p.x - mb.cx, p.y - mb.cy) }
+})
+console.log(`  crossed the factory to the mailbox: ${jWalked.dist.toFixed(0)} units away`)
+
 // ── C. Movement, collisions, camera (C1 regression) ───────
 console.log('\n### C. Movement (WASD)')
 await boot(seedState({}))
@@ -463,8 +524,15 @@ const checks = [
   // matters is that each was loaded and worked independently.
   ['D: both stations were loaded',        dBoth.stations.split('/').every(p => p !== 'IDLE')],
   // A bench only runs while somebody is at it, so the player cannot finish two
-  // at once alone. What matters is that both were loaded and worked separately.
-  ['D: each bench progressed on its own', dDone.stations.split('/').every(p => p !== 'IDLE')],
+  // at once alone. The precise, non-flaky statement of "independent" is: the
+  // one nobody is standing at keeps its progress and waits, and the one the
+  // player is at reaches a conclusion. That conclusion is READY — or BURNT/IDLE
+  // when the kit goes wrong, which is a real outcome now that an unattended
+  // bench can miss (F1.6), so the check must not demand a happy ending.
+  ['D: the unattended bench waits, keeping its kit',
+   dDone.stations.split('/')[0] === 'ASSEMBLY'],
+  ['D: the attended bench reached a conclusion',
+   dDone.stations.split('/')[1] !== 'ASSEMBLY'],
   ['E: nav grid rasterised the world',    eGrid.blocked > 0 && eGrid.cols > 30],
   ['E: pathed across the flat and out',   Math.hypot(eArrived.x - 230, eArrived.y - 1450) < 60],
   ['E: never ended inside geometry',      eArrived.stuck === false],
@@ -480,7 +548,9 @@ const checks = [
   ['G: movement still works while soldering', Math.abs(gAfterWalk.x - gBefore.x) > 80],
   ['G: strip closes on walking away',      gStripGone === false],
   ['G: leaving costs nothing, bench waits', gPhaseAway === 'ASSEMBLY'],
-  ['G: an upgraded bench does the work for you', gUnattended.phase === 'READY'],
+  // Same reason as D: "did the work" means it stopped being ASSEMBLY without
+  // the player tapping anything — a burnt kit is still the bench doing the work.
+  ['G: an upgraded bench does the work for you', gUnattended.phase !== 'ASSEMBLY'],
   ['G: a hands-off iron offers no mini-game', gUnattended.solderOpen === false],
   ['H: the move actually happened',       hAfter.loc === 'garage'],
   ['H: the room is a different size',     hAfter.world > hBefore.world],
@@ -489,9 +559,16 @@ const checks = [
   ['H: the player is inside the new room', hAfter.playerInside === true],
   ['I: the factory has no salvage bin',   !iScene.zones.includes('trashbin')],
   ['I: the factory has no piggy bank',    !iScene.zones.includes('piggy')],
-  ['I: the factory still has three benches', iScene.stations === 3],
+  ['I: the factory opens with one hall of benches', iScene.stations === 2],
   ['I: an old "workshop" save lands in the factory', iMigrated === 'factory'],
   ['I: a burnt kit can be cleared on foot', iCleared.phase === 'IDLE'],
+  ['J: the hall actually opened',         jAfter.halls === jBefore.halls + 1],
+  ['J: the map got wider',                jAfter.world > jBefore.world],
+  ['J: the hall brought its own benches', jAfter.stations > jBefore.stations],
+  ['J: every bench got a zone',           jAfter.zones === jAfter.stations],
+  ['J: nav grid rebuilt for the wider floor', jAfter.grid > jBefore.grid],
+  ['J: the player is still inside the world', jAfter.inside],
+  ['J: a character can cross between halls', jWalked.dist < 120],
   ['no console errors',                   errors.length === 0],
 ]
 console.log('\n=== checks ===')

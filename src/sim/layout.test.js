@@ -12,21 +12,22 @@ const boot = (locationId = 'apartment', extra = {}) => {
 
 describe('C7 — locations are floor plans, not palettes', () => {
   it('each location is a different sized room with its own bench slots', () => {
-    const sizes = Object.values(LAYOUTS).map(l => l.world.w)
-    expect(new Set(sizes).size).toBe(3)
+    const all = [...Object.values(LAYOUTS), layoutFor('factory')]
+    expect(new Set(all.map(l => l.world.w)).size).toBe(3)
     expect(LAYOUTS.apartment.stationSlots).toHaveLength(1)
     expect(LAYOUTS.garage.stationSlots).toHaveLength(2)
-    expect(LAYOUTS.factory.stationSlots).toHaveLength(3)
+    // The factory opens with one hall; the rest are bought (F2).
+    expect(layoutFor('factory').stationSlots).toHaveLength(2)
   })
 
   it('every layout leaves a doorway a character can actually fit through', () => {
-    for (const layout of Object.values(LAYOUTS)) {
+    for (const layout of [...Object.values(LAYOUTS), layoutFor('factory')]) {
       expect(layout.door.w).toBeGreaterThan(80)   // agent is 40 wide
     }
   })
 
   it('every layout puts its props inside its own world', () => {
-    for (const layout of Object.values(LAYOUTS)) {
+    for (const layout of [...Object.values(LAYOUTS), layoutFor('factory')]) {
       for (const [name, p] of Object.entries(layout.props)) {
         expect(p.cx, `${layout.id}.${name}.x`).toBeGreaterThan(0)
         expect(p.cx, `${layout.id}.${name}.x`).toBeLessThan(layout.world.w)
@@ -39,9 +40,9 @@ describe('C7 — locations are floor plans, not palettes', () => {
     const w = boot('apartment')
     const before = { obstacles: w.obstacles.length, cols: w.navGrid.cols }
 
-    applyLayout(w, LAYOUTS.factory)
+    applyLayout(w, layoutFor('factory'))
 
-    expect(w.bounds.w).toBe(LAYOUTS.factory.world.w)
+    expect(w.bounds.w).toBe(layoutFor('factory').world.w)
     expect(w.navGrid.cols).toBeGreaterThan(before.cols)
     expect(w.zones.some(z => z.kind === 'mailbox')).toBe(true)
   })
@@ -49,17 +50,17 @@ describe('C7 — locations are floor plans, not palettes', () => {
   it('a move puts everyone in the new room, not at old coordinates', () => {
     const w = boot('garage')   // hiring starts at the second location
     dispatch(w, 'hireWorker', { role: 'courier' })
-    applyLayout(w, LAYOUTS.factory)
+    applyLayout(w, layoutFor('factory'))
 
     for (const a of w.agents) {
-      expect(a.x).toBeLessThan(LAYOUTS.factory.world.w)
-      expect(a.y).toBeLessThan(LAYOUTS.factory.world.h)
+      expect(a.x).toBeLessThan(layoutFor('factory').world.w)
+      expect(a.y).toBeLessThan(layoutFor('factory').world.h)
       expect(a.path).toBeNull()
       expect(a.task).toBeNull()
     }
   })
 
-  it('moving to the factory builds the benches already paid for', () => {
+  it('moving to the factory builds the first hall\'s benches', () => {
     const w = boot('garage', {
       upgrades: { ...createState().upgrades, solderingLevel: 3, consumablesLevel: 2, benchLevel: 2 },
     })
@@ -68,12 +69,43 @@ describe('C7 — locations are floor plans, not palettes', () => {
 
     dispatch(w, 'moveToLocation', { locationId: 'factory' })
     expect(w.game.locationId).toBe('factory')
-    expect(w.game.stations).toHaveLength(3)
-    expect(w.zones.filter(z => z.kind === 'bench')).toHaveLength(3)
+    // The hall comes with its benches — the `benches` track no longer decides.
+    expect(w.game.stations).toHaveLength(2)
+    expect(w.zones.filter(z => z.kind === 'bench')).toHaveLength(2)
+  })
+
+  it('opening a hall widens the world and brings its benches with it', () => {
+    const w = boot('factory', {
+      money: 20000,
+      upgrades: { ...createState().upgrades, solderingLevel: 3, consumablesLevel: 2 },
+    })
+    const before = { w: w.bounds.w, stations: w.game.stations.length, grid: w.navGrid.cols }
+
+    // Every open hall has to be staffed before the next one opens.
+    for (const role of ['courier', 'tech', 'seller', 'manager']) {
+      dispatch(w, 'hireWorker', { role })
+    }
+    dispatch(w, 'unlockHall', { hallId: 'hall-2' })
+
+    expect(w.game.unlockedHalls).toEqual(['hall-1', 'hall-2'])
+    expect(w.bounds.w).toBeGreaterThan(before.w)
+    expect(w.game.stations.length).toBeGreaterThan(before.stations)
+    expect(w.navGrid.cols).toBeGreaterThan(before.grid)
+    expect(w.zones.filter(z => z.kind === 'bench')).toHaveLength(w.game.stations.length)
+  })
+
+  it('a hall will not open while the open ones are short-staffed', () => {
+    const w = boot('factory', { money: 20000 })
+    expect(() => dispatch(w, 'unlockHall', { hallId: 'hall-2' })).toThrow('укомплектуйте')
+  })
+
+  it('halls open in order, never skipping one', () => {
+    const w = boot('factory', { money: 99999 })
+    expect(() => dispatch(w, 'unlockHall', { hallId: 'hall-3' })).toThrow('по черзі')
   })
 
   it('no station footprint blocks its own interaction zone', () => {
-    for (const id of Object.keys(LAYOUTS)) {
+    for (const id of [...Object.keys(LAYOUTS), 'factory']) {
       const w = boot(id, { upgrades: { ...createState().upgrades, benchLevel: 2 } })
       for (const placed of w.placedStations) {
         const overlaps =

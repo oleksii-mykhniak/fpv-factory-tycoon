@@ -5,6 +5,7 @@
 // makes the move feel like progress rather than a palette swap.
 
 import { buildLayout } from './buildLayout.js'
+import { buildFactoryLayout } from './factory.js'
 
 // ── Квартира — one bench, everything within a few steps.
 // Deliberately small: with a single station and no staff, a big room is just
@@ -87,48 +88,12 @@ export const garage = buildLayout({
   theme: { bgColor: '#0d1810', floorColor: '#1a2618' },
 })
 
-// ── Фабрика — a proper shop floor: three benches, long runs.
-// The last location: from here the map grows in rooms rather than moves (F2).
-// No salvage bin and no piggy bank — neither belongs in a place that is meant
-// to be reliable (F1.3).
-export const factory = buildLayout({
-  id:    'factory',
-  world: { w: 2000, h: 1900 },
-  roomH: 1400,
-  door:  { x: 900, w: 240 },
-  stationSlots: [
-    { def: 'workbench', x: 420,  y: 380 },
-    { def: 'workbench', x: 980,  y: 380 },
-    { def: 'workbench', x: 1540, y: 380 },
-  ],
-  props: {
-    lamp:     { x: 980, y: 130, w: 56, h: 56, sprite: 'lamp',     color: '#d4c060', z: 2 },
-    mailbox:  { x: 300, y: 1650, w: 50, h: 40, sprite: 'mailbox',  color: '#3a5db8' },
-    desk:     { x: 1800, y: 860, w: 96, h: 58, sprite: 'desk',     color: '#5a4a7a' },
-    rack:     { x: 220, y: 720, w: 62, h: 92, sprite: 'rack',     color: '#3a6a72' },
-    jobboard: { x: 220, y: 900, w: 60, h: 78, sprite: 'jobboard', color: '#7a5a3a' },
-  },
-  deliverySlots: [
-    { x: 900,  y: 1540 },
-    { x: 1180, y: 1540 },
-    { x: 1450, y: 1540 },
-  ],
-  spawns: {
-    player:     { x: 1500, y: 1100 },
-    workerIdle: { x: 1620, y: 1150 },
-    posts: {
-      courier: { x: 900, y: 1270 },
-      tech:    { x: 980, y: 560 },
-      seller:  { x: 380, y: 1280 },
-      manager: { x: 1760, y: 1020 },
-    },
-  },
-  theme: { bgColor: '#180d18', floorColor: '#261a26' },
-})
+export const LAYOUTS = Object.freeze({ apartment, garage })
 
-export const LAYOUTS = Object.freeze({ apartment, garage, factory })
-
-export function layoutFor(locationId) {
+// The factory is not a constant: it is assembled from the halls that are open,
+// so it needs the state to know which those are (F2).
+export function layoutFor(locationId, state = null) {
+  if (locationId === 'factory') return buildFactoryLayout(state?.unlockedHalls)
   return LAYOUTS[locationId] ?? apartment
 }
 

@@ -12,12 +12,12 @@ export function rect(cx, cy, w, h) {
   return { cx, cy, w, h, x: cx - w / 2, y: cy - h / 2 }
 }
 
-const WALL_SIDE  = 24
-const WALL_HORIZ = 28
+export const WALL_SIDE  = 24
+export const WALL_HORIZ = 28
 
 // Sizes of the entities that live in a world. Shared: a drone is a drone
 // whichever room it is built in.
-const SIZES = {
+export const SIZES = {
   character: 74,
   box:       { w: 52, h: 34 },
   drone:     { w: 40, h: 22 },
@@ -91,7 +91,9 @@ export function buildLayout({
     walls,
     // Stations are added to `obstacles` at runtime from stationSlots.
     obstacles: [...walls],
-    doorVoid:  rect(door.x, roomH - WALL_HORIZ / 2, door.w, WALL_HORIZ),
+    // Painted gaps in the walls. An array because the factory has one per
+    // hall divider as well as the street door (F2).
+    doorVoids: [rect(door.x, roomH - WALL_HORIZ / 2, door.w, WALL_HORIZ)],
     stationSlots,
     props: propRects,
     zones,

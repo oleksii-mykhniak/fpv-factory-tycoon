@@ -11,7 +11,8 @@ import {
   capFor, canMoveToLocation, LOCATIONS, hiringAllowed, roleCapHere, startMoneyAt,
   freezeCapsFor, ruleAt,
 } from './locations.js'
-import { hireCost, roleDef } from '../defs/roles.js'
+import { hireCost, roleDef, ROLE_ORDER } from '../defs/roles.js'
+import { FACTORY_HALL_IDS, FIRST_HALL_ID, hallDef } from '../defs/layouts/factory.js'
 
 // Re-export so existing consumers keep importing kit data from gameState.js.
 export { KIT_TYPES }
@@ -118,6 +119,9 @@ export function createState() {
     scrapRuns:         0,
     lastPiggyAt:       null,
     locationId:        'apartment',
+    // Which factory halls are open (F2). Meaningless anywhere else, but kept in
+    // the base state so no code path has to ask whether the field exists.
+    unlockedHalls:     [FIRST_HALL_ID],
     onboarded:         false,
     scrapAvailable:    false, // true when player has "ordered" scrap from the trash
     // All deliveries: [{id, kitId, slotIndex, readyAt, status}]
@@ -416,6 +420,51 @@ export function buyUpgrade(state, trackId) {
     ...state,
     money:    state.money - cost,
     upgrades: { ...state.upgrades, [track.stateKey]: level + 1 },
+  }
+}
+
+// ── Factory halls (F2) ────────────────────────────────────
+
+export const openHallIds = (state) =>
+  FACTORY_HALL_IDS.slice(0, Math.max(1, (state.unlockedHalls ?? []).length))
+
+export const nextHallId = (state) => FACTORY_HALL_IDS[openHallIds(state).length] ?? null
+
+// Returns { can, reasons } — the same shape as canMoveToLocation, because the
+// panel renders both the same way.
+//
+// Money is not the only gate. A hall you cannot staff is a wider room you walk
+// across, not more production: without the staffing condition the fastest route
+// through the factory would be to open everything and run it yourself, which is
+// the opposite of what the place is for.
+export function canUnlockHall(state, hallId) {
+  if ((state.locationId ?? 'apartment') !== 'factory')
+    return { can: false, reasons: ['Цехи є лише на фабриці'] }
+
+  const expected = nextHallId(state)
+  if (!expected)      return { can: false, reasons: ['Усі цехи вже відкриті'] }
+  if (hallId !== expected) return { can: false, reasons: ['Цехи відкриваються по черзі'] }
+
+  const hall    = hallDef(hallId)
+  const reasons = []
+  if (state.money < hall.cost)
+    reasons.push(`Потрібно $${hall.cost} (є $${Math.floor(state.money)})`)
+
+  const missing = ROLE_ORDER
+    .filter(id => workersInRole(state, id).length < roleCapHere(state, id))
+    .length
+  if (missing) reasons.push(`Спершу укомплектуйте відкриті цехи (${missing} вакансій)`)
+
+  return { can: reasons.length === 0, reasons }
+}
+
+export function unlockHall(state, hallId) {
+  const { can, reasons } = canUnlockHall(state, hallId)
+  if (!can) throw new Error(`unlockHall: ${reasons.join('; ')}`)
+  return {
+    ...state,
+    money:         state.money - hallDef(hallId).cost,
+    unlockedHalls: [...openHallIds(state), hallId],
   }
 }
 

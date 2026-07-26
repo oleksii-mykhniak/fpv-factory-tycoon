@@ -105,7 +105,7 @@ function addPulse(actor) {
 // than the viewport and must look the same on every device.
 
 function buildRoom(scene, layout) {
-  const { world, room, street, walls, doorVoid, props, theme } = layout
+  const { world, room, street, walls, doorVoids, props, theme } = layout
 
   // ── Street (below the building) ────────────────────────
   colorRect(scene, {
@@ -128,9 +128,9 @@ function buildRoom(scene, layout) {
   for (const wall of walls) {
     colorRect(scene, { x: wall.cx, y: wall.cy, w: wall.w, h: wall.h, hex: '#2e2e42', z: 1 })
   }
-  colorRect(scene, {
-    x: doorVoid.cx, y: doorVoid.cy, w: doorVoid.w, h: doorVoid.h, hex: '#0a0a14', z: 1,
-  })
+  for (const gap of doorVoids ?? []) {
+    colorRect(scene, { x: gap.cx, y: gap.cy, w: gap.w, h: gap.h, hex: '#0a0a14', z: 1 })
+  }
 
   // ── Props ──────────────────────────────────────────────
   // One actor per entry in layout.props; a new object in the layout appears
