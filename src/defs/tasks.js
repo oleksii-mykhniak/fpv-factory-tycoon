@@ -29,6 +29,22 @@ export const TASKS = Object.freeze({
     ],
   },
 
+  // Clear a burnt kit off a bench. Ranked above assembling because a burnt
+  // bench blocks everything behind it: a technician who kept soldering
+  // elsewhere while one station stood smoking would look broken.
+  // Like every other task, it names a place and not an action — the bench zone
+  // writes the kit off, exactly as it does when the player walks up.
+  clear_burnt: {
+    id:       'clear_burnt',
+    role:     'tech',
+    priority: 25,
+    steps: [
+      { op: 'goto',    zone: 'job.atZone' },
+      { op: 'waitFor', cond: 'stationNotBurnt', timeoutMs: 12000 },
+      { op: 'done' },
+    ],
+  },
+
   // Stand at a bench and work it until the drone is finished.
   assemble: {
     id:       'assemble',

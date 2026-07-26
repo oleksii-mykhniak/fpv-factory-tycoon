@@ -14,7 +14,7 @@ function world({ benchLevel = 0 } = {}) {
   const state = {
     ...base,
     money: 5000,
-    locationId: 'workshop',
+    locationId: 'factory',
     upgrades: { ...base.upgrades, benchLevel },
   }
   return createWorld({ state, salesLog: [] }, { now: 1e6, rng: () => 0.5, layout: apartment })

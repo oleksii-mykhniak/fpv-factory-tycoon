@@ -147,6 +147,46 @@ describe('sim/stationSystem', () => {
     return w
   }
 
+  // Risk on the unattended path: before this a hired shop could not fail at all.
+  it('an unattended bench can lay a cold joint', () => {
+    // First roll decides "miss" (below missChance), second decides burn-vs-cold.
+    const w = benchWithKit('mini_drone', semiAutoUpgrades)
+    w.rng = seq([0.01, 0.99])
+    const events = run(w, 6000)
+    expect(types(events)).toContain(EV.STAGE_COLD)
+    expect(bench(w).coldPenalty).toBeGreaterThan(0)
+    expect(bench(w).phase).toBe(Phase.ASSEMBLY)
+  })
+
+  it('an unattended bench can burn the kit outright', () => {
+    const w = benchWithKit('mini_drone', semiAutoUpgrades)
+    w.rng = seq([0.01, 0.0])
+    // Just past the first point (1200 ms) and before the bench dwell that
+    // would clear it again (1100 ms more).
+    const events = run(w, 1600)
+    expect(types(events)).toContain(EV.KIT_BURNT)
+    expect(bench(w).phase).toBe(Phase.BURNT)
+  })
+
+  it('a burnt kit is cleared by whoever is standing at the bench', () => {
+    // Before F1.5 nothing could clear one: the modal that owned that decision
+    // stopped being opened in C6, so a burnt station stayed burnt forever.
+    const w = benchWithKit('mini_drone', semiAutoUpgrades)
+    w.rng = seq([0.01, 0.0])
+    const events = run(w, 12_000)
+    expect(types(events)).toContain(EV.KIT_BURNT)
+    expect(types(events)).toContain(EV.BENCH_CLEARED)
+    expect(bench(w).phase).toBe(Phase.IDLE)
+  })
+
+  it('a clean roll still records a normal point', () => {
+    const w = benchWithKit('mini_drone', semiAutoUpgrades)
+    w.rng = seq([0.9])
+    run(w, 2500)
+    expect(bench(w).solderPoints.length).toBeGreaterThan(0)
+    expect(bench(w).phase).toBe(Phase.ASSEMBLY)
+  })
+
   it('an empty bench builds nothing, however good the iron', () => {
     const w = benchWithKit('mini_drone', semiAutoUpgrades, { attended: false })
     expect(types(run(w, 30_000))).not.toContain(EV.STAGE_STARTED)

@@ -81,7 +81,10 @@ function colorRect(scene, { x, y, w, h, hex, z = 0 }) {
 
 // Pulse utility: sine-wave scale on actor while active.
 // Returns { start, stop } controller.
+// A pulse for an actor that may not exist here (F1.3: no bin in the factory).
+// Returning a no-op keeps every caller free of null checks.
 function addPulse(actor) {
+  if (!actor) return { start: () => {}, stop: () => {} }
   let active = false
   actor.on('preupdate', () => {
     if (!active) return
@@ -150,8 +153,10 @@ function buildRoom(scene, layout) {
   // Small hand-placed details that read better than a flat rectangle.
   const mb = props.mailbox
   colorRect(scene, { x: mb.cx, y: mb.cy - mb.h * 0.34, w: mb.w, h: 5, hex: '#2244a0', z: 4 })
+  // Not every location has a bin (F1.3) — the detail follows the prop.
   const tb = props.trashbin
-  colorRect(scene, { x: tb.cx, y: tb.cy - tb.h * 0.46, w: tb.w * 1.1, h: 6, hex: '#3a5a2a', z: 4 })
+  if (tb)
+    colorRect(scene, { x: tb.cx, y: tb.cy - tb.h * 0.46, w: tb.w * 1.1, h: 6, hex: '#3a5a2a', z: 4 })
 
   return { floor, ...actors }
 }
@@ -490,7 +495,7 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
   const IDLE_POS     = ex.vec(spawns.workerIdle.x, spawns.workerIdle.y)
   const BENCH_POS    = ex.vec(spawns.bench.x, spawns.bench.y)
   const MAILBOX_POS  = mailbox.pos.clone()
-  const TRASHBIN_POS = trashbin.pos.clone()
+  const TRASHBIN_POS = trashbin?.pos.clone() ?? null
 
   // ── Delivery box — spawns in the street ────────────────
   const BOX_W = sizes.box.w
@@ -566,19 +571,23 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
   })
 
   // ── Piggy bank (built from the layout; only its behaviour lives here) ──
-  piggy.graphics.visible = false
+  // A location without the prop simply has no piggy bank — the rescue mechanic
+  // is not part of every chapter (F1.3).
+  if (piggy) piggy.graphics.visible = false
 
-  const piggyTimerLabel = new ex.Label({
+  const piggyTimerLabel = piggy && new ex.Label({
     text:  '',
     pos:   ex.vec(piggy.pos.x, piggy.pos.y - piggy.height * 0.78),
     color: ex.Color.fromHex('#dddddd'),
     font:  new ex.Font({ size: 13, family: 'monospace', textAlign: ex.TextAlign.Center }),
     z: 5,
   })
-  piggyTimerLabel.graphics.visible = false
-  scene.add(track(piggyTimerLabel))
+  if (piggyTimerLabel) {
+    piggyTimerLabel.graphics.visible = false
+    scene.add(track(piggyTimerLabel))
+  }
 
-  piggy.on('preupdate', () => {
+  piggy?.on('preupdate', () => {
     if (!piggy.graphics.visible) return
     const { game, now } = getWorld()
     const remaining = game.lastPiggyAt != null ? PIGGY_COOLDOWN_MS - (now - game.lastPiggyAt) : 0

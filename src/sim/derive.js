@@ -13,7 +13,7 @@ import {
 import { GUIDANCE_ORDERS, GUIDANCE_SCRAP_RUNS, MANAGER_RESERVE } from '../state/config.js'
 import { levelData, UPGRADE_TRACKS } from '../state/upgrades.js'
 import {
-  kitsForLocation, hiringAllowed, roleCapHere, capFor,
+  kitsForLocation, hiringAllowed, roleCapHere, capFor, ruleAt,
   canMoveToLocation, LOCATION_ORDER,
 } from '../state/locations.js'
 import { ROLE_ORDER, roleLevelData } from '../defs/roles.js'
@@ -27,6 +27,7 @@ export const cheapestKitCost = Math.min(
 // The piggy bank is a rescue: it shows only when the player is stuck — too poor
 // for any kit, with nothing already in flight.
 export function piggyShouldShow(game) {
+  if (!ruleAt(game, 'hasPiggy')) return false
   const busy = (game.deliveries ?? []).length > 0 || busyStations(game).length > 0
   return game.money < cheapestKitCost && !busy
 }
@@ -77,6 +78,28 @@ export function hireNeedsAttention(game) {
     game.money >= nextHireCost(game, id))
 }
 
+// ── The rescue kit (F1.5) ─────────────────────────────────
+//
+// Every location needs a way out of "spent the last money on an upgrade, cannot
+// afford a kit, nothing in flight" — otherwise the shop is dead and the save is
+// over. The apartment and the garage have two: the piggy bank and the salvage
+// bin. The factory has neither, so the way out is a free kit: the manager
+// orders one off the laptop, and you can too if you have not hired them yet.
+//
+// Deliberately gated on genuinely stuck rather than on "cheap kit available",
+// so it is a rescue and not a strategy: with money for a real kit, a real kit
+// is always the better buy.
+export function rescueKitAvailable(game) {
+  // Where a rescue mechanic already exists, this one must not: two of them
+  // would make the salvage bin pointless.
+  if (ruleAt(game, 'hasPiggy') || ruleAt(game, 'hasTrash')) return false
+  if ((game.deliveries ?? []).length) return false
+  if (!idleStations(game).length) return false
+  return game.money < cheapestKitCost
+}
+
+export const RESCUE_KIT_ID = 'scrap_drone'
+
 // ── Procurement (S3) ──────────────────────────────────────
 //
 // Which kit a manager of this level should buy right now, or null when they
@@ -96,6 +119,14 @@ export function managerKitChoice(game, level = 0) {
     .filter((k, i) => i <= tier && game.money >= k.cost * MANAGER_RESERVE)
 
   return affordable.length ? affordable[affordable.length - 1] : null
+}
+
+// What the manager should order right now: the best kit they can afford, or —
+// when the shop has run itself dry — the free rescue kit. Returning the kit
+// object either way keeps the desk zone from having to know the difference.
+export function managerOrderChoice(game, level = 0) {
+  return managerKitChoice(game, level)
+    ?? (rescueKitAvailable(game) ? KIT_TYPES[RESCUE_KIT_ID] : null)
 }
 
 // The station the player is standing at, if it has a kit on it (C6).

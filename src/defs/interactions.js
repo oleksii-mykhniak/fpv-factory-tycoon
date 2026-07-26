@@ -19,17 +19,18 @@
 import {
   Phase, DeliveryStatus, KIT_TYPES,
   pickupDelivery, startAssembly, startScrapAssembly, getStation,
-  sell as sellStation, calcPrice, takeOutput, orderKit,
+  sell as sellStation, calcPrice, takeOutput, orderKit, abandonBurntDrone,
 } from '../state/gameState.js'
 import {
   ZONE_DWELL_INSTANT_MS, ZONE_DWELL_BENCH_MS, ZONE_DWELL_OUTPUT_MS,
   ZONE_DWELL_MAILBOX_MS, ZONE_DWELL_TRASH_MS, ZONE_DWELL_PANEL_MS,
-  CARRY_CAPACITY, MANAGER_COOLDOWN_MS,
+  CARRY_CAPACITY, MANAGER_COOLDOWN_MS, SALVAGE_RATE,
 } from '../state/config.js'
 import { EV, emit } from '../sim/events.js'
 import {
   piggyShouldShow, shopNeedsAttention, upgradeNeedsAttention, hireNeedsAttention,
-  managerKitChoice,
+  rescueKitAvailable,
+  managerOrderChoice,
 } from '../sim/derive.js'
 import { hiringAllowed } from '../state/locations.js'
 
@@ -90,6 +91,11 @@ export const INTERACTIONS = {
       // A box can only be put down where there is a delivery to consume.
       if (hasBox) return phase === Phase.IDLE
       if (carriedType(agent, 'scrap')) return phase === Phase.IDLE
+      // A burnt kit is cleared by whoever walks up to the bench with free
+      // hands. Until now nothing could clear one at all: the modal that owned
+      // that decision stopped being opened when soldering moved onto the floor
+      // in C6, so a burnt station stayed BURNT for the rest of the save.
+      if (phase === Phase.BURNT) return carryEmpty(agent)
       // ASSEMBLY is not a trigger any more (C6): working a bench is continuous
       // presence, shown by the soldering strip, not a one-shot dwell.
       return false
@@ -109,6 +115,15 @@ export const INTERACTIONS = {
         drop(agent, 'scrap')
         world.game = startScrapAssembly(world.game, stationId)
         emit(events, EV.SCRAP_STARTED, { stationId })
+        emit(events, EV.STATE_DIRTY)
+        return
+      }
+      if (station.phase === Phase.BURNT) {
+        const kit     = KIT_TYPES[station.kitId]
+        const salvage = (kit?.cost ?? 0) * SALVAGE_RATE
+        world.game = abandonBurntDrone(world.game, stationId, SALVAGE_RATE)
+        emit(events, EV.MONEY_GAINED, { amount: salvage, reason: 'salvage' })
+        emit(events, EV.BENCH_CLEARED, { reason: 'abandoned', stationId })
         emit(events, EV.STATE_DIRTY)
         return
       }
@@ -210,16 +225,18 @@ export const INTERACTIONS = {
       if (agent.kind === 'player') return true
       if (agent.role !== 'manager') return false
       if (world.now < (world.managerNextOrderAt ?? 0)) return false
-      return !!managerKitChoice(world.game, agent.level ?? 0)
+      return !!managerOrderChoice(world.game, agent.level ?? 0)
     },
     attention: (world, _zone, agent) =>
-      agent?.kind === 'player' ? shopNeedsAttention(world.game) : true,
+      agent?.kind === 'player'
+        ? shopNeedsAttention(world.game) || rescueKitAvailable(world.game)
+        : true,
     run(world, _zone, agent, events) {
       if (agent.kind === 'player') {
         emit(events, EV.PANEL_REQUESTED, { agentId: agent.id, panel: 'shop' })
         return
       }
-      const kit = managerKitChoice(world.game, agent.level ?? 0)
+      const kit = managerOrderChoice(world.game, agent.level ?? 0)
       if (!kit) return
       world.game = orderKit(world.game, kit.id, world.now, () => `kit-${world.seq++}`)
       // A short cooldown so a rich manager does not fill every slot in one walk.

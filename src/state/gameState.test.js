@@ -22,9 +22,10 @@ import {
 } from './config.js'
 import { trackMaxLevel, nextCost, levelData, UPGRADE_TRACKS } from './upgrades.js'
 import { roleLevelData } from '../defs/roles.js'
+import { rescueKitAvailable, managerOrderChoice } from '../sim/derive.js'
 import {
   LOCATIONS, LOCATION_ORDER, capFor, canMoveToLocation, currentLocation,
-  roleCapHere, maxWorkersHere,
+  roleCapHere, maxWorkersHere, isTerminal, ruleAt,
 } from './locations.js'
 
 const SOLDERING_MAX_LEVEL = trackMaxLevel('soldering')
@@ -346,7 +347,7 @@ describe('Холодна пайка: штраф якості', () => {
 
 describe('Апгрейди: buyUpgrade', () => {
   function richState() {
-    return { ...createState(), money: 9999, locationId: 'workshop' }
+    return { ...createState(), money: 9999, locationId: 'factory' }
   }
 
   it('рівень 0 → 1: гроші зменшуються, solderingLevel зростає', () => {
@@ -454,7 +455,7 @@ describe('Нові типи дронів (D2.1)', () => {
 })
 
 describe('Апгрейд consumables (D2.2)', () => {
-  function richState() { return { ...createState(), money: 9999, locationId: 'workshop' } }
+  function richState() { return { ...createState(), money: 9999, locationId: 'factory' } }
 
   it('початковий стан має consumablesLevel 0', () => {
     expect(createState().upgrades.consumablesLevel).toBe(0)
@@ -556,7 +557,7 @@ describe('Скарбничка (piggy bank)', () => {
 })
 
 describe('D6 — слоти доставки та логістика', () => {
-  function richState() { return { ...createState(), money: 9999, locationId: 'workshop' } }
+  function richState() { return { ...createState(), money: 9999, locationId: 'factory' } }
   const NOW = 1_000_000_000
 
   it('createState: deliveries порожній', () => {
@@ -744,7 +745,7 @@ describe('D6 — слоти доставки та логістика', () => {
 })
 
 describe('D6.6 — pickupDelivery', () => {
-  function richState() { return { ...createState(), money: 9999, locationId: 'workshop' } }
+  function richState() { return { ...createState(), money: 9999, locationId: 'factory' } }
   const NOW = 1_000_000_000
 
   function idleWithArrivedDelivery(slotIndex = 0) {
@@ -823,8 +824,8 @@ describe('D7 — Реєстр локацій', () => {
     expect(createState().locationId).toBe('apartment')
   })
 
-  it('LOCATION_ORDER містить apartment, garage, workshop', () => {
-    expect(LOCATION_ORDER).toEqual(['apartment', 'garage', 'workshop'])
+  it('LOCATION_ORDER містить apartment, garage, factory', () => {
+    expect(LOCATION_ORDER).toEqual(['apartment', 'garage', 'factory'])
   })
 
   it('currentLocation(apartment): повертає дані квартири', () => {
@@ -850,8 +851,8 @@ describe('D7 — Реєстр локацій', () => {
     expect(capFor(s, 'logistics')).toBe(1)
   })
 
-  it('capFor: workshop — всі кепи = max', () => {
-    const s = { ...createState(), locationId: 'workshop' }
+  it('capFor: factory — всі кепи = max', () => {
+    const s = { ...createState(), locationId: 'factory' }
     expect(capFor(s, 'storage')).toBe(2)
     expect(capFor(s, 'soldering')).toBe(3)
   })
@@ -977,10 +978,10 @@ describe('D7 — moveToLocation', () => {
     expect(s.money).toBe(monBefore)
   })
 
-  it('garage → workshop: потрібні soldering=3 і consumables=2', () => {
+  it('garage → factory: потрібні soldering=3 і consumables=2', () => {
     const s = { ...createState(), money: 9999, locationId: 'garage',
       upgrades: { ...createState().upgrades, solderingLevel: 3, consumablesLevel: 2 } }
-    expect(moveToLocation(s, 'workshop').locationId).toBe('workshop')
+    expect(moveToLocation(s, 'factory').locationId).toBe('factory')
   })
 
   it('старий save без locationId: createState дефолт — apartment', () => {
@@ -1000,7 +1001,7 @@ describe('C3: кілька станцій', () => {
   const NOW3 = 1_700_000_000_000
 
   function twoStations(money = 5000) {
-    let s = { ...createState(), money, locationId: 'workshop' }
+    let s = { ...createState(), money, locationId: 'factory' }
     return syncStations(s, 2)
   }
 
@@ -1090,7 +1091,9 @@ describe('C3: кілька станцій', () => {
     s = loadStation(s, 'station-0')
     expect(() => startScrap(s)).toThrow('немає вільної станції')
 
-    const two = loadStation(twoStations(), 'station-0')
+    // Гараж, а не фабрика: на фабриці смітника немає взагалі (F1.3), тож там
+    // цей тест перевіряв би не те правило.
+    const two = { ...loadStation(twoStations(), 'station-0'), locationId: 'garage' }
     expect(startScrap(two).scrapAvailable).toBe(true)
   })
 
@@ -1188,11 +1191,11 @@ describe('Ліміт персоналу — на роль, не на цех', ()
 
   it('менеджер наймається лише в майстерні', () => {
     expect(() => hireWorker(at('garage'), 'manager')).toThrow('не поміститься')
-    expect(workersInRole(hireWorker(at('workshop'), 'manager'), 'manager')).toHaveLength(1)
+    expect(workersInRole(hireWorker(at('factory'), 'manager'), 'manager')).toHaveLength(1)
   })
 
   it('повний штат ролі не блокує інші ролі (те, чого не вмів загальний ліміт)', () => {
-    let s = at('workshop')
+    let s = at('factory')
     s = hireWorker(s, 'courier'); s = hireWorker(s, 'courier')
     expect(() => hireWorker(s, 'courier')).toThrow('не поміститься')
     s = hireWorker(s, 'seller')
@@ -1205,5 +1208,93 @@ describe('Ліміт персоналу — на роль, не на цех', ()
       const sum = Object.values(LOCATIONS[id].workerCaps).reduce((a, b) => a + b, 0)
       expect(maxWorkersHere(s)).toBe(sum)
     }
+  })
+})
+
+// ── F1 — фабрика як остання локація ──────────────────────
+
+describe('F1 — фабрика', () => {
+  const toFactory = () => moveToLocation({
+    ...createState(), money: 9999, locationId: 'garage',
+    upgrades: { ...createState().upgrades, solderingLevel: 3, consumablesLevel: 2 },
+  }, 'factory')
+
+  it('фабрика — термінальна: після неї локацій немає', () => {
+    expect(LOCATION_ORDER[LOCATION_ORDER.length - 1]).toBe('factory')
+    expect(isTerminal(toFactory())).toBe(true)
+    expect(isTerminal(createState())).toBe(false)
+  })
+
+  it('фабрика лишається без обох рятівних механік', () => {
+    const f = toFactory()
+    expect(ruleAt(f, 'hasTrash')).toBe(false)
+    expect(ruleAt(f, 'hasPiggy')).toBe(false)
+    // Локація, яка мовчить про правило, поводиться як завжди.
+    expect(ruleAt(createState(), 'hasTrash')).toBe(true)
+  })
+
+  it('брухт на фабриці не замовляється взагалі', () => {
+    expect(() => startScrap(toFactory())).toThrow('немає смітника')
+  })
+
+  it('особисті треки заморожуються на рівні, з яким приїхав', () => {
+    const f = toFactory()
+    expect(f.frozenCaps).toEqual({ soldering: 3, consumables: 2 })
+    expect(capFor(f, 'soldering')).toBe(3)
+    expect(() => buyUpgrade({ ...f, money: 99999 }, 'soldering'))
+      .toThrow('максимальному рівні')
+  })
+
+  it('заморожування знімає знімок, а не читає рівень наживо', () => {
+    // Приїхав з нижчим рівнем — стеля нижча, і покупка вже неможлива.
+    const low = moveToLocation({
+      ...createState(), money: 9999, locationId: 'garage',
+      upgrades: { ...createState().upgrades, solderingLevel: 3, consumablesLevel: 2 },
+    }, 'factory')
+    const dropped = { ...low, upgrades: { ...low.upgrades, solderingLevel: 1 } }
+    // Стеля лишилась 3 — знімок не переписується заднім числом.
+    expect(capFor(dropped, 'soldering')).toBe(3)
+  })
+
+  it('facility-треки на фабриці не заморожені', () => {
+    const f = toFactory()
+    expect(capFor(f, 'benches')).toBe(2)
+    expect(capFor(f, 'storage')).toBe(2)
+  })
+
+  it('менеджер зʼявляється саме на фабриці — раніше його ніде не найняти', () => {
+    for (const id of LOCATION_ORDER) {
+      const s = { ...createState(), locationId: id }
+      expect(roleCapHere(s, 'manager'), id).toBe(id === 'factory' ? 1 : 0)
+    }
+  })
+})
+
+describe('F1.5 — аварійна партія за $0', () => {
+  const stuckAt = (locationId, money = 0) => ({
+    ...createState(), locationId, money,
+  })
+
+  it('на фабриці зʼявляється, коли грошей на кіт немає й нічого в дорозі', () => {
+    expect(rescueKitAvailable(stuckAt('factory'))).toBe(true)
+  })
+
+  it('не зʼявляється там, де є смітник або скарбничка', () => {
+    expect(rescueKitAvailable(stuckAt('apartment'))).toBe(false)
+    expect(rescueKitAvailable(stuckAt('garage'))).toBe(false)
+  })
+
+  it('не зʼявляється, поки є гроші на найдешевший кіт', () => {
+    expect(rescueKitAvailable(stuckAt('factory', 100000))).toBe(false)
+  })
+
+  it('не зʼявляється, поки щось уже їде', () => {
+    const s = orderKit({ ...stuckAt('factory', 100000) }, 'mini_drone')
+    expect(rescueKitAvailable({ ...s, money: 0 })).toBe(false)
+  })
+
+  it('менеджер бере справжній кіт, коли може, і аварійний, коли ні', () => {
+    expect(managerOrderChoice(stuckAt('factory', 100000), 0).id).not.toBe('scrap_drone')
+    expect(managerOrderChoice(stuckAt('factory', 0), 0).id).toBe('scrap_drone')
   })
 })

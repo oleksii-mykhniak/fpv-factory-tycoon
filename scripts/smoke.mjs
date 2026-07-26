@@ -345,6 +345,43 @@ const hAfter = await page.evaluate(() => {
 console.log(`  ${hBefore.loc} (${hBefore.world}w, ${hBefore.slots} slots, grid ${hBefore.grid})` +
             ` → ${hAfter.loc} (${hAfter.world}w, ${hAfter.slots} slots, grid ${hAfter.grid})`)
 
+// ── I. The factory: no bin, no piggy, burnt kits clear themselves (F1) ──
+console.log('\n### I. The factory')
+await boot(seedState(
+  { solderingLevel: 3, consumablesLevel: 2, benchLevel: 2, storageLevel: 2 },
+  { locationId: 'factory', money: 4000 },
+))
+const iScene = await page.evaluate(() => {
+  const w = globalThis.__world
+  return {
+    loc:      w.game.locationId,
+    zones:    w.zones.map(z => z.kind),
+    props:    Object.keys(w.layout.props),
+    stations: w.layout.stationSlots.length,
+  }
+})
+console.log(`  ${iScene.loc}: ${iScene.stations} slots, zones=${[...new Set(iScene.zones)].join(',')}`)
+
+// An old save still says "workshop" — it must land in the factory, not back
+// in the apartment.
+await boot(seedState({ solderingLevel: 2 }, { locationId: 'workshop' }))
+const iMigrated = await page.evaluate(() => globalThis.__world.game.locationId)
+console.log(`  old save locationId: workshop → ${iMigrated}`)
+
+// A burnt kit has to be clearable — until F1.5 nothing could clear one.
+await boot(seedState({ solderingLevel: 2 }, { locationId: 'factory', money: 4000 }))
+await page.evaluate(() => {
+  const w = globalThis.__world
+  w.game = {
+    ...w.game,
+    stations: w.game.stations.map((s, i) =>
+      i === 0 ? { ...s, phase: 'BURNT', kitId: 'mini_drone' } : s),
+  }
+})
+await goTo('zone-station-0')
+await page.waitForTimeout(2500)
+const iCleared = await log('stood at the burnt bench')
+
 // ── C. Movement, collisions, camera (C1 regression) ───────
 console.log('\n### C. Movement (WASD)')
 await boot(seedState({}))
@@ -447,6 +484,11 @@ const checks = [
   ['H: more bench slots than before',     hAfter.slots > hBefore.slots],
   ['H: nav grid rebuilt for the new room', hAfter.grid > hBefore.grid],
   ['H: the player is inside the new room', hAfter.playerInside === true],
+  ['I: the factory has no salvage bin',   !iScene.zones.includes('trashbin')],
+  ['I: the factory has no piggy bank',    !iScene.zones.includes('piggy')],
+  ['I: the factory still has three benches', iScene.stations === 3],
+  ['I: an old "workshop" save lands in the factory', iMigrated === 'factory'],
+  ['I: a burnt kit can be cleared on foot', iCleared.phase === 'IDLE'],
   ['no console errors',                   errors.length === 0],
 ]
 console.log('\n=== checks ===')

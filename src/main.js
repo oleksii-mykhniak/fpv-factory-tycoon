@@ -89,6 +89,12 @@ function migrateState(raw) {
     s = { ...rest, stations: [station] }
   }
 
+  // Stage 5: the third location stopped being "one more move" and became the
+  // place the game ends up, so it is called the factory now. The id is what a
+  // save stores, so an old one has to be carried across or the player wakes up
+  // back in the apartment.
+  if (s.locationId === 'workshop') s = { ...s, locationId: 'factory' }
+
   return s
 }
 

@@ -9,6 +9,7 @@ import { UPGRADE_TRACKS } from './upgrades.js'
 import { KIT_TYPES } from './kits.js'
 import {
   capFor, canMoveToLocation, LOCATIONS, hiringAllowed, roleCapHere, startMoneyAt,
+  freezeCapsFor, ruleAt,
 } from './locations.js'
 import { hireCost, roleDef } from '../defs/roles.js'
 
@@ -351,6 +352,8 @@ export function freeSlots(state) {
 // ── Scrap (Tinder mini-game → free drone assembly) ───────
 
 export function startScrap(state) {
+  if (!ruleAt(state, 'hasTrash'))
+    throw new Error('startScrap: у цій локації немає смітника')
   if (!idleStations(state).length)
     throw new Error('startScrap: немає вільної станції')
   if (state.scrapAvailable)
@@ -423,9 +426,13 @@ export function moveToLocation(state, targetId) {
     throw new Error(`moveToLocation: ${reasons.join('; ')}`)
   // The cash RESETS rather than being charged: unlockCost proves you can afford
   // the step up, startMoney decides how the next chapter opens. See startMoneyAt.
+  // Frozen tracks are snapshotted here, on arrival — the level you walked in
+  // with becomes the ceiling (F1.4).
+  const frozen = freezeCapsFor(state, targetId)
   return {
     ...state,
     money:      startMoneyAt(targetId),
     locationId: targetId,
+    ...(Object.keys(frozen).length ? { frozenCaps: { ...state.frozenCaps, ...frozen } } : {}),
   }
 }

@@ -7,6 +7,7 @@
 import {
   HIRE_COST_BASE, HIRE_COST_GROWTH,
   COURIER_SPEED_BY_LEVEL, TECH_POINT_MS_BY_LEVEL, TECH_QUALITY_BY_LEVEL,
+  TECH_MISS_CHANCE_BY_LEVEL,
   SELLER_SPEED_BY_LEVEL, MANAGER_SPEED_BY_LEVEL, MANAGER_TIER_BY_LEVEL,
 } from '../state/config.js'
 
@@ -41,7 +42,8 @@ export const ROLES = Object.freeze({
     levels: TECH_POINT_MS_BY_LEVEL.map((pointMs, i) => ({
       speed:   COURIER_SPEED_BY_LEVEL[i] ?? COURIER_SPEED_BY_LEVEL[0],
       pointMs,
-      quality: TECH_QUALITY_BY_LEVEL[i],
+      quality:     TECH_QUALITY_BY_LEVEL[i],
+      missChance:  TECH_MISS_CHANCE_BY_LEVEL[i],
     })),
   },
 

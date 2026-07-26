@@ -8,6 +8,7 @@ import { EV } from '../events.js'
 import { apartment } from '../../defs/layouts/index.js'
 import { Phase, createState, startAssembly } from '../../state/gameState.js'
 import { TICK_MS, MAX_CATCHUP_STEPS } from '../../state/config.js'
+import { taskDef } from '../../defs/tasks.js'
 
 const T0 = 1_000_000
 
@@ -16,7 +17,7 @@ function world({ money = 20000, hire = [], upgrades = {}, benchLevel = 0 } = {})
   let state = {
     ...base,
     money,
-    locationId: 'workshop',
+    locationId: 'factory',
     upgrades: { ...base.upgrades, benchLevel, ...upgrades },
   }
   const w = createWorld({ state, salesLog: [] }, { now: T0, rng: () => 0.5, layout: apartment })
@@ -56,6 +57,20 @@ describe('sim/jobSystem — the board is derived, never accumulated', () => {
     dispatch(w, 'order', { kitId: 'mini_drone' })
     run(w, 1000)
     expect(deriveJobs(w)).toHaveLength(0)
+  })
+
+  it('a burnt bench asks to be cleared, and outranks assembling', () => {
+    const w = world()
+    w.game = {
+      ...w.game,
+      stations: w.game.stations.map((s, i) =>
+        i === 0 ? { ...s, phase: Phase.BURNT, kitId: 'mini_drone' } : s),
+    }
+    const jobs = deriveJobs(w)
+    const clear = jobs.find(j => j.type === 'clear_burnt')
+    expect(clear).toBeTruthy()
+    expect(clear.stationId).toBe('station-0')
+    expect(clear.priority).toBeGreaterThan(taskDef('assemble').priority)
   })
 
   it('a bench mid-assembly wants a technician; a finished one wants a seller', () => {

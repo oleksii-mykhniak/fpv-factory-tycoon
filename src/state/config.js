@@ -23,11 +23,11 @@ export const PRICE_QUALITY_COEFF = 0.7
 // Raised 0.40 → 0.48 in the 2026-07-26 difficulty pass: at 0.40 a tap had to
 // land in the outer third of the miss range to fail at all, so a player who
 // half-aimed never saw a bad joint and never learned the mini-game had stakes.
-export const COLD_SOLDER_THRESHOLD = 0.48
+export const COLD_SOLDER_THRESHOLD = 0.52
 // Of all misses, this fraction escalates to overheating.
 // 0.25 → 0.40: with the old numbers a full playthrough could end without ever
 // burning a kit, which made the whole burnt-drone branch content nobody met.
-export const OVERHEAT_CHANCE = 0.40
+export const OVERHEAT_CHANCE = 0.45
 // Fraction of kit cost returned as scrap on abandon.
 export const SALVAGE_RATE = 0.40
 // How much each cold-solder miss subtracts from the final assembly quality cap.
@@ -61,6 +61,22 @@ export const SEMIAUTO_POINT_DELAY_MS = 1200
 // times the width of the starting one.
 export const SOLDER_STATION_GREEN_HALF      = 0.34
 export const SOLDER_STATION_OVERHEAT_CHANCE = 0
+
+// ── Risk on the unattended path ──────────────────────────
+// Until now only the player's own taps could go wrong: a bench run by a
+// technician or a semi-auto iron recorded a clean point every single time. That
+// made the whole shop risk-free the moment you hired someone — and it is the
+// real reason a playthrough could end without ever seeing a burnt kit.
+//
+// A miss here means the same thing it means for the player: a cold joint that
+// costs quality, and sometimes a kit that burns. The rate is what a worker's
+// level buys, which is what makes upgrading people worth money (F5).
+export const TECH_MISS_CHANCE_BY_LEVEL = [0.15, 0.09, 0.05]
+export const SEMIAUTO_MISS_CHANCE      = 0.10
+// Of unattended misses, this fraction burns the kit. Deliberately far below the
+// player's own OVERHEAT_CHANCE: a bench nobody is watching should mostly cost
+// quality, or an unattended shop would spend its day on fire.
+export const AUTO_OVERHEAT_SHARE = 0.20
 
 // ── Camera (C1) ──────────────────────────────────────────
 // The world is now larger than the screen and measured in fixed world units,

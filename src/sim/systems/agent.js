@@ -52,6 +52,11 @@ const CONDITIONS = {
 
   // The bench is finished (or was cleared by someone else) — either way the
   // technician's shift there is over.
+  stationNotBurnt: (world, agent, job) => {
+    const station = stationsOf(world.game).find(s => s.id === job.stationId)
+    return !station || station.phase !== Phase.BURNT
+  },
+
   stationIdleOrDone: (world, agent, job) => {
     const station = stationsOf(world.game).find(s => s.id === job.stationId)
     return !station || station.phase !== Phase.ASSEMBLY

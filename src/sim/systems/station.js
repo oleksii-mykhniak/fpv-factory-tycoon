@@ -18,7 +18,9 @@
 
 import {
   Phase, KIT_TYPES, recordSolderPoint, finishAssembly, calcPrice, stationsOf, releaseOutput,
+  burnKit, applyColdSolderPenalty,
 } from '../../state/gameState.js'
+import { AUTO_OVERHEAT_SHARE, COLD_SOLDER_QUALITY_PENALTY } from '../../state/config.js'
 import { levelData } from '../../state/upgrades.js'
 import { roleLevelData } from '../../defs/roles.js'
 import { EV, emit } from '../events.js'
@@ -51,19 +53,30 @@ export function workSource(world, station, data) {
   // Levels 2–3 supply a hands-off rate; levels 0–1 only sharpen the player's
   // own mini-game (greenHalf), so they cannot run themselves at all.
   const iron = data.qualityMin !== undefined
-    ? { pointDelayMs: data.pointDelayMs, qualityMin: data.qualityMin, qualityMax: data.qualityMax }
+    ? {
+        pointDelayMs: data.pointDelayMs,
+        qualityMin:   data.qualityMin,
+        qualityMax:   data.qualityMax,
+        missChance:   data.missChance ?? 0,
+      }
     : null
 
   if (!tech) return iron            // the player: only a good iron works alone
 
   const t = roleLevelData('tech', tech.level ?? 0)
-  const hands = { pointDelayMs: t.pointMs, qualityMin: t.quality - 0.05, qualityMax: t.quality + 0.05 }
+  const hands = {
+    pointDelayMs: t.pointMs,
+    qualityMin:   t.quality - 0.05,
+    qualityMax:   t.quality + 0.05,
+    missChance:   t.missChance ?? 0,
+  }
   if (!iron) return hands
-  // Best of both on each axis.
+  // Best of both on each axis — including the one where "best" means lowest.
   return {
     pointDelayMs: Math.min(hands.pointDelayMs, iron.pointDelayMs),
     qualityMin:   Math.max(hands.qualityMin, iron.qualityMin),
     qualityMax:   Math.max(hands.qualityMax, iron.qualityMax),
+    missChance:   Math.min(hands.missChance, iron.missChance),
   }
 }
 
@@ -139,6 +152,24 @@ export function stationSystem(world, dt, events) {
 
     rt.elapsedMs += dt
     if (rt.elapsedMs < rt.durationMs) continue
+
+    // Something can go wrong on an unattended bench too. Before this, hiring
+    // anybody made the shop risk-free, so every failure branch in the game was
+    // content only a hands-on player ever met.
+    if (world.rng() < (source.missChance ?? 0)) {
+      const flux = levelData('consumables', world.game.upgrades.consumablesLevel ?? 0)
+      if (world.rng() < AUTO_OVERHEAT_SHARE * flux.overheatMult) {
+        world.game = burnKit(world.game, stationId)
+        emit(events, EV.KIT_BURNT, { stationId, kitId: station.kitId })
+      } else {
+        const step = kit.assemblySteps?.[station.solderPoints.length]
+        world.game = applyColdSolderPenalty(world.game, stationId, COLD_SOLDER_QUALITY_PENALTY)
+        emit(events, EV.STAGE_COLD, { stationId, missMsg: step?.missMsg })
+      }
+      idle(rt)
+      emit(events, EV.STATE_DIRTY)
+      continue
+    }
 
     const quality = Math.min(1, Math.max(0,
       source.qualityMin + world.rng() * (source.qualityMax - source.qualityMin)))

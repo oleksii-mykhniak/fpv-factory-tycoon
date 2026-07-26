@@ -9,6 +9,7 @@ import {
   BETTER_IRON_GREEN_HALF, BETTER_IRON_OVERHEAT_CHANCE,
   SEMIAUTO_GREEN_HALF, SEMIAUTO_OVERHEAT_CHANCE,
   SEMIAUTO_QUALITY_MIN, SEMIAUTO_QUALITY_MAX, SEMIAUTO_POINT_DELAY_MS,
+  SEMIAUTO_MISS_CHANCE,
   SOLDER_STATION_GREEN_HALF, SOLDER_STATION_OVERHEAT_CHANCE,
   SOLDERING_UPGRADE_COSTS,
   CONSUMABLES_UPGRADE_COSTS, FLUX_OVERHEAT_MULT, FLUX_QUALITY_BONUS,
@@ -40,7 +41,8 @@ export const UPGRADE_TRACKS = Object.freeze({
         greenHalf: BETTER_IRON_GREEN_HALF, overheatChance: BETTER_IRON_OVERHEAT_CHANCE },
       { name: 'Напівавтомат', effect: 'Верстак паяє сам 60–75%; руками — точніше',
         greenHalf: SEMIAUTO_GREEN_HALF, overheatChance: SEMIAUTO_OVERHEAT_CHANCE,
-        qualityMin: SEMIAUTO_QUALITY_MIN, qualityMax: SEMIAUTO_QUALITY_MAX, pointDelayMs: SEMIAUTO_POINT_DELAY_MS },
+        qualityMin: SEMIAUTO_QUALITY_MIN, qualityMax: SEMIAUTO_QUALITY_MAX,
+        pointDelayMs: SEMIAUTO_POINT_DELAY_MS, missChance: SEMIAUTO_MISS_CHANCE },
       // No qualityMin: this level deliberately has no unattended rate. Hands-off
       // assembly is what a technician is for; this is what YOUR hands are for.
       { name: 'Паяльна станція', effect: 'Найширша зона, перегріву немає — але паяєте ви',

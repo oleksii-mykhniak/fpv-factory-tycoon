@@ -16,7 +16,7 @@ describe('C7 — locations are floor plans, not palettes', () => {
     expect(new Set(sizes).size).toBe(3)
     expect(LAYOUTS.apartment.stationSlots).toHaveLength(1)
     expect(LAYOUTS.garage.stationSlots).toHaveLength(2)
-    expect(LAYOUTS.workshop.stationSlots).toHaveLength(3)
+    expect(LAYOUTS.factory.stationSlots).toHaveLength(3)
   })
 
   it('every layout leaves a doorway a character can actually fit through', () => {
@@ -39,9 +39,9 @@ describe('C7 — locations are floor plans, not palettes', () => {
     const w = boot('apartment')
     const before = { obstacles: w.obstacles.length, cols: w.navGrid.cols }
 
-    applyLayout(w, LAYOUTS.workshop)
+    applyLayout(w, LAYOUTS.factory)
 
-    expect(w.bounds.w).toBe(LAYOUTS.workshop.world.w)
+    expect(w.bounds.w).toBe(LAYOUTS.factory.world.w)
     expect(w.navGrid.cols).toBeGreaterThan(before.cols)
     expect(w.zones.some(z => z.kind === 'mailbox')).toBe(true)
   })
@@ -49,25 +49,25 @@ describe('C7 — locations are floor plans, not palettes', () => {
   it('a move puts everyone in the new room, not at old coordinates', () => {
     const w = boot('garage')   // hiring starts at the second location
     dispatch(w, 'hireWorker', { role: 'courier' })
-    applyLayout(w, LAYOUTS.workshop)
+    applyLayout(w, LAYOUTS.factory)
 
     for (const a of w.agents) {
-      expect(a.x).toBeLessThan(LAYOUTS.workshop.world.w)
-      expect(a.y).toBeLessThan(LAYOUTS.workshop.world.h)
+      expect(a.x).toBeLessThan(LAYOUTS.factory.world.w)
+      expect(a.y).toBeLessThan(LAYOUTS.factory.world.h)
       expect(a.path).toBeNull()
       expect(a.task).toBeNull()
     }
   })
 
-  it('moving to the workshop builds the benches already paid for', () => {
+  it('moving to the factory builds the benches already paid for', () => {
     const w = boot('garage', {
       upgrades: { ...createState().upgrades, solderingLevel: 3, consumablesLevel: 2, benchLevel: 2 },
     })
     // The garage caps benches at 2 slots even though level 2 was bought.
     expect(w.game.stations).toHaveLength(2)
 
-    dispatch(w, 'moveToLocation', { locationId: 'workshop' })
-    expect(w.game.locationId).toBe('workshop')
+    dispatch(w, 'moveToLocation', { locationId: 'factory' })
+    expect(w.game.locationId).toBe('factory')
     expect(w.game.stations).toHaveLength(3)
     expect(w.zones.filter(z => z.kind === 'bench')).toHaveLength(3)
   })

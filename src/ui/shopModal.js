@@ -1,4 +1,6 @@
 import { Phase, KIT_TYPES, calcPrice, idleStations } from '../state/gameState.js'
+import { ruleAt } from '../state/locations.js'
+import { rescueKitAvailable, RESCUE_KIT_ID } from '../sim/derive.js'
 import { PRICE_BASE_COEFF, PRICE_QUALITY_COEFF, STORAGE_SLOTS_BY_LEVEL } from '../state/config.js'
 import { kitsForLocation, LOCATIONS } from '../state/locations.js'
 
@@ -129,7 +131,37 @@ export function createShopModal(root, { onOrder, onScrapStart }) {
       btn.addEventListener('click', () => { onOrder(btn.dataset.order); close() })
     })
 
-    // Scrap drone card — free, Tinder mini-game, always at bottom
+    // The rescue kit (F1.5): where there is no bin and no piggy bank, the way
+    // out of a dry shop is a free kit ordered straight off the laptop. Shown
+    // only when genuinely stuck, so it never competes with a real purchase.
+    if (rescueKitAvailable(state)) {
+      const card = document.createElement('div')
+      card.className = 'kit-card kit-card--scrap'
+      card.innerHTML = `
+        <div class="kit-card__header">
+          <span class="kit-card__emoji">♻️</span>
+          <div class="kit-card__info">
+            <div class="kit-card__name">Аварійна партія</div>
+            <div class="kit-card__meta">Списаний комплект зі складу</div>
+          </div>
+          <div class="kit-card__prices">
+            <div class="kit-card__buy-price">$0</div>
+          </div>
+        </div>
+        <button class="btn btn--success kit-card__btn" id="btn-rescue-order">
+          Замовити — $0
+        </button>
+      `
+      body.appendChild(card)
+      card.querySelector('#btn-rescue-order').addEventListener('click', () => {
+        onOrder(RESCUE_KIT_ID); close()
+      })
+    }
+
+    // Scrap drone card — free, Tinder mini-game, always at bottom.
+    // Only where there is a bin to salvage from (F1.3).
+    if (!ruleAt(state, 'hasTrash')) return
+
     const scrapKit      = KIT_TYPES['scrap_drone']
     const scrapSellMin  = calcPrice(scrapKit.basePrice, 0,   state.upgrades.priceMultiplier)
     const scrapSellMax  = calcPrice(scrapKit.basePrice, 1.0, state.upgrades.priceMultiplier)

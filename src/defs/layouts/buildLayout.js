@@ -57,6 +57,13 @@ export function buildLayout({
 
   // Fixed trigger zones. Bench zones are NOT here: they are generated from the
   // stations that are actually built (C3), so buying one adds its own.
+  // A zone exists only where its prop does. That is the whole implementation of
+  // "the factory has no salvage bin" (F1.3): leave the bin out of the props and
+  // the zone, the guidance arrow and the interaction all follow, because each
+  // of them iterates the zones that exist rather than assuming a fixed set.
+  const zoneIfProp = (name, kind, w, h) =>
+    props[name] ? [{ id: name, kind, ...rect(props[name].x, props[name].y, w, h) }] : []
+
   const zones = [
     ...deliverySlots.map((slot, i) => ({
       id: `slot${i}`,
@@ -65,8 +72,8 @@ export function buildLayout({
       meta: { slotIndex: i },
     })),
     { id: 'mailbox',  kind: 'mailbox',  ...rect(props.mailbox.x, props.mailbox.y, 150, 150) },
-    { id: 'trashbin', kind: 'trashbin', ...rect(props.trashbin.x, props.trashbin.y, 150, 150) },
-    { id: 'piggy',    kind: 'piggy',    ...rect(props.piggy.x, props.piggy.y, 140, 140) },
+    ...zoneIfProp('trashbin', 'trashbin', 150, 150),
+    ...zoneIfProp('piggy',    'piggy',    140, 140),
     // S2: the panels the bottom bar used to hold are objects in the room now.
     // Each is a prop with a zone in front of it — you walk up to the laptop to
     // order a kit, to the rack to buy an upgrade, to the board to hire.

@@ -87,9 +87,12 @@ export const garage = buildLayout({
   theme: { bgColor: '#0d1810', floorColor: '#1a2618' },
 })
 
-// ── Майстерня — a proper shop floor: three benches, long runs ──
-export const workshop = buildLayout({
-  id:    'workshop',
+// ── Фабрика — a proper shop floor: three benches, long runs.
+// The last location: from here the map grows in rooms rather than moves (F2).
+// No salvage bin and no piggy bank — neither belongs in a place that is meant
+// to be reliable (F1.3).
+export const factory = buildLayout({
+  id:    'factory',
   world: { w: 2000, h: 1900 },
   roomH: 1400,
   door:  { x: 900, w: 240 },
@@ -100,9 +103,7 @@ export const workshop = buildLayout({
   ],
   props: {
     lamp:     { x: 980, y: 130, w: 56, h: 56, sprite: 'lamp',     color: '#d4c060', z: 2 },
-    piggy:    { x: 200, y: 1150, w: 46, h: 46, sprite: 'piggy',    color: '#d4607a' },
     mailbox:  { x: 300, y: 1650, w: 50, h: 40, sprite: 'mailbox',  color: '#3a5db8' },
-    trashbin: { x: 1780, y: 1650, w: 50, h: 54, sprite: 'trashbin', color: '#4a6a3a' },
     desk:     { x: 1800, y: 860, w: 96, h: 58, sprite: 'desk',     color: '#5a4a7a' },
     rack:     { x: 220, y: 720, w: 62, h: 92, sprite: 'rack',     color: '#3a6a72' },
     jobboard: { x: 220, y: 900, w: 60, h: 78, sprite: 'jobboard', color: '#7a5a3a' },
@@ -125,7 +126,7 @@ export const workshop = buildLayout({
   theme: { bgColor: '#180d18', floorColor: '#261a26' },
 })
 
-export const LAYOUTS = Object.freeze({ apartment, garage, workshop })
+export const LAYOUTS = Object.freeze({ apartment, garage, factory })
 
 export function layoutFor(locationId) {
   return LAYOUTS[locationId] ?? apartment

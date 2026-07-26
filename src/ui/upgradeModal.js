@@ -1,6 +1,7 @@
 import { UPGRADE_TRACKS } from '../state/upgrades.js'
 import {
   currentLocation, LOCATIONS, LOCATION_ORDER, capFor, canMoveToLocation, startMoneyAt,
+  isTerminal,
 } from '../state/locations.js'
 
 export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation }) {
@@ -47,6 +48,7 @@ export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation }) {
       const nextInfo     = level < effectiveMax ? track.levels[level + 1] : null
       const nextCost     = level < effectiveMax ? track.costs[level]      : null
       const capLocked    = level >= cap && cap < maxLevel  // hit location cap before absolute max
+      const frozen       = state.frozenCaps?.[id] !== undefined && level >= cap
       // Money is the only gate. A busy bench used to block this too, from when
       // one bench was the whole game; with staff working nonstop that read as
       // "upgrades are broken".
@@ -60,6 +62,9 @@ export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation }) {
           </button>
           <p class="upgrade-effect-hint">${nextInfo.effect}</p>
         `
+      } else if (frozen) {
+        // A frozen track is not "come back later" — this is where it ends.
+        footer = '<p class="upgrade-effect-hint">Заморожено на фабриці — тут росте персонал</p>'
       } else if (capLocked) {
         footer = '<p class="upgrade-effect-hint">Ліміт локації — переїдьте далі</p>'
       } else {
@@ -83,7 +88,20 @@ export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation }) {
     const nextLocId  = LOCATION_ORDER[currentIdx + 1]
 
     let locationHTML = ''
-    if (nextLocId) {
+    if (isTerminal(state)) {
+      // The last location. There is no move to offer, so the panel says what
+      // grows here instead — rooms and people (F2, F5).
+      locationHTML = `
+        <div class="shop-section shop-section--location">
+          <div class="shop-section__title">Локація: ${loc.emoji} ${loc.name}</div>
+          <div class="shop-upgrade">
+            <p class="upgrade-effect-hint">
+              Остання локація — далі росте сама фабрика: нові цехи й рівні персоналу.
+            </p>
+          </div>
+        </div>
+      `
+    } else if (nextLocId) {
       const nextLoc        = LOCATIONS[nextLocId]
       const { can, reasons } = canMoveToLocation(state, nextLocId)
       // A bench mid-build no longer blocks the move: the station list carries
