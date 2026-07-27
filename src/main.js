@@ -43,6 +43,11 @@ import { createEffects } from './view/effects.js'
 // ── State init ────────────────────────────────────────────
 
 // Migrate saves written before the per-delivery-status refactor (D6).
+//
+// Everything below the current MIN_LOADABLE_VERSION (3, raised in Stage 8) is
+// already discarded in storage.js before it gets here, so these branches only
+// matter if that floor is ever lowered again. Kept rather than deleted: they
+// are also the record of what each shape used to look like.
 // Old saves may have phase=ORDERED/DELIVERY, activeDeliveryReadyAt,
 // activeSlotIndex, and deliveryQueue instead of deliveries[].
 function migrateState(raw) {
@@ -152,6 +157,11 @@ const canvas = document.getElementById('game-canvas')
 
 let sceneRefs   = null
 let saveQueued  = false   // coalesces STATE_DIRTY events into one save per frame
+// Set once the save has been wiped on purpose. location.reload() does NOT stop
+// the page: the tick keeps running until the navigation commits, and the very
+// next STATE_DIRTY wrote the whole shop back into storage — which is why
+// "Скинути збереження" looked like it did nothing at all.
+let savingStopped = false
 let uiDirty     = true    // forces a UI render even when the state object is unchanged
 let coldWarning = null    // transient: consumed by solderModal on the next render
 
@@ -232,7 +242,7 @@ function tick() {
 function present() {
   syncScene(sceneRefs, world)
   renderUI()
-  if (saveQueued) {
+  if (saveQueued && !savingStopped) {
     const { state, salesLog } = serializeWorld(world)
     saveGame(state, salesLog)
     saveQueued = false
@@ -302,7 +312,7 @@ const promoteModal = createPromoteModal(uiRoot, {
 })
 
 const settingsModal = createSettingsModal(uiRoot, {
-  onClearSave:     () => { clearSave(); location.reload() },
+  onClearSave:     () => { savingStopped = true; clearSave(); location.reload() },
   onSoundChange:   (on) => setMuted(!on),
   onMusicChange:   (on) => setMusicEnabled(on),
   hapticsSupported,

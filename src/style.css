@@ -392,6 +392,12 @@ body {
 .btn--upgrade:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .btn--danger { background: #7a2d2d; color: #fdd; }
+
+/* Зведена кнопка скидання: другий тап справді стирає гру (див. settingsModal). */
+.btn--armed {
+  background: #d04a4a;
+  color: #fff;
+}
 .btn--danger:hover { background: #9a3a3a; }
 .btn--cheat { background: #2d5a2d; color: #cfc; }
 .btn--cheat:hover { background: #3a7a3a; }

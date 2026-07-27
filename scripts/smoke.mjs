@@ -122,7 +122,7 @@ async function orderFirstKit() {
 // version is now discarded on load, which would silently boot every scenario
 // into a fresh apartment instead of the state it meant to test.
 const seedState = (upgrades, extra = {}) => ({
-  version: 2,
+  version: 3,
   savedAt: Date.now(),
   state: {
     money: 1000, lastPiggyAt: null, locationId: 'apartment', onboarded: true,
@@ -708,6 +708,43 @@ const nInnocent = await page.evaluate(() => {
 })
 console.log(`  cat sat in the delivery slot: carrying ${nInnocent.carrying}, box ${nInnocent.status}`)
 
+// ── R. Resetting the save ─────────────────────────────────
+//
+// Дві речі, які ламались нарізно: кнопка чекала на нативний confirm(), а тік
+// продовжував крутитись під час location.reload() і записував гру назад.
+console.log('\n### R. Reset')
+await boot(seedState({ solderingLevel: 2 }, { money: 4321, ordersPlaced: 7 }))
+const rBefore = await page.evaluate(() => ({
+  money: Math.round(globalThis.__world.game.money),
+  saved: !!localStorage.getItem('fpv_factory_save'),
+}))
+
+await page.click('#settings-btn')
+await page.waitForTimeout(300)
+const rArmedText = await page.evaluate(() => {
+  document.querySelector('#settings-reset').click()
+  return document.querySelector('#settings-reset').textContent.trim()
+})
+await page.waitForTimeout(200)
+// Один тап нічого не стирає — це підтвердження, а не дія.
+const rAfterOne = await page.evaluate(() => !!localStorage.getItem('fpv_factory_save'))
+
+await page.click('#settings-reset')
+await page.waitForTimeout(2500)
+const rAfter = await page.evaluate(() => {
+  const raw = localStorage.getItem('fpv_factory_save')
+  return {
+    money: Math.round(globalThis.__world.game.money),
+    soldering: globalThis.__world.game.upgrades.solderingLevel,
+    // Якщо гра вже щось записала після перезапуску — це має бути НОВА гра, а
+    // не та, яку щойно стерли.
+    persisted: raw ? Math.round(JSON.parse(raw).state.money) : null,
+  }
+})
+console.log(`  $${rBefore.money} saved=${rBefore.saved} → one tap: "${rArmedText}" ` +
+            `(saved=${rAfterOne}) → two taps: $${rAfter.money}, ` +
+            `persisted=${rAfter.persisted}`)
+
 // ── P. The quest tracker (П1) ─────────────────────────────
 console.log('\n### P. The quest tracker')
 await boot(seedState({ solderingLevel: 2 }, { money: 400, ordersPlaced: 3 }))
@@ -900,6 +937,9 @@ console.log(errors.length ? errors.join('\n---\n') : '(none)')
 
 const money = (s) => parseFloat(s.money.replace('$', ''))
 const checks = [
+  ['R: one tap only arms the button',     rAfterOne === true && /ще раз/.test(rArmedText)],
+  ['R: the second tap actually wipes it', rAfter.money !== rBefore.money && rAfter.soldering === 0],
+  ['R: and the old shop never comes back', rAfter.persisted !== rBefore.money],
   ['P: the tracker shows a goal with a money bar', !!pBefore?.title && !!pBefore?.meta],
   ['P: the bar reflects the money actually held', pBefore?.fill !== '0%' && pBefore?.fill !== '100%'],
   ['P: the list expands to the other goals', pExpanded > pCollapsed],

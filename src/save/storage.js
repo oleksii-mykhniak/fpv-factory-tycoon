@@ -8,7 +8,7 @@ const SAVE_KEY = 'fpv_factory_save'
 // Bumping this ALONE does not throw a save away: migrateState() in main.js has
 // been carrying old shapes forward since D6 and there is no reason to discard a
 // save we can still read. What throws a save away is raising the floor below.
-export const SAVE_VERSION = 2
+export const SAVE_VERSION = 3
 
 // The oldest schema this build will still load. Raise it — deliberately, and
 // only alongside a comment saying why — when a change is too structural to
@@ -17,7 +17,14 @@ export const SAVE_VERSION = 2
 // 2 (Stage 5 / F1): the third location changed id, upgrade tracks began
 // freezing, and the failure model moved onto the unattended path. A version-1
 // save is a shop built under rules the game no longer plays by.
-export const MIN_LOADABLE_VERSION = 2
+//
+// 3 (Stage 8 / П1–П4): the garage stopped being a location and became a room of
+// the flat, so the whole middle of the game is a different shape — different
+// floor plan, different money (a room is bought, a move used to reset the
+// balance), different ceilings. migrateState CAN carry an old save across, and
+// it does; what it cannot do is make the result a game anybody actually played.
+// Everyone starts the new one from the beginning, deliberately.
+export const MIN_LOADABLE_VERSION = 3
 
 export function saveGame(state, salesLog) {
   const payload = {

@@ -1,5 +1,5 @@
 const SETTINGS_KEY = 'fpv_settings'
-const APP_VERSION  = '0.1.0-dev'
+const APP_VERSION  = '0.2.0-dev'
 
 function loadSettings() {
   try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') }
@@ -87,15 +87,38 @@ export function createSettingsModal(root, {
   overlay.querySelector('#settings-add-money').addEventListener('click', () => {
     onAddMoney?.(1000)
   })
-  overlay.querySelector('#settings-reset').addEventListener('click', () => {
-    if (confirm('Скинути збереження? Прогрес буде втрачено.')) {
-      close()
-      onClearSave()
+  // Підтвердження двома тапами по тій самій кнопці, а не через `confirm()`.
+  // Нативний діалог тут залежить від того, чи обгортка WebView його показує: у
+  // Capacitor-збірці він може мовчки повернути false, і кнопка виглядає
+  // зламаною. Свій крок працює скрізь однаково й заразом дає передумати.
+  const resetBtn = overlay.querySelector('#settings-reset')
+  let armed = false
+  let armTimer = null
+
+  function disarm() {
+    armed = false
+    clearTimeout(armTimer)
+    resetBtn.textContent = 'Скинути збереження'
+    resetBtn.classList.remove('btn--armed')
+  }
+
+  resetBtn.addEventListener('click', () => {
+    if (!armed) {
+      armed = true
+      resetBtn.textContent = 'Точно скинути? Тапни ще раз'
+      resetBtn.classList.add('btn--armed')
+      // Кнопка не лишається зведеною назавжди: наступний випадковий тап за
+      // хвилину не має стирати гру.
+      armTimer = setTimeout(disarm, 4000)
+      return
     }
+    disarm()
+    close()
+    onClearSave()
   })
 
   function open() { overlay.removeAttribute('hidden') }
-  function close() { overlay.setAttribute('hidden', '') }
+  function close() { disarm(); overlay.setAttribute('hidden', '') }
 
   return { open, close, getSettings: () => ({ ...settings }) }
 }
