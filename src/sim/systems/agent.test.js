@@ -5,7 +5,7 @@ import { dispatch } from '../commands.js'
 import { SYSTEMS } from './index.js'
 import { deriveJobs, reconcile } from './job.js'
 import { EV } from '../events.js'
-import { apartment } from '../../defs/layouts/index.js'
+import { layoutFor } from '../../defs/layouts/index.js'
 import { Phase, createState, startAssembly } from '../../state/gameState.js'
 import { TICK_MS, MAX_CATCHUP_STEPS } from '../../state/config.js'
 import { taskDef } from '../../defs/tasks.js'
@@ -23,7 +23,7 @@ function world({ money = 20000, hire = [], upgrades = {}, benchLevel = 0 } = {})
     unlockedHalls: ['hall-1', 'hall-2', 'hall-3'],
     upgrades: { ...base.upgrades, benchLevel, ...upgrades },
   }
-  const w = createWorld({ state, salesLog: [] }, { now: T0, rng: () => 0.5, layout: apartment })
+  const w = createWorld({ state, salesLog: [] }, { now: T0, rng: () => 0.5, layout: layoutFor('apartment') })
   for (const role of hire) dispatch(w, 'hireWorker', { role })
   // Park the player far from every zone so the workers are unambiguously the
   // ones doing the work.
@@ -245,7 +245,7 @@ describe('sim/agentSystem — hired workers', () => {
     const base = createState()
     const w = createWorld(
       { state: { ...base, money: 9999, locationId: 'apartment' }, salesLog: [] },
-      { now: T0, rng: () => 0.5, layout: apartment },
+      { now: T0, rng: () => 0.5, layout: layoutFor('apartment') },
     )
     expect(() => dispatch(w, 'hireWorker', { role: 'courier' })).toThrow('немає де тримати')
   })

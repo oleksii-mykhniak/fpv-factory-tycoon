@@ -96,6 +96,15 @@ function migrateState(raw) {
   // back in the apartment.
   if (s.locationId === 'workshop') s = { ...s, locationId: 'factory' }
 
+  // П2: the garage stopped being an address and became a room of the flat. A
+  // save that stands in it comes home — with the room already built, because it
+  // was already paid for. The money is deliberately NOT reset: moving used to
+  // reset it, buying a room does not, and the player is on the buying side of
+  // that change.
+  if (s.locationId === 'garage') {
+    s = { ...s, locationId: 'apartment', unlockedRooms: ['flat', 'garage'] }
+  }
+
   return s
 }
 
@@ -248,6 +257,14 @@ const upgradeModal = createUpgradeModal(uiRoot, {
       uiDirty = true
       present()
     }
+  },
+  // Buying a room widens the flat: same rebuild as a hall (П2).
+  onUnlockRoom: (roomId) => {
+    send('unlockRoom', { roomId })
+    sceneRefs = rebuildScene({ getWorld: () => world, onIntent, layout: world.layout, world })
+    resetSceneSync()
+    uiDirty = true
+    present()
   },
   // Opening a hall is a different floor plan, exactly like a move — so it is
   // rebuilt exactly like one.

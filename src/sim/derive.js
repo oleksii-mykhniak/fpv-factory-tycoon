@@ -8,7 +8,7 @@
 
 import {
   KIT_TYPES, busyStations, idleStations, Phase, stationsOf, nextHireCost, freeSlots,
-  workersInRole, nextHallId, canUnlockHall,
+  workersInRole, nextHallId, canUnlockHall, nextRoomId, canUnlockRoom,
 } from '../state/gameState.js'
 import {
   GUIDANCE_ORDERS, GUIDANCE_SCRAP_RUNS, MANAGER_RESERVE, INCOME_WINDOW_MS,
@@ -63,7 +63,11 @@ export function upgradeNeedsAttention(game) {
   const nextLocId  = LOCATION_ORDER[currentIdx + 1]
   if (nextLocId && canMoveToLocation(game, nextLocId).can) return true
 
-  // On the factory the rack is also where a new hall is bought (F2).
+  // The rack is also where the floor plan is bought: a room at home (П2), a
+  // hall on the factory (F2).
+  const roomId = nextRoomId(game)
+  if (roomId && canUnlockRoom(game, roomId).can) return true
+
   const hallId = nextHallId(game)
   if (hallId && canUnlockHall(game, hallId).can) return true
 

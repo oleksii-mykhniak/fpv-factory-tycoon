@@ -13,6 +13,7 @@ import {
   calcPrice, calcQuality,
   canOpenPiggy, collectPiggy,
   moveToLocation, hireWorker, workersInRole,
+  openRoomIds, nextRoomId, canUnlockRoom, unlockRoom,
 } from './gameState.js'
 import {
   SOLDERING_UPGRADE_COSTS, CONSUMABLES_UPGRADE_COSTS,
@@ -23,10 +24,16 @@ import {
 import { trackMaxLevel, nextCost, levelData, UPGRADE_TRACKS } from './upgrades.js'
 import { roleLevelData, ROLE_ORDER, promoteCost } from '../defs/roles.js'
 import { FACTORY_HALLS } from '../defs/layouts/factory.js'
+import { roomDef } from '../defs/layouts/rooms.js'
+
+// Дім із прибудованим гаражем (П2) — те, що раніше було локацією `garage`.
+const withGarage = (extra = {}) => ({
+  ...createState(), unlockedRooms: ['flat', 'garage'], ...extra,
+})
 import { rescueKitAvailable, managerOrderChoice, incomePerSec } from '../sim/derive.js'
 import {
   LOCATIONS, LOCATION_ORDER, capFor, canMoveToLocation, currentLocation,
-  roleCapHere, maxWorkersHere, isTerminal, ruleAt,
+  roleCapHere, maxWorkersHere, isTerminal, ruleAt, hiringAllowed, kitsForLocation,
 } from './locations.js'
 
 const SOLDERING_MAX_LEVEL = trackMaxLevel('soldering')
@@ -825,8 +832,8 @@ describe('D7 — Реєстр локацій', () => {
     expect(createState().locationId).toBe('apartment')
   })
 
-  it('LOCATION_ORDER містить apartment, garage, factory', () => {
-    expect(LOCATION_ORDER).toEqual(['apartment', 'garage', 'factory'])
+  it('LOCATION_ORDER містить apartment і factory — гараж тепер кімната', () => {
+    expect(LOCATION_ORDER).toEqual(['apartment', 'factory'])
   })
 
   it('currentLocation(apartment): повертає дані квартири', () => {
@@ -846,10 +853,12 @@ describe('D7 — Реєстр локацій', () => {
     expect(capFor(s, 'soldering')).toBe(2)
   })
 
-  it('capFor: garage — storage cap = 1, logistics cap = 1', () => {
-    const s = { ...createState(), locationId: 'garage' }
+  it('capFor: гараж піднімає стелю вдома — storage 1, logistics 1', () => {
+    const s = withGarage()
     expect(capFor(s, 'storage')).toBe(1)
     expect(capFor(s, 'logistics')).toBe(1)
+    // Стеля — максимум по кімнатах, а не сума: паяльник 3, а не 2+3.
+    expect(capFor(s, 'soldering')).toBe(3)
   })
 
   it('capFor: factory — всі кепи = max', () => {
@@ -889,100 +898,123 @@ describe('D7 — Кепи апгрейдів за локацією', () => {
     expect(() => buyUpgrade(s, 'benches')).toThrow('заблоковано')
   })
 
-  it('після переїзду до garage: storage можна купити', () => {
-    let s = { ...createState(), money: 9999, locationId: 'garage' }
+  it('після прибудови гаража: storage можна купити', () => {
+    let s = withGarage({ money: 9999 })
     s = buyUpgrade(s, 'storage')
     expect(s.upgrades.storageLevel).toBe(1)
   })
 })
 
-describe('D7 — canMoveToLocation', () => {
-  it('apartment → garage: причини без грошей і солдерингу', () => {
-    const s = createState()  // money=120, solderingLevel=0
-    const { can, reasons } = canMoveToLocation(s, 'garage')
-    expect(can).toBe(false)
-    expect(reasons.length).toBeGreaterThan(0)
-    expect(reasons.some(r => r.includes('800'))).toBe(true)
+describe('П2 — гараж як кімната квартири', () => {
+  it('спершу гараж — це наступна кімната, і вона одна', () => {
+    const s = createState()
+    expect(openRoomIds(s)).toEqual(['flat'])
+    expect(nextRoomId(s)).toBe('garage')
+    expect(nextRoomId(withGarage())).toBeNull()
   })
 
-  it('apartment → garage: can=true коли є гроші + soldering=2', () => {
-    let s = { ...createState(), money: 9999, locationId: 'apartment' }
+  it('без грошей і паяльника — причини називають і те, і те', () => {
+    const { can, reasons } = canUnlockRoom(createState(), 'garage')  // money=120, soldering=0
+    expect(can).toBe(false)
+    expect(reasons.some(r => r.includes('800'))).toBe(true)
+    expect(reasons.some(r => r.includes('Паяльник'))).toBe(true)
+  })
+
+  it('can=true коли є гроші і soldering=2', () => {
+    let s = { ...createState(), money: 9999 }
     s = buyUpgrade(s, 'soldering')
     s = buyUpgrade(s, 'soldering')
-    const { can, reasons } = canMoveToLocation(s, 'garage')
+    const { can, reasons } = canUnlockRoom(s, 'garage')
     expect(can).toBe(true)
     expect(reasons).toHaveLength(0)
   })
 
-  it('apartment → garage: нема грошей — у причинах вартість', () => {
-    let s = { ...createState(), money: 100, locationId: 'apartment' }
-    s = { ...s, upgrades: { ...s.upgrades, solderingLevel: 2 } }
-    const { can, reasons } = canMoveToLocation(s, 'garage')
-    expect(can).toBe(false)
-    expect(reasons.some(r => r.includes('800'))).toBe(true)
+  it('кімната КУПУЄТЬСЯ: ціна списується, решта лишається', () => {
+    const s = { ...createState(), money: 5000,
+      upgrades: { ...createState().upgrades, solderingLevel: 2 } }
+    const after = unlockRoom(s, 'garage')
+    expect(after.money).toBe(5000 - roomDef('garage').cost)
+    expect(openRoomIds(after)).toEqual(['flat', 'garage'])
+    // Оригінал не змінився.
+    expect(s.money).toBe(5000)
+    expect(openRoomIds(s)).toEqual(['flat'])
   })
 
-  it('вже в garage: переїзд до apartment → помилка', () => {
-    const s = { ...createState(), locationId: 'garage' }
-    const { can, reasons } = canMoveToLocation(s, 'apartment')
-    expect(can).toBe(false)
-    expect(reasons[0]).toMatch(/Вже/)
+  it('гараж приносить найм, довгий кіт і другий верстак', () => {
+    const before = createState()
+    const after  = withGarage()
+    expect(hiringAllowed(before)).toBe(false)
+    expect(hiringAllowed(after)).toBe(true)
+    expect(kitsForLocation(before)).not.toContain('longrange_drone')
+    expect(kitsForLocation(after)).toContain('longrange_drone')
+    expect(capFor(before, 'benches')).toBe(0)
+    expect(capFor(after, 'benches')).toBe(1)
   })
 
-  it('невідома локація → can=false', () => {
-    expect(canMoveToLocation(createState(), 'moon').can).toBe(false)
+  it('кімнати відкриваються по черзі й не двічі', () => {
+    expect(canUnlockRoom({ ...createState(), money: 9999 }, 'flat').can).toBe(false)
+    expect(() => unlockRoom(withGarage({ money: 9999 }), 'garage')).toThrow('unlockRoom')
+  })
+
+  it('на фабриці кімнат не добудовують — там ростуть цехи', () => {
+    const f = { ...createState(), locationId: 'factory', money: 9999 }
+    expect(canUnlockRoom(f, 'garage').can).toBe(false)
   })
 })
 
 describe('D7 — moveToLocation', () => {
-  it('переїзд до garage: каса скидається до стартової суми локації', () => {
-    let s = { ...createState(), money: 9999, locationId: 'apartment' }
-    s = buyUpgrade(s, 'soldering')
-    s = buyUpgrade(s, 'soldering')
-    s = moveToLocation(s, 'garage')
-    expect(s.locationId).toBe('garage')
-    expect(s.money).toBe(LOCATIONS.garage.startMoney)
+  const readyForFactory = (extra = {}) => withGarage({
+    money: 9999,
+    upgrades: { ...createState().upgrades, solderingLevel: 3, consumablesLevel: 2 },
+    ...extra,
+  })
+
+  it('переїзд на фабрику: каса скидається до стартової суми локації', () => {
+    const s = moveToLocation(readyForFactory(), 'factory')
+    expect(s.locationId).toBe('factory')
+    expect(s.money).toBe(LOCATIONS.factory.startMoney)
   })
 
   it('скидання не залежить від того, скільки було накопичено', () => {
-    const rich = { ...createState(), money: 500000, locationId: 'apartment',
-      upgrades: { ...createState().upgrades, solderingLevel: 2 } }
-    const poor = { ...rich, money: LOCATIONS.garage.unlockCost }
-    expect(moveToLocation(rich, 'garage').money).toBe(moveToLocation(poor, 'garage').money)
+    const rich = readyForFactory({ money: 500000 })
+    const poor = readyForFactory({ money: LOCATIONS.factory.unlockCost })
+    expect(moveToLocation(rich, 'factory').money).toBe(moveToLocation(poor, 'factory').money)
   })
 
   it('unlockCost лишається порогом входу, хоч і не списується', () => {
-    const s = { ...createState(), money: LOCATIONS.garage.unlockCost - 1,
-      upgrades: { ...createState().upgrades, solderingLevel: 2 } }
-    expect(() => moveToLocation(s, 'garage')).toThrow('moveToLocation')
+    const s = readyForFactory({ money: LOCATIONS.factory.unlockCost - 1 })
+    expect(() => moveToLocation(s, 'factory')).toThrow('moveToLocation')
   })
 
-  it('після переїзду до garage: capFor storage = 1', () => {
-    let s = { ...createState(), money: 9999, locationId: 'apartment' }
-    s = { ...s, upgrades: { ...s.upgrades, solderingLevel: 2 } }
-    s = moveToLocation(s, 'garage')
-    expect(capFor(s, 'storage')).toBe(1)
+  it('після переїзду на фабрику: capFor storage = 2', () => {
+    const s = moveToLocation(readyForFactory(), 'factory')
+    expect(capFor(s, 'storage')).toBe(2)
   })
 
   it('moveToLocation кидає якщо умови не виконані', () => {
     const s = createState()  // solderingLevel=0, money=120
-    expect(() => moveToLocation(s, 'garage')).toThrow('moveToLocation')
+    expect(() => moveToLocation(s, 'factory')).toThrow('moveToLocation')
+  })
+
+  it('переїзд на фабрику вимагає прибудованого гаража', () => {
+    const noGarage = { ...createState(), money: 9999,
+      upgrades: { ...createState().upgrades, solderingLevel: 3, consumablesLevel: 2 } }
+    const { can, reasons } = canMoveToLocation(noGarage, 'factory')
+    expect(can).toBe(false)
+    expect(reasons.some(r => r.includes('Гараж'))).toBe(true)
   })
 
   it('moveToLocation не мутує оригінальний стан', () => {
-    let s = { ...createState(), money: 9999, locationId: 'apartment' }
-    s = { ...s, upgrades: { ...s.upgrades, solderingLevel: 2 } }
-    const locBefore  = s.locationId
-    const monBefore  = s.money
-    moveToLocation(s, 'garage')
+    const s = readyForFactory()
+    const locBefore = s.locationId
+    const monBefore = s.money
+    moveToLocation(s, 'factory')
     expect(s.locationId).toBe(locBefore)
     expect(s.money).toBe(monBefore)
   })
 
-  it('garage → factory: потрібні soldering=3 і consumables=2', () => {
-    const s = { ...createState(), money: 9999, locationId: 'garage',
-      upgrades: { ...createState().upgrades, solderingLevel: 3, consumablesLevel: 2 } }
-    expect(moveToLocation(s, 'factory').locationId).toBe('factory')
+  it('невідома локація → can=false', () => {
+    expect(canMoveToLocation(createState(), 'moon').can).toBe(false)
   })
 
   it('старий save без locationId: createState дефолт — apartment', () => {
@@ -1094,7 +1126,8 @@ describe('C3: кілька станцій', () => {
 
     // Гараж, а не фабрика: на фабриці смітника немає взагалі (F1.3), тож там
     // цей тест перевіряв би не те правило.
-    const two = { ...loadStation(twoStations(), 'station-0'), locationId: 'garage' }
+    const two = { ...loadStation(twoStations(), 'station-0'),
+      locationId: 'apartment', unlockedRooms: ['flat', 'garage'] }
     expect(startScrap(two).scrapAvailable).toBe(true)
   })
 
@@ -1176,7 +1209,7 @@ describe('Ліміт персоналу — на роль, не на цех', ()
   const at = (locationId) => ({ ...createState(), locationId, money: 99999 })
 
   it('гараж: по одному на роль, менеджер — ні', () => {
-    const s = at('garage')
+    const s = withGarage({ money: 99999 })
     expect(roleCapHere(s, 'courier')).toBe(1)
     expect(roleCapHere(s, 'tech')).toBe(1)
     expect(roleCapHere(s, 'seller')).toBe(1)
@@ -1184,14 +1217,14 @@ describe('Ліміт персоналу — на роль, не на цех', ()
   })
 
   it('другий кур\'єр у гаражі відхиляється, а технік — ні', () => {
-    let s = hireWorker(at('garage'), 'courier')
+    let s = hireWorker(withGarage({ money: 99999 }), 'courier')
     expect(() => hireWorker(s, 'courier')).toThrow('не поміститься')
     s = hireWorker(s, 'tech')
     expect(workersInRole(s, 'tech')).toHaveLength(1)
   })
 
   it('менеджер наймається лише в майстерні', () => {
-    expect(() => hireWorker(at('garage'), 'manager')).toThrow('не поміститься')
+    expect(() => hireWorker(withGarage({ money: 99999 }), 'manager')).toThrow('не поміститься')
     expect(workersInRole(hireWorker(at('factory'), 'manager'), 'manager')).toHaveLength(1)
   })
 
@@ -1225,10 +1258,10 @@ describe('Ліміт персоналу — на роль, не на цех', ()
 // ── F1 — фабрика як остання локація ──────────────────────
 
 describe('F1 — фабрика', () => {
-  const toFactory = () => moveToLocation({
-    ...createState(), money: 9999, locationId: 'garage',
+  const toFactory = () => moveToLocation(withGarage({
+    money: 9999,
     upgrades: { ...createState().upgrades, solderingLevel: 3, consumablesLevel: 2 },
-  }, 'factory')
+  }), 'factory')
 
   it('фабрика — термінальна: після неї локацій немає', () => {
     expect(LOCATION_ORDER[LOCATION_ORDER.length - 1]).toBe('factory')
@@ -1258,10 +1291,10 @@ describe('F1 — фабрика', () => {
 
   it('заморожування знімає знімок, а не читає рівень наживо', () => {
     // Приїхав з нижчим рівнем — стеля нижча, і покупка вже неможлива.
-    const low = moveToLocation({
-      ...createState(), money: 9999, locationId: 'garage',
+    const low = moveToLocation(withGarage({
+      money: 9999,
       upgrades: { ...createState().upgrades, solderingLevel: 3, consumablesLevel: 2 },
-    }, 'factory')
+    }), 'factory')
     const dropped = { ...low, upgrades: { ...low.upgrades, solderingLevel: 1 } }
     // Стеля лишилась 3 — знімок не переписується заднім числом.
     expect(capFor(dropped, 'soldering')).toBe(3)
@@ -1294,7 +1327,7 @@ describe('F1.5 — аварійна партія за $0', () => {
 
   it('не зʼявляється там, де є смітник або скарбничка', () => {
     expect(rescueKitAvailable(stuckAt('apartment'))).toBe(false)
-    expect(rescueKitAvailable(stuckAt('garage'))).toBe(false)
+    expect(rescueKitAvailable({ ...stuckAt('apartment'), unlockedRooms: ['flat', 'garage'] })).toBe(false)
   })
 
   it('не зʼявляється, поки є гроші на найдешевший кіт', () => {

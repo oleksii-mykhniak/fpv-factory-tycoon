@@ -15,6 +15,7 @@ import {
   buyUpgrade as buyUpgradeState, moveToLocation as moveToLocationState,
   canOpenPiggy, collectPiggy as collectPiggyState,
   startScrap as startScrapState, cancelScrap, unlockHall as unlockHallState,
+  unlockRoom as unlockRoomState,
   calcPrice, getStation, focusStation, idleStations, syncStations,
   hireWorker as hireWorkerState, nextHireCost,
 } from '../state/gameState.js'
@@ -141,6 +142,18 @@ const HANDLERS = {
     world.game = syncStations(world.game, stationCountFor(world.game, world.layout))
     rebuildStationGeometry(world)
     emit(events, EV.LOCATION_CHANGED, { locationId })
+  },
+
+  // Buy the next room of the flat (П2). The garage used to be a move; the only
+  // thing that changed is that the world grows instead of being replaced —
+  // which is why this is the hall command with a different noun.
+  unlockRoom(world, { roomId }, events) {
+    world.game = unlockRoomState(world.game, roomId)
+    applyLayout(world, layoutFor(world.game.locationId, world.game))
+    world.game = syncStations(world.game, stationCountFor(world.game, world.layout))
+    rebuildStationGeometry(world)
+    emit(events, EV.ROOM_UNLOCKED, { roomId })
+    emit(events, EV.STATE_DIRTY)
   },
 
   // Open the next factory hall (F2). Structurally identical to a move — a

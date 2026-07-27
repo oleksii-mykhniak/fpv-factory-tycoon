@@ -9,21 +9,23 @@
 import { describe, it, expect } from 'vitest'
 import { createWorld } from '../sim/world.js'
 import { createState } from '../state/gameState.js'
-import { layoutFor, LAYOUTS } from '../defs/layouts/index.js'
+import { layoutFor } from '../defs/layouts/index.js'
 import { findPath } from './astar.js'
 import { nearestWalkable, worldToCell, isWalkable } from './navGrid.js'
 
 // Every location, with every bench it can hold actually built.
 function worlds() {
   const out = []
-  for (const id of Object.keys(LAYOUTS)) {
+  // Home, before and after the garage is built (П2): the wing is reached
+  // through a doorway, which is exactly the kind of geometry that fails silently.
+  for (const rooms of [['flat'], ['flat', 'garage']]) {
     const base = createState()
     const state = {
-      ...base, locationId: id, money: 99999,
+      ...base, locationId: 'apartment', money: 99999, unlockedRooms: rooms,
       upgrades: { ...base.upgrades, benchLevel: 2 },
     }
-    out.push([id, createWorld({ state, salesLog: [] },
-      { now: 1e6, rng: () => 0.5, layout: layoutFor(id, state) })])
+    out.push([`apartment×${rooms.length}`, createWorld({ state, salesLog: [] },
+      { now: 1e6, rng: () => 0.5, layout: layoutFor('apartment', state) })])
   }
   for (const halls of [['hall-1'], ['hall-1', 'hall-2'], ['hall-1', 'hall-2', 'hall-3']]) {
     const base = createState()

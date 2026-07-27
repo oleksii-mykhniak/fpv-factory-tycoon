@@ -5,7 +5,7 @@ import { dispatch } from '../commands.js'
 import { SYSTEMS } from './index.js'
 import { dwellProgress } from './zone.js'
 import { EV } from '../events.js'
-import { apartment } from '../../defs/layouts/index.js'
+import { layoutFor } from '../../defs/layouts/index.js'
 import { Phase, KIT_TYPES, createState } from '../../state/gameState.js'
 import { TICK_MS, MAX_CATCHUP_STEPS, ZONE_DWELL_BENCH_MS } from '../../state/config.js'
 
@@ -22,7 +22,9 @@ const zone = (id) => _w.zones.find(z => z.id === id)
 function world(overrides = {}) {
   const base  = createState()
   const state = { ...base, money: 5000, ...overrides }
-  _w = createWorld({ state, salesLog: [] }, { now: T0, rng: () => 0.5, layout: apartment })
+  // The layout is built FROM the state, so passing `unlockedRooms` in the
+  // overrides gets you the flat with its garage attached (П2).
+  _w = createWorld({ state, salesLog: [] }, { now: T0, rng: () => 0.5, layout: layoutFor('apartment', state) })
   return _w
 }
 
@@ -247,12 +249,17 @@ describe('sim/interactions — the full loop without a single tap', () => {
     expect(events.filter(e => e.t === EV.PANEL_REQUESTED)).toHaveLength(1)
   })
 
-  it('S2: the job board is dead where nobody may be hired', () => {
-    // The apartment is a one-person shop, so the board must not even light up.
+  it('S2/П2: there is no job board at all until the garage is built', () => {
+    // The flat is a one-person shop. A board that can only say no used to
+    // stand in the living room; now it does not exist until the room that
+    // brings the vacancies does.
     const w = world()
-    standAt(w, zone('jobboard'))
-    const events = run(w, 3000)
-    expect(events.filter(e => e.t === EV.PANEL_REQUESTED)).toHaveLength(0)
+    expect(zone('jobboard')).toBeUndefined()
+
+    const g = world({ unlockedRooms: ['flat', 'garage'] })
+    standAt(g, zone('jobboard'))
+    const events = run(g, 3000)
+    expect(events.filter(e => e.t === EV.PANEL_REQUESTED)).toHaveLength(1)
   })
 
   it('S3: the same desk serves the player a panel and the manager an order', () => {

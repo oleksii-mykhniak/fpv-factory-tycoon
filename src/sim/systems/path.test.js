@@ -3,7 +3,11 @@ import { createWorld, createAgent, rebuildStationGeometry } from '../world.js'
 import { advance } from '../loop.js'
 import { SYSTEMS } from './index.js'
 import { planPath, stopPath } from './path.js'
-import { apartment, rect } from '../../defs/layouts/index.js'
+import { layoutFor, rect } from '../../defs/layouts/index.js'
+
+// The flat as the game boots it — every landmark below is read off the real
+// floor plan, never from literals.
+const apartment = layoutFor('apartment')
 import { buildGrid } from '../../nav/navGrid.js'
 import { createState, syncStations } from '../../state/gameState.js'
 import { TICK_MS, MAX_CATCHUP_STEPS } from '../../state/config.js'
@@ -18,7 +22,7 @@ function world({ benchLevel = 0 } = {}) {
     unlockedHalls: ['hall-1', 'hall-2', 'hall-3'],
     upgrades: { ...base.upgrades, benchLevel },
   }
-  return createWorld({ state, salesLog: [] }, { now: 1e6, rng: () => 0.5, layout: apartment })
+  return createWorld({ state, salesLog: [] }, { now: 1e6, rng: () => 0.5, layout: layoutFor('apartment') })
 }
 
 const player = (w) => w.agents.find(a => a.kind === 'player')

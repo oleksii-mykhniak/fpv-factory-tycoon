@@ -3,14 +3,17 @@ import { ruleAt } from '../state/locations.js'
 import { rescueKitAvailable, RESCUE_KIT_ID } from '../sim/derive.js'
 import { PRICE_BASE_COEFF, PRICE_QUALITY_COEFF, STORAGE_SLOTS_BY_LEVEL } from '../state/config.js'
 import { kitsForLocation, LOCATIONS } from '../state/locations.js'
+import { roomDef } from '../defs/layouts/rooms.js'
 
 function isKitLocked(kit, locationKitIds) {
   return !locationKitIds.includes(kit.id)
 }
 
 function lockReasonText(kit) {
-  const locId = kit.unlock?.location
-  const name  = locId ? (LOCATIONS[locId]?.name ?? locId) : 'іншій локації'
+  const { location: locId, room: roomId } = kit.unlock ?? {}
+  const name = roomId ? (roomDef(roomId)?.name ?? roomId)
+             : locId  ? (LOCATIONS[locId]?.name ?? locId)
+             : 'іншій локації'
   return `🔒 Відкривається в ${name}`
 }
 

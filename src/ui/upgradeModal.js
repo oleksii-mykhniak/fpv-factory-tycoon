@@ -1,12 +1,17 @@
 import { UPGRADE_TRACKS } from '../state/upgrades.js'
-import { openHallIds, nextHallId, canUnlockHall } from '../state/gameState.js'
+import {
+  openHallIds, nextHallId, canUnlockHall, openRoomIds, nextRoomId, canUnlockRoom,
+} from '../state/gameState.js'
 import { FACTORY_HALLS, hallDef } from '../defs/layouts/factory.js'
+import { APARTMENT_ROOMS, roomDef } from '../defs/layouts/rooms.js'
 import {
   currentLocation, LOCATIONS, LOCATION_ORDER, capFor, canMoveToLocation, startMoneyAt,
   isTerminal,
 } from '../state/locations.js'
 
-export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation, onUnlockHall }) {
+export function createUpgradeModal(root, {
+  onBuyUpgrade, onMoveToLocation, onUnlockHall, onUnlockRoom,
+}) {
   const overlay = document.createElement('div')
   overlay.id = 'upgrade-modal'
   overlay.className = 'modal-overlay'
@@ -83,6 +88,40 @@ export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation, onUnl
         </div>
       `
     }).join('')
+
+    // ── Rooms of the flat (П2) ────────────────────────────
+    // Written like the hall card below, because it is the same offer: pay, and
+    // the floor plan grows. The one difference is worth spelling out on the
+    // card — this is a purchase, so the rest of the money stays yours.
+    let roomHTML = ''
+    const nextRoom = nextRoomId(state)
+    if (nextRoom) {
+      const room = roomDef(nextRoom)
+      const { can, reasons } = canUnlockRoom(state, nextRoom)
+      const openCount = openRoomIds(state).length
+      roomHTML = `
+        <div class="shop-section shop-section--location">
+          <div class="shop-section__title">
+            🏠 Житло — кімнат ${openCount}/${APARTMENT_ROOMS.length}
+          </div>
+          <div class="shop-upgrade">
+            <span class="shop-upgrade__current">Наступна: ${room.emoji ?? ''} ${room.name}</span>
+            <button class="btn btn--upgrade" id="room-btn" ${can ? '' : 'disabled'}>
+              Прибудувати ${room.name} — $${room.cost}
+            </button>
+            ${reasons.length
+              ? `<p class="upgrade-effect-hint">${reasons.join(' · ')}</p>`
+              : '<p class="upgrade-effect-hint">Умови виконані — можна прибудовувати!</p>'}
+            <p class="upgrade-effect-hint">
+              +${room.benches} верстак, місця для ${
+                Object.values(room.workerCaps ?? {}).reduce((a, b) => a + b, 0)} людей,
+              вищі ліміти поліпшень
+            </p>
+            <p class="upgrade-effect-hint">Це покупка, не переїзд — решта грошей лишається з вами</p>
+          </div>
+        </div>
+      `
+    }
 
     // ── Location section ──────────────────────────────────
     const loc        = currentLocation(state)
@@ -161,11 +200,17 @@ export function createUpgradeModal(root, { onBuyUpgrade, onMoveToLocation, onUnl
 
     // Hiring moved out to its own panel behind the job board (S2): the rack is
     // where tools are bought, the board by the door is where people are taken on.
-    body.innerHTML = trackHTML + locationHTML
+    body.innerHTML = trackHTML + roomHTML + locationHTML
 
     body.querySelectorAll('[data-upgrade]').forEach(btn => {
       btn.addEventListener('click', () => onBuyUpgrade(btn.dataset.upgrade))
     })
+    const roomBtn = body.querySelector('#room-btn')
+    if (roomBtn) roomBtn.addEventListener('click', () => {
+      const nextId = nextRoomId(state)
+      if (nextId) { onUnlockRoom?.(nextId); close() }
+    })
+
     const hallBtn = body.querySelector('#hall-btn')
     if (hallBtn) hallBtn.addEventListener('click', () => {
       const nextId = nextHallId(state)

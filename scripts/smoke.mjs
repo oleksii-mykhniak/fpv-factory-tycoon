@@ -192,7 +192,7 @@ const bTrash = await log('trash zone with salvage ordered')
 
 // ── D. Two stations at once (C3) ──────────────────────────
 console.log('\n### D. Two benches in parallel')
-await boot(seedState({ solderingLevel: 2, benchLevel: 1, storageLevel: 1 }, { locationId: 'garage' }))
+await boot(seedState({ solderingLevel: 2, benchLevel: 1, storageLevel: 1 }, { unlockedRooms: ['flat', 'garage'] }))
 const dCount = await page.evaluate(() => globalThis.__world.game.stations.length)
 const dZones = await page.evaluate(() =>
   globalThis.__world.zones.filter(z => z.kind === 'bench').map(z => z.id))
@@ -220,7 +220,7 @@ const dDone = await log('both benches worked')
 
 // ── E. Navigation (C4) ────────────────────────────────────
 console.log('\n### E. A* navigation')
-await boot(seedState({ benchLevel: 1 }, { locationId: 'garage' }))
+await boot(seedState({ benchLevel: 1 }, { unlockedRooms: ['flat', 'garage'] }))
 const eGrid = await page.evaluate(() => {
   const g = globalThis.__world.navGrid
   const blocked = g.data.reduce((n, v) => n + v, 0)
@@ -228,19 +228,24 @@ const eGrid = await page.evaluate(() => {
 })
 console.log(`  grid ${eGrid.cols}×${eGrid.rows} @${eGrid.cell}px, ${eGrid.blocked} blocked cells`)
 
-// Walk the player from the flat, through the door, to the mailbox — a route
-// that has to round two benches and thread the doorway.
-await page.evaluate(() => {
+// Walk the player from the far end of the garage, through two doorways, out
+// to the post box — the longest route the flat has (П2). The destination is
+// read off the layout, never written as a literal: the floor plan moves.
+const eGoal = await page.evaluate(() => {
+  const p = globalThis.__world.layout.props.mailbox
+  return { x: p.cx, y: p.cy }
+})
+await page.evaluate((goal) => {
   const w = globalThis.__world
   const a = w.agents.find(x => x.kind === 'player')
-  a.x = 660; a.y = 150            // above the benches
-  a.pathTarget = { x: 230, y: 1450 }   // garage mailbox
-})
+  a.x = w.layout.world.w - 120; a.y = 150   // far corner of the garage
+  a.pathTarget = goal
+}, eGoal)
 const eStart = Date.now()
-await page.waitForFunction(() => {
+await page.waitForFunction((goal) => {
   const a = globalThis.__world.agents.find(x => x.kind === 'player')
-  return Math.hypot(a.x - 230, a.y - 1450) < 45
-}, null, { timeout: 40000 }).catch(() => {})
+  return Math.hypot(a.x - goal.x, a.y - goal.y) < 45
+}, eGoal, { timeout: 40000 }).catch(() => {})
 const eArrived = await page.evaluate(() => {
   const w = globalThis.__world
   const a = w.agents.find(x => x.kind === 'player')
@@ -253,8 +258,8 @@ console.log(`  arrived at (${eArrived.x},${eArrived.y}) in ${((Date.now() - eSta
 
 // ── F. Hired workers run the shop (C5) ────────────────────
 console.log('\n### F. The shop runs without the player')
-// Hiring starts at the garage — the apartment is a one-person shop (C7 fix).
-await boot(seedState({}, { money: 20000, locationId: 'garage' }))
+// Hiring starts with the garage — the flat is a one-person shop (П2).
+await boot(seedState({}, { money: 20000, unlockedRooms: ['flat', 'garage'] }))
 // Hire all three through the real UI, not by seeding state.
 // Hiring lives behind the job board now (S2), not in the upgrade panel.
 await openPanelAt('jobboard')
@@ -330,28 +335,43 @@ await page.waitForTimeout(14000)
 const gUnattended = await log('semi-auto bench, player standing there')
 
 // ── H. Moving house rebuilds the shop (C7) ────────────────
-console.log('\n### H. A move is a different room')
+console.log('\n### H. The flat grows a garage, then you move out')
 await boot(seedState({ solderingLevel: 2 }, { money: 5000 }))
-const hBefore = await page.evaluate(() => ({
-  loc: globalThis.__world.game.locationId,
+const plan = () => page.evaluate(() => ({
+  loc:   globalThis.__world.game.locationId,
+  rooms: (globalThis.__world.game.unlockedRooms ?? []).join('+'),
   world: globalThis.__world.bounds.w,
   slots: globalThis.__world.layout.stationSlots.length,
-  grid: globalThis.__world.navGrid.cols,
+  grid:  globalThis.__world.navGrid.cols,
+  money: Math.floor(globalThis.__world.game.money),
+  board: globalThis.__world.zones.some(z => z.kind === 'jobboard'),
 }))
+const hStart = await plan()
+
+// П2: the garage is bought, not moved into — the world gets wider and the rest
+// of the money stays in the bank.
+await openPanelAt('rack')
+await page.click('#room-btn').catch(() => {})
+await page.waitForTimeout(1200)
+const hRoom = await plan()
+console.log(`  ${hStart.rooms} (${hStart.world}w, ${hStart.slots} slots, board ${hStart.board}, $${hStart.money})` +
+            ` → ${hRoom.rooms} (${hRoom.world}w, ${hRoom.slots} slots, board ${hRoom.board}, $${hRoom.money})`)
+
+// Now the move is unlocked (the factory wants a garage behind you).
+await page.evaluate(() => {
+  const w = globalThis.__world
+  w.game = { ...w.game, money: 9000,
+    upgrades: { ...w.game.upgrades, solderingLevel: 3, consumablesLevel: 2 } }
+})
+const hBefore = await plan()
 await openPanelAt('rack')
 await page.click('#move-btn').catch(() => {})
 await page.waitForTimeout(1500)
-const hAfter = await page.evaluate(() => {
+const hAfter = { ...(await plan()), playerInside: await page.evaluate(() => {
   const w = globalThis.__world
   const p = w.agents.find(a => a.kind === 'player')
-  return {
-    loc: w.game.locationId,
-    world: w.bounds.w,
-    slots: w.layout.stationSlots.length,
-    grid: w.navGrid.cols,
-    playerInside: p.x < w.bounds.w && p.y < w.bounds.h,
-  }
-})
+  return p.x < w.bounds.w && p.y < w.bounds.h
+}) }
 console.log(`  ${hBefore.loc} (${hBefore.world}w, ${hBefore.slots} slots, grid ${hBefore.grid})` +
             ` → ${hAfter.loc} (${hAfter.world}w, ${hAfter.slots} slots, grid ${hAfter.grid})`)
 
@@ -377,6 +397,18 @@ console.log(`  ${iScene.loc}: ${iScene.stations} slots, zones=${[...new Set(iSce
 await boot(seedState({ solderingLevel: 2 }, { locationId: 'workshop' }))
 const iMigrated = await page.evaluate(() => globalThis.__world.game.locationId)
 console.log(`  old save locationId: workshop → ${iMigrated}`)
+
+// And one that says "garage" comes home with the room already built (П2),
+// keeping the money it had — it paid for that address once already.
+await boot(seedState({ solderingLevel: 2 }, { locationId: 'garage', money: 3210 }))
+const iGarage = await page.evaluate(() => ({
+  loc:   globalThis.__world.game.locationId,
+  rooms: (globalThis.__world.game.unlockedRooms ?? []).join('+'),
+  money: Math.floor(globalThis.__world.game.money),
+  board: globalThis.__world.zones.some(z => z.kind === 'jobboard'),
+}))
+console.log(`  old save locationId: garage → ${iGarage.loc} [${iGarage.rooms}] ` +
+            `$${iGarage.money}, board ${iGarage.board}`)
 
 // A burnt kit has to be clearable — until F1.5 nothing could clear one.
 await boot(seedState({ solderingLevel: 2 }, { locationId: 'factory', money: 4000 }))
@@ -795,7 +827,7 @@ const checks = [
   ['D: the attended bench reached a conclusion',
    dDone.stations.split('/')[1] !== 'ASSEMBLY'],
   ['E: nav grid rasterised the world',    eGrid.blocked > 0 && eGrid.cols > 30],
-  ['E: pathed across the flat and out',   Math.hypot(eArrived.x - 230, eArrived.y - 1450) < 60],
+  ['E: pathed across the flat and out',   Math.hypot(eArrived.x - eGoal.x, eArrived.y - eGoal.y) < 60],
   ['E: never ended inside geometry',      eArrived.stuck === false],
   ['E: routes were cached',               eArrived.cached > 0],
   ['F: hired a full staff via the UI',    fHired.roster.length === 2 && fHired.agents === 2],
@@ -813,10 +845,14 @@ const checks = [
   // the player tapping anything — a burnt kit is still the bench doing the work.
   ['G: an upgraded bench does the work for you', gUnattended.phase !== 'ASSEMBLY'],
   ['G: a hands-off iron offers no mini-game', gUnattended.solderOpen === false],
-  ['H: the move actually happened',       hAfter.loc === 'garage'],
-  ['H: the room is a different size',     hAfter.world > hBefore.world],
-  ['H: more bench slots than before',     hAfter.slots > hBefore.slots],
-  ['H: nav grid rebuilt for the new room', hAfter.grid > hBefore.grid],
+  ['H: the garage was bought, not moved into', hRoom.loc === 'apartment' && hRoom.rooms.includes('garage')],
+  ['H: buying it widened the world',      hRoom.world > hStart.world],
+  ['H: and brought a second bench slot',  hRoom.slots > hStart.slots],
+  ['H: and the job board with it',        hStart.board === false && hRoom.board === true],
+  ['H: the money left over stays yours',  hRoom.money > 0 && hRoom.money < hStart.money],
+  ['H: the move actually happened',       hAfter.loc === 'factory'],
+  ['H: the room is a different one',      hAfter.world !== hBefore.world],
+  ['H: nav grid rebuilt for the new room', hAfter.grid !== hBefore.grid],
   ['H: the player is inside the new room', hAfter.playerInside === true],
   ['I: the factory has no salvage bin',   !iScene.zones.includes('trashbin')],
   ['I: the factory has no piggy bank',    !iScene.zones.includes('piggy')],

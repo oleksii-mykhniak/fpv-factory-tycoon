@@ -8,7 +8,7 @@ import {
   Phase, DeliveryStatus, KIT_TYPES, createState, startAssembly,
 } from '../state/gameState.js'
 import { TICK_MS, MAX_CATCHUP_STEPS } from '../state/config.js'
-import { apartment } from '../defs/layouts/index.js'
+import { layoutFor } from '../defs/layouts/index.js'
 
 // Deterministic rng: cycles through a fixed sequence so quality outcomes and
 // overheat rolls are reproducible.
@@ -135,7 +135,7 @@ describe('sim/stationSystem', () => {
       ...base, money: 5000, upgrades,
       stations: base.stations,
     }
-    const w = createWorld({ state, salesLog: [] }, { now: T0, rng: seq([0.5]), layout: apartment })
+    const w = createWorld({ state, salesLog: [] }, { now: T0, rng: seq([0.5]), layout: layoutFor('apartment') })
     dispatch(w, 'order', { kitId })
     run(w, KIT_TYPES[kitId].deliveryMs + 500)
     dispatch(w, 'pickup', { deliveryId: w.game.deliveries[0].id })
@@ -313,7 +313,7 @@ describe('sim — full cycle, headless', () => {
     const w = createWorld({
       state: { ...base, money: 500, upgrades: { ...base.upgrades, solderingLevel: 2 } },
       salesLog: [],
-    }, { now: T0, rng: seq([0.5]), layout: apartment })
+    }, { now: T0, rng: seq([0.5]), layout: layoutFor('apartment') })
     const startMoney = w.game.money
 
     dispatch(w, 'order', { kitId: 'mini_drone' })

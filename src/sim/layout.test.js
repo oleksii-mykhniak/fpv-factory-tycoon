@@ -1,33 +1,59 @@
 import { describe, it, expect } from 'vitest'
 import { createWorld, applyLayout } from './world.js'
 import { dispatch } from './commands.js'
-import { LAYOUTS, layoutFor } from '../defs/layouts/index.js'
+import { layoutFor } from '../defs/layouts/index.js'
 import { createState } from '../state/gameState.js'
 
 const boot = (locationId = 'apartment', extra = {}) => {
   const base = createState()
   const state = { ...base, money: 20000, locationId, ...extra }
-  return createWorld({ state, salesLog: [] }, { now: 1e6, rng: () => 0.5, layout: layoutFor(locationId) })
+  return createWorld({ state, salesLog: [] },
+    { now: 1e6, rng: () => 0.5, layout: layoutFor(locationId, state) })
 }
 
+// Every floor plan the game can be in: home with and without its garage (П2),
+// the factory with one hall and with all three (F2).
+const GARAGE = { unlockedRooms: ['flat', 'garage'] }
+const homes  = () => [layoutFor('apartment'), layoutFor('apartment', GARAGE)]
+const plans  = () => [
+  ...homes(),
+  layoutFor('factory'),
+  layoutFor('factory', { unlockedHalls: ['hall-1', 'hall-2', 'hall-3'] }),
+]
+
 describe('C7 — locations are floor plans, not palettes', () => {
-  it('each location is a different sized room with its own bench slots', () => {
-    const all = [...Object.values(LAYOUTS), layoutFor('factory')]
-    expect(new Set(all.map(l => l.world.w)).size).toBe(3)
-    expect(LAYOUTS.apartment.stationSlots).toHaveLength(1)
-    expect(LAYOUTS.garage.stationSlots).toHaveLength(2)
+  it('each floor plan is a different sized room with its own bench slots', () => {
+    const [flat, withGarage] = homes()
+    expect(new Set([flat, withGarage, layoutFor('factory')].map(l => l.world.w)).size).toBe(3)
+    // The flat starts with one bench; the garage brings the second with it (П2).
+    expect(flat.stationSlots).toHaveLength(1)
+    expect(withGarage.stationSlots).toHaveLength(2)
+    expect(withGarage.world.w).toBeGreaterThan(flat.world.w)
     // The factory opens with one hall; the rest are bought (F2).
     expect(layoutFor('factory').stationSlots).toHaveLength(2)
   })
 
+  it('the garage brings its own door, its bench and the job board', () => {
+    const [flat, withGarage] = homes()
+    // Hiring is a thing that exists in the garage, so the board is too.
+    expect(flat.zones.some(z => z.kind === 'jobboard')).toBe(false)
+    expect(withGarage.zones.filter(z => z.kind === 'jobboard')).toHaveLength(1)
+    // Two holes in the FRONT wall now — the front door and the garage door —
+    // plus the doorway between the flat and the garage inside.
+    const onFrontWall = (l) => l.doorVoids.filter(v => Math.abs(v.cy - l.door.y) < 40).length
+    expect(onFrontWall(flat)).toBe(1)
+    expect(onFrontWall(withGarage)).toBe(2)
+    expect(withGarage.doorVoids.length).toBe(flat.doorVoids.length + 2)
+  })
+
   it('every layout leaves a doorway a character can actually fit through', () => {
-    for (const layout of [...Object.values(LAYOUTS), layoutFor('factory')]) {
+    for (const layout of plans()) {
       expect(layout.door.w).toBeGreaterThan(80)   // agent is 40 wide
     }
   })
 
   it('every layout puts its props inside its own world', () => {
-    for (const layout of [...Object.values(LAYOUTS), layoutFor('factory')]) {
+    for (const layout of plans()) {
       for (const [name, p] of Object.entries(layout.props)) {
         expect(p.cx, `${layout.id}.${name}.x`).toBeGreaterThan(0)
         expect(p.cx, `${layout.id}.${name}.x`).toBeLessThan(layout.world.w)
@@ -48,7 +74,7 @@ describe('C7 — locations are floor plans, not palettes', () => {
   })
 
   it('a move puts everyone in the new room, not at old coordinates', () => {
-    const w = boot('garage')   // hiring starts at the second location
+    const w = boot('apartment', GARAGE)   // hiring starts with the garage
     dispatch(w, 'hireWorker', { role: 'courier' })
     applyLayout(w, layoutFor('factory'))
 
@@ -61,10 +87,11 @@ describe('C7 — locations are floor plans, not palettes', () => {
   })
 
   it('moving to the factory builds the first hall\'s benches', () => {
-    const w = boot('garage', {
+    const w = boot('apartment', {
+      ...GARAGE,
       upgrades: { ...createState().upgrades, solderingLevel: 3, consumablesLevel: 2, benchLevel: 2 },
     })
-    // The garage caps benches at 2 slots even though level 2 was bought.
+    // Home holds two benches even though level 2 was bought.
     expect(w.game.stations).toHaveLength(2)
 
     dispatch(w, 'moveToLocation', { locationId: 'factory' })
@@ -109,9 +136,7 @@ describe('C7 — locations are floor plans, not palettes', () => {
   // the hiring panel on top of it — indistinguishable from a broken button.
   it('no two panel zones overlap — one spot, one panel', () => {
     const PANELS = ['desk', 'rack', 'jobboard']
-    const all = [...Object.values(LAYOUTS), layoutFor('factory'),
-                 layoutFor('factory', { unlockedHalls: ['hall-1', 'hall-2', 'hall-3'] })]
-    for (const layout of all) {
+    for (const layout of plans()) {
       const panels = layout.zones.filter(z => PANELS.includes(z.kind))
       for (let i = 0; i < panels.length; i++) {
         for (let j = i + 1; j < panels.length; j++) {
@@ -126,8 +151,8 @@ describe('C7 — locations are floor plans, not palettes', () => {
   })
 
   it('no station footprint blocks its own interaction zone', () => {
-    for (const id of [...Object.keys(LAYOUTS), 'factory']) {
-      const w = boot(id, { upgrades: { ...createState().upgrades, benchLevel: 2 } })
+    for (const [id, extra] of [['apartment', {}], ['apartment', GARAGE], ['factory', {}]]) {
+      const w = boot(id, { ...extra, upgrades: { ...createState().upgrades, benchLevel: 2 } })
       for (const placed of w.placedStations) {
         const overlaps =
           Math.abs(placed.zone.cx - placed.body.cx) < (placed.zone.w + placed.body.w) / 2 &&

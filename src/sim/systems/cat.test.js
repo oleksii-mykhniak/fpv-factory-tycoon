@@ -151,14 +151,20 @@ describe('V5 — кіт', () => {
     }
   })
 
-  it('у гаражі та на фабриці кота немає', () => {
-    for (const id of ['garage', 'factory']) {
-      const base = createState()
-      const state = { ...base, locationId: id }
-      const w = createWorld({ state, salesLog: [] },
-        { now: T0, rng: () => 0.5, layout: layoutFor(id, state) })
-      run(w, 500)
-      expect(cat(w), id).toBeUndefined()
-    }
+  it('на фабриці кота немає, а вдома він лишається і після прибудови гаража', () => {
+    const base = createState()
+
+    const factory = { ...base, locationId: 'factory' }
+    const wf = createWorld({ state: factory, salesLog: [] },
+      { now: T0, rng: () => 0.5, layout: layoutFor('factory', factory) })
+    run(wf, 500)
+    expect(cat(wf)).toBeUndefined()
+
+    // Кіт живе вдома, а не в кімнаті: гараж нічого для нього не змінює (П2).
+    const home = { ...base, unlockedRooms: ['flat', 'garage'] }
+    const wh = createWorld({ state: home, salesLog: [] },
+      { now: T0, rng: () => 0.5, layout: layoutFor('apartment', home) })
+    run(wh, 500)
+    expect(cat(wh)).toBeDefined()
   })
 })

@@ -1,6 +1,7 @@
 import { UPGRADE_TRACKS } from './upgrades.js'
 import { STARTING_MONEY } from './config.js'
 import { openHalls } from '../defs/layouts/factory.js'
+import { APARTMENT_ROOMS, openRooms, roomUpgradeCaps, roomDef } from '../defs/layouts/rooms.js'
 import { ROLE_ORDER } from '../defs/roles.js'
 
 // Location registry — data-driven. Each location defines which kits are available,
@@ -12,37 +13,16 @@ export const LOCATIONS = Object.freeze({
     id:   'apartment',
     name: 'Квартира',
     emoji: '🏠',
-    kitIds: ['mini_drone', 'racing_drone', 'cinematic_drone'],
-    // Max level achievable at this location per upgrade track.
-    // 0 = fully locked (can't buy any level); Infinity = no cap.
-    upgradeCaps: { soldering: 2, storage: 0, logistics: 0, consumables: 2, benches: 0 },
-    // The first location is deliberately hands-on: you are the whole workforce.
-    hiring: false,
-    workerCaps: { courier: 0, tech: 0, seller: 0, manager: 0 },
+    // Kits, upgrade ceilings and headcount are per ROOM here, not per location
+    // (П2): the garage used to be a location of its own and is a room you buy
+    // now. Everything below sums (or maxes) over the open ones, which is why
+    // this entry names none of them.
+    rooms: APARTMENT_ROOMS,
     unlockCost: 0,
     unlockReq: null,
     startMoney: STARTING_MONEY,
     rules: { hasTrash: true, hasPiggy: true },
     sceneConfig: { bgColor: '#0e0e18', floorColor: '#1a1a26' },
-  },
-  garage: {
-    id:   'garage',
-    name: 'Гараж',
-    emoji: '🔧',
-    kitIds: ['mini_drone', 'racing_drone', 'cinematic_drone', 'longrange_drone'],
-    upgradeCaps: { soldering: 3, storage: 1, logistics: 1, consumables: 2, benches: 1 },
-    hiring: true,
-    // Room is counted per role, not as one pool: a shop with two couriers and
-    // nobody at the bench is not a staffing choice, it is a dead end. One of
-    // each hands-on role fits in the garage; the manager — the role that makes
-    // the shop order for itself — is workshop-only, so "runs without me" stays
-    // something you move for (S3).
-    workerCaps: { courier: 1, tech: 1, seller: 1, manager: 0 },
-    unlockCost: 800,
-    unlockReq: { minUpgrades: { soldering: 2 } },
-    startMoney: 250,
-    rules: { hasTrash: true, hasPiggy: true },
-    sceneConfig: { bgColor: '#0d1810', floorColor: '#1a2618' },
   },
   // The last location. Everything after this point grows inside it — rooms, not
   // another move (Stage 5). See docs/plan_stage5_factory.md.
@@ -52,12 +32,13 @@ export const LOCATIONS = Object.freeze({
     emoji: '🏭',
     kitIds: ['mini_drone', 'racing_drone', 'cinematic_drone', 'longrange_drone'],
     upgradeCaps: { soldering: 3, storage: 2, logistics: 2, consumables: 2, benches: 2 },
-    hiring: true,
     // Headcount is per HALL here, not per location: opening a hall is what
     // buys the people to run it (F2). Summed over open halls by roleCapHere.
     workerCaps: null,
     unlockCost: 2500,
-    unlockReq: { minUpgrades: { soldering: 3, consumables: 2 } },
+    // The garage is a room now, so "have you outgrown home" is a room you own
+    // rather than a location you passed through (П2).
+    unlockReq: { minUpgrades: { soldering: 3, consumables: 2 }, rooms: ['garage'] },
     startMoney: 800,
     // Kits still burn here — risk is the game, and taking it away would make
     // the biggest shop the dullest one. What the factory drops is the two
@@ -81,14 +62,31 @@ export const LOCATIONS = Object.freeze({
 })
 
 // Ordered list of location IDs — used to enforce progression (can only advance).
-export const LOCATION_ORDER = Object.freeze(['apartment', 'garage', 'factory'])
+export const LOCATION_ORDER = Object.freeze(['apartment', 'factory'])
 
+// Falls back to home rather than to undefined: a save carrying a location id
+// this build no longer knows (the garage, before the migration in main.js) must
+// land somewhere real instead of taking every derived value down with it.
 export function currentLocation(state) {
-  return LOCATIONS[state.locationId ?? 'apartment']
+  return LOCATIONS[state.locationId] ?? LOCATIONS.apartment
+}
+
+// The rooms of the current location that are actually open — empty everywhere
+// the location is one room (the factory grows by halls instead).
+export function openRoomsHere(state) {
+  return currentLocation(state).rooms ? openRooms(state.unlockedRooms) : []
+}
+
+export function roomIsOpen(state, roomId) {
+  return openRoomsHere(state).some(r => r.id === roomId)
 }
 
 export function kitsForLocation(state) {
-  return currentLocation(state).kitIds
+  const loc = currentLocation(state)
+  if (loc.kitIds) return loc.kitIds
+  // Rooms bring their own catalogue with them: the long-range kit is something
+  // the garage can build, not something the address unlocks.
+  return [...new Set(openRoomsHere(state).flatMap(r => r.kitIds ?? []))]
 }
 
 // Max level allowed for a track at the current location. Infinity when no cap
@@ -98,7 +96,10 @@ export function kitsForLocation(state) {
 export function capFor(state, trackId) {
   const frozen = state.frozenCaps?.[trackId]
   if (frozen !== undefined) return frozen
-  const caps = currentLocation(state).upgradeCaps
+  const loc  = currentLocation(state)
+  // The ceiling is the highest any open room allows, not the sum: the garage
+  // does not add levels to the flat's, it raises the bar.
+  const caps = loc.upgradeCaps ?? roomUpgradeCaps(openRoomsHere(state))
   return caps[trackId] ?? Infinity
 }
 
@@ -131,11 +132,13 @@ export function startMoneyAt(locationId) {
   return LOCATIONS[locationId]?.startMoney ?? STARTING_MONEY
 }
 
-// Returns { can: bool, reasons: string[] }.
-// Whether workers can be hired here. The apartment is a one-person shop; the
-// point of moving to the garage is that you stop doing everything yourself.
+// Whether workers can be hired here — which is simply "is there room for
+// anybody at all". It used to be a flag of its own, and a flag and a set of
+// caps that both claim to answer the same question is how the flat ends up
+// with a job board that can only ever say no: the flat is a one-person shop
+// until the garage (П2) brings the first three vacancies with it.
 export function hiringAllowed(state) {
-  return currentLocation(state).hiring === true
+  return ROLE_ORDER.some(id => roleCapHere(state, id) > 0)
 }
 
 // How many people of THIS role there is room for right now. The cap is per role
@@ -146,6 +149,9 @@ export function hiringAllowed(state) {
 // makes opening one feel like hiring capacity rather than buying floor space.
 export function roleCapHere(state, roleId) {
   const loc = currentLocation(state)
+  // Same rule one level down: at home the room brings the vacancies (П2).
+  if (loc.rooms)
+    return openRoomsHere(state).reduce((sum, r) => sum + (r.workerCaps?.[roleId] ?? 0), 0)
   if (loc.workerCaps) return loc.workerCaps[roleId] ?? 0
   return openHalls(state.unlockedHalls)
     .reduce((sum, hall) => sum + (hall.workerCaps?.[roleId] ?? 0), 0)
@@ -178,6 +184,11 @@ export function canMoveToLocation(state, targetId) {
 
   if (state.money < target.unlockCost)
     reasons.push(`Потрібно $${target.unlockCost} (є $${Math.floor(state.money)})`)
+
+  for (const roomId of target.unlockReq?.rooms ?? []) {
+    if (!roomIsOpen(state, roomId))
+      reasons.push(`Спершу відкрийте: ${roomDef(roomId)?.name ?? roomId}`)
+  }
 
   if (target.unlockReq?.minUpgrades) {
     for (const [trackId, minLevel] of Object.entries(target.unlockReq.minUpgrades)) {

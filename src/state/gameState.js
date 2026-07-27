@@ -13,6 +13,7 @@ import {
 } from './locations.js'
 import { hireCost, roleDef, ROLE_ORDER, promoteCost } from '../defs/roles.js'
 import { FACTORY_HALL_IDS, FIRST_HALL_ID, hallDef } from '../defs/layouts/factory.js'
+import { APARTMENT_ROOM_IDS, FIRST_ROOM_ID, roomDef } from '../defs/layouts/rooms.js'
 
 // Re-export so existing consumers keep importing kit data from gameState.js.
 export { KIT_TYPES }
@@ -122,6 +123,10 @@ export function createState() {
     // Which factory halls are open (F2). Meaningless anywhere else, but kept in
     // the base state so no code path has to ask whether the field exists.
     unlockedHalls:     [FIRST_HALL_ID],
+    // Which rooms of the flat are open (П2) — the same idea one location
+    // earlier. Kept in the base state for the same reason: no code path should
+    // have to ask whether the field exists.
+    unlockedRooms:     [FIRST_ROOM_ID],
     onboarded:         false,
     scrapAvailable:    false, // true when player has "ordered" scrap from the trash
     // All deliveries: [{id, kitId, slotIndex, readyAt, status}]
@@ -446,6 +451,54 @@ export function buyUpgrade(state, trackId) {
     ...state,
     money:    state.money - cost,
     upgrades: { ...state.upgrades, [track.stateKey]: level + 1 },
+  }
+}
+
+// ── Apartment rooms (П2) ──────────────────────────────────
+//
+// Deliberately the same three functions as the halls below, in the same order.
+// The two are not shared code: a hall is gated on staffing the ones you have,
+// a room on the tools you own, and folding those into one predicate would give
+// the flat a condition nobody would understand.
+
+export const openRoomIds = (state) =>
+  APARTMENT_ROOM_IDS.slice(0, Math.max(1, (state.unlockedRooms ?? []).length))
+
+export const nextRoomId = (state) => APARTMENT_ROOM_IDS[openRoomIds(state).length] ?? null
+
+export function canUnlockRoom(state, roomId) {
+  if (!LOCATIONS[state.locationId ?? 'apartment']?.rooms)
+    return { can: false, reasons: ['Кімнати добудовуються лише вдома'] }
+
+  const expected = nextRoomId(state)
+  if (!expected)           return { can: false, reasons: ['Усі кімнати вже відкриті'] }
+  if (roomId !== expected) return { can: false, reasons: ['Кімнати відкриваються по черзі'] }
+
+  const room    = roomDef(roomId)
+  const reasons = []
+  if (state.money < room.cost)
+    reasons.push(`Потрібно $${room.cost} (є $${Math.floor(state.money)})`)
+
+  for (const [trackId, minLevel] of Object.entries(room.req?.minUpgrades ?? {})) {
+    const track   = UPGRADE_TRACKS[trackId]
+    const current = track ? (state.upgrades[track.stateKey] ?? 0) : 0
+    if (current < minLevel) reasons.push(`${track?.name ?? trackId}: рівень ${current}/${minLevel}`)
+  }
+
+  return { can: reasons.length === 0, reasons }
+}
+
+// A room is BOUGHT, not moved into: the money is deducted and what is left is
+// still yours. That is the whole reason the garage stopped being a location —
+// a move resets the balance (see startMoneyAt), and having the mid-game wipe
+// the savings is exactly what made progress impossible to feel.
+export function unlockRoom(state, roomId) {
+  const { can, reasons } = canUnlockRoom(state, roomId)
+  if (!can) throw new Error(`unlockRoom: ${reasons.join('; ')}`)
+  return {
+    ...state,
+    money:         state.money - roomDef(roomId).cost,
+    unlockedRooms: [...openRoomIds(state), roomId],
   }
 }
 

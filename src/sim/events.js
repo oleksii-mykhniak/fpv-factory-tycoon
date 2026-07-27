@@ -57,6 +57,7 @@ export const EV = Object.freeze({
   UPGRADE_BOUGHT:   'upgrade.bought',     // { trackId, level }
   LOCATION_CHANGED: 'location.changed',   // { locationId }
   HALL_UNLOCKED:    'factory.hallOpened', // { hallId }
+  ROOM_UNLOCKED:    'home.roomOpened',    // { roomId }
   BELT_DROPPED:     'belt.dropped',       // { deliveryId, hallId }
   WORKER_PROMOTED:  'worker.promoted',    // { workerId, role, level }
   COMMAND_REJECTED: 'command.rejected',   // { type, reason }

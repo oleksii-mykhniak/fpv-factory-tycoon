@@ -89,6 +89,7 @@ export function createEffects({
     [EV.UPGRADE_BOUGHT]:  () => { playSfx('upgrade'); haptic('medium') },
     [EV.WORKER_PROMOTED]: () => { playSfx('promote'); haptic('medium') },
     [EV.HALL_UNLOCKED]:   () => { playSfx('hall');    haptic('heavy') },
+    [EV.ROOM_UNLOCKED]:   () => { playSfx('hall');    haptic('heavy') },
     [EV.LOCATION_CHANGED]: () => { playSfx('hall');   haptic('heavy') },
 
     // Pass the event through: dropping the payload here once crashed the whole

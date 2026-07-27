@@ -76,7 +76,8 @@ export function buildLayout({
   id,
   world,          // { w, h } total world size in units
   roomH,          // interior height; the street fills the rest
-  door,           // { x, w } gap in the bottom wall
+  door,           // { x, w } gap in the bottom wall — the front door
+  extraDoors = [],// further { x, w } gaps in the same wall (the garage door, П2)
   partitions = [],// interior walls — see partitionRects
   decor = [],     // furniture that does nothing — see below
   street = [],    // the same thing, outside the front door
@@ -86,18 +87,22 @@ export function buildLayout({
   spawns,         // { player, workerIdle, posts: { courier, tech, seller } }
   theme,
 }) {
+  // The bottom wall is a partition like any other: a wall with holes in it.
+  // Written out longhand it could hold exactly one door, which is why the
+  // garage (П2) could not have its own until now.
+  const front = partitionRects({
+    axis: 'h',
+    at:   roomH - WALL_HORIZ / 2,
+    from: 0,
+    to:   world.w,
+    gaps: [door, ...extraDoors].map(d => ({ at: d.x, size: d.w })),
+  })
+
   const walls = [
     rect(world.w / 2, WALL_HORIZ / 2, world.w, WALL_HORIZ),                     // top
     rect(WALL_SIDE / 2, roomH / 2, WALL_SIDE, roomH),                           // left
     rect(world.w - WALL_SIDE / 2, roomH / 2, WALL_SIDE, roomH),                 // right
-    // Bottom wall, split by the door gap
-    rect((door.x - door.w / 2) / 2, roomH - WALL_HORIZ / 2, door.x - door.w / 2, WALL_HORIZ),
-    rect(
-      (door.x + door.w / 2 + world.w) / 2,
-      roomH - WALL_HORIZ / 2,
-      world.w - (door.x + door.w / 2),
-      WALL_HORIZ,
-    ),
+    ...front.walls,
   ]
 
   const interior = partitions.map(partitionRects)
@@ -151,9 +156,11 @@ export function buildLayout({
     // S2: the panels the bottom bar used to hold are objects in the room now.
     // Each is a prop with a zone in front of it — you walk up to the laptop to
     // order a kit, to the rack to buy an upgrade, to the board to hire.
-    { id: 'desk',     kind: 'desk',     ...rect(props.desk.x, props.desk.y, 160, 150) },
-    { id: 'rack',     kind: 'rack',     ...rect(props.rack.x, props.rack.y, 150, 150) },
-    { id: 'jobboard', kind: 'jobboard', ...rect(props.jobboard.x, props.jobboard.y, 150, 150) },
+    // Conditional for the same reason the salvage bin is (F1.3): the job board
+    // exists only where somebody may actually be hired — in the garage (П2).
+    ...zoneIfProp('desk',     'desk',     160, 150),
+    ...zoneIfProp('rack',     'rack',     150, 150),
+    ...zoneIfProp('jobboard', 'jobboard', 150, 150),
   ]
 
   return {
@@ -169,7 +176,7 @@ export function buildLayout({
     // Painted gaps in the walls. An array because the factory has one per
     // hall divider as well as the street door (F2).
     doorVoids: [
-      rect(door.x, roomH - WALL_HORIZ / 2, door.w, WALL_HORIZ),
+      ...front.voids,
       ...interior.flatMap(p => p.voids),
     ],
     stationSlots,
