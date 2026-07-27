@@ -62,6 +62,30 @@ describe('C7 — locations are floor plans, not palettes', () => {
     }
   })
 
+  // П4: продавець чекав біля скриньки — тобто в КІНЦІ свого маршруту, там, де
+  // на нього ніхто не дивиться, поки цех вище стоїть безлюдний. Його пост має
+  // бути ближче до верстаків, ніж до скриньки, у кожному плані поверху.
+  it('пост продавця ближчий до верстаків, ніж до скриньки', () => {
+    const near = (from, points) => Math.min(...points.map(p =>
+      Math.hypot((p.x ?? p.cx) - from.x, (p.y ?? p.cy) - from.y)))
+
+    for (const layout of plans()) {
+      const boxes = Object.entries(layout.props)
+        .filter(([name]) => name.startsWith('mailbox'))
+        .map(([, p]) => p)
+
+      const postSets = [
+        layout.spawns.posts,
+        ...Object.values(layout.spawns.postsByHall ?? {}),
+      ]
+      for (const posts of postSets) {
+        const seller = posts.seller
+        expect(near(seller, layout.stationSlots), `${layout.id}: до верстака`)
+          .toBeLessThan(near(seller, boxes))
+      }
+    }
+  })
+
   it('applyLayout rebuilds obstacles, zones and the nav grid', () => {
     const w = boot('apartment')
     const before = { obstacles: w.obstacles.length, cols: w.navGrid.cols }

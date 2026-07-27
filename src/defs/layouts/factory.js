@@ -274,10 +274,14 @@ export function buildFactoryLayout(hallIds) {
       // into their hands the moment it arrived.
       player:     { x: home.cx, y: 1250 },
       workerIdle: { x: home.cx + 160, y: 1250 },
+      // Продавець чекає МІЖ ВЕРСТАКАМИ, а не біля скриньки (П4): скринька — це
+      // кінець його маршруту, і поки він стояв там, увесь цех вище виглядав
+      // безлюдним. Тепер він гуляє там, звідки забирає дрони — заразом і йти
+      // йому починати ближче.
       posts: {
         courier: { x: doorX, y: 1270 },
         tech:    { x: home.cx, y: 560 },
-        seller:  { x: home.x0 + 380, y: 1280 },
+        seller:  { x: home.cx, y: 660 },
         manager: { x: props.desk.x - 40, y: props.desk.y + 160 },
       },
       // A post per role PER HALL, so staff stand where they work instead of
@@ -285,7 +289,7 @@ export function buildFactoryLayout(hallIds) {
       postsByHall: Object.fromEntries(placed.map(hall => [hall.id, {
         courier: { x: hall.cx - 200, y: conveyor.y + 190 },
         tech:    { x: hall.cx,       y: 560 },
-        seller:  { x: hall.x0 + 420, y: 1180 },
+        seller:  { x: hall.cx,       y: 660 },
         manager: { x: props.desk.x - 40, y: props.desk.y + 160 },
       }])),
       door:          { x: doorX, y: ROOM_H - WALL_HORIZ - 30 },
