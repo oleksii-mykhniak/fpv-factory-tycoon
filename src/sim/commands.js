@@ -18,6 +18,7 @@ import {
   unlockRoom as unlockRoomState,
   calcPrice, getStation, focusStation, idleStations, syncStations,
   hireWorker as hireWorkerState, nextHireCost,
+  promoteWorker as promoteWorkerState, workerById,
 } from '../state/gameState.js'
 import { levelData, UPGRADE_TRACKS } from '../state/upgrades.js'
 import {
@@ -26,6 +27,7 @@ import {
 import { EV, emit } from './events.js'
 import { rebuildStationGeometry, stationCountFor, syncWorkerAgents, applyLayout } from './world.js'
 import { layoutFor } from '../defs/layouts/index.js'
+import { promoteCost } from '../defs/roles.js'
 
 // Commands that come from a UI button rather than a zone have no station in
 // hand; they act on the one the player is most likely looking at.
@@ -142,6 +144,21 @@ const HANDLERS = {
     world.game = syncStations(world.game, stationCountFor(world.game, world.layout))
     rebuildStationGeometry(world)
     emit(events, EV.LOCATION_CHANGED, { locationId })
+  },
+
+  // Підвищення робітника (П3). Списання живе тут, поряд з рештою покупок, а не
+  // в тригер-зоні: зона лише відкриває панель, а гроші витрачає кнопка, яку
+  // натиснув гравець.
+  promoteWorker(world, { workerId }, events) {
+    const worker = workerById(world.game, workerId)
+    if (!worker) return
+    const cost = promoteCost(worker.role, worker.level ?? 0)
+    world.game = promoteWorkerState(world.game, workerId)
+    emit(events, EV.MONEY_SPENT, { amount: cost, reason: 'promote' })
+    emit(events, EV.WORKER_PROMOTED, {
+      workerId, role: worker.role, level: (worker.level ?? 0) + 1,
+    })
+    emit(events, EV.STATE_DIRTY)
   },
 
   // Тап по картці квесту (П1). Нічого не купує — лише каже стрілці, куди

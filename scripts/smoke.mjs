@@ -606,8 +606,9 @@ const lBefore = await page.evaluate(() => {
   }
 })
 
-// Stand on top of them for a moment — that is the whole interaction.
-for (let i = 0; i < 30; i++) {
+// Stand on top of them for a moment. П3: this no longer BUYS anything — it
+// opens a panel, exactly like every other object in the shop.
+for (let i = 0; i < 45; i++) {
   await page.evaluate(() => {
     const w = globalThis.__world
     const worker = w.agents.find(a => a.kind === 'worker')
@@ -616,6 +617,25 @@ for (let i = 0; i < 30; i++) {
   })
   await page.waitForTimeout(60)
 }
+await page.waitForTimeout(400)
+
+const lPanel = await page.evaluate(() => {
+  const el = document.querySelector('#promote-modal')
+  if (!el || el.hasAttribute('hidden')) return null
+  return {
+    title: el.querySelector('#promote-title')?.textContent.trim(),
+    stats: [...el.querySelectorAll('.promote-stat')].map(r => r.textContent.replace(/\s+/g, ' ').trim()),
+    btn:   el.querySelector('#promote-btn')?.textContent.trim(),
+  }
+})
+// Нічого ще не сталось: панель лише питає.
+const lAsked = await page.evaluate(() => {
+  const w = globalThis.__world
+  return { level: w.game.workers[0].level, money: Math.round(w.game.money) }
+})
+console.log(`  panel "${lPanel?.title}": ${lPanel?.stats.join('; ')} → [${lPanel?.btn}]`)
+
+await page.click('#promote-btn')
 await page.waitForTimeout(500)
 
 const lAfter = await page.evaluate(() => {
@@ -980,7 +1000,10 @@ const checks = [
   ['K: and carries it into a bench',          kOnBench.phase === 'ASSEMBLY'],
   ['L: a zone follows the worker around',  lBefore.zone === true],
   ['L: the price tag is drawn over them',  lBefore.tagOn && lBefore.tag.includes('$')],
-  ['L: standing next to them promotes',    lAfter.level === lBefore.level + 1],
+  ['L: standing next to them only ASKS',   !!lPanel && lAsked.level === lBefore.level &&
+                                           lAsked.money === lBefore.money],
+  ['L: the panel says what will change',   (lPanel?.stats.length ?? 0) > 0],
+  ['L: the button in the panel promotes',  lAfter.level === lBefore.level + 1],
   ['L: it costs money',                    lAfter.money < lBefore.money],
   ['L: they actually get faster',          lAfter.speed > lBefore.speed],
   ['L: the level dots move on',            lAfter.dots !== lBefore.dots],

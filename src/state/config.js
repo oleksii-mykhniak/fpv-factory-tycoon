@@ -156,7 +156,10 @@ export const TECH_QUALITY_BY_LEVEL  = [0.55, 0.65, 0.75]
 export const WORKER_UPGRADE_BASE   = { courier: 240, tech: 400, seller: 300, manager: 560 }
 export const WORKER_UPGRADE_GROWTH = 2.1
 // How long the player stands next to someone to promote them.
-export const ZONE_DWELL_PROMOTE_MS = 1000
+// Довше за решту панелей (П3): біля власного техніка можна опинитись випадково
+// на секунду, але не на півтори — а ця панель відкривається САМА, поки ти
+// просто стоїш поруч.
+export const ZONE_DWELL_PROMOTE_MS = 1600
 // How close counts as "next to". Deliberately tight: a wide one would fire on
 // anybody walking past a colleague, and promotions cost money.
 export const PROMOTE_ZONE_SIZE = 120

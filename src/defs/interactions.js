@@ -20,7 +20,7 @@ import {
   Phase, DeliveryStatus, KIT_TYPES,
   pickupDelivery, startAssembly, startScrapAssembly, getStation,
   sell as sellStation, calcPrice, takeOutput, orderKit, abandonBurntDrone,
-  workerById, promoteWorker,
+  workerById,
 } from '../state/gameState.js'
 import {
   ZONE_DWELL_INSTANT_MS, ZONE_DWELL_BENCH_MS, ZONE_DWELL_OUTPUT_MS,
@@ -282,9 +282,17 @@ export const INTERACTIONS = {
       }),
   },
 
-  // Standing next to one of your own people promotes them (F5). The zone moves
-  // with them, so there is nowhere to walk "to" — you catch them where they
-  // work, which is what makes the factory feel staffed rather than managed.
+  // Standing next to one of your own people offers to promote them (F5). The
+  // zone moves with them, so there is nowhere to walk "to" — you catch them
+  // where they work, which is what makes the factory feel staffed rather than
+  // managed.
+  //
+  // П3: this used to SPEND THE MONEY on the spot. Every other panel in the shop
+  // — the desk, the rack, the board — opens a modal on dwell; this one alone
+  // charged you, so walking past your own technician silently cost $240 with no
+  // explanation of what had happened. Now it asks, like everything else. The
+  // dwell is longer than the others for the same reason: you can stand next to
+  // someone for a second by accident, but not for a second and a half.
   promote: {
     dwellMs: ZONE_DWELL_PROMOTE_MS,
     repeat:  false,
@@ -295,17 +303,10 @@ export const INTERACTIONS = {
       const cost = promoteCost(worker.role, worker.level ?? 0)
       return cost !== null && world.game.money >= cost
     },
-    run(world, zone, _agent, events) {
-      const worker = workerById(world.game, zone.meta?.workerId)
-      if (!worker) return
-      const cost = promoteCost(worker.role, worker.level ?? 0)
-      world.game = promoteWorker(world.game, worker.id)
-      emit(events, EV.MONEY_SPENT, { amount: cost, reason: 'promote' })
-      emit(events, EV.WORKER_PROMOTED, {
-        workerId: worker.id, role: worker.role, level: (worker.level ?? 0) + 1,
-      })
-      emit(events, EV.STATE_DIRTY)
-    },
+    run: (_world, zone, agent, events) =>
+      emit(events, EV.PANEL_REQUESTED, {
+        agentId: agent.id, panel: 'promote', workerId: zone.meta?.workerId,
+      }),
   },
 
   // Piggy bank: the rescue mini-game.

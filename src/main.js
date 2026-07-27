@@ -29,6 +29,7 @@ import { createSettingsButton } from './ui/settingsButton.js'
 import { createShopModal } from './ui/shopModal.js'
 import { createUpgradeModal } from './ui/upgradeModal.js'
 import { createHireModal } from './ui/hireModal.js'
+import { createPromoteModal } from './ui/promoteModal.js'
 import { createSettingsModal } from './ui/settingsModal.js'
 import { createSolderModal } from './ui/solderModal.js'
 import { createSolderBar } from './ui/solderBar.js'
@@ -207,7 +208,7 @@ const effects = createEffects({
   onQuestDone:     ({ questId }) => questTracker.flash(questId),
   onMinigame:      ({ game, agentId }) => openMinigame(game, agentId),
   // Walking up to the laptop / rack / board is what opens these now (S2).
-  onPanel:         ({ panel, hallId }) => openPanel(panel, hallId),
+  onPanel:         (e) => openPanel(e.panel, e),
 })
 
 // Applies a player command and pushes the result through the presentation layer.
@@ -296,6 +297,10 @@ const upgradeModal = createUpgradeModal(uiRoot, {
   },
 })
 
+const promoteModal = createPromoteModal(uiRoot, {
+  onPromote: (workerId) => send('promoteWorker', { workerId }),
+})
+
 const settingsModal = createSettingsModal(uiRoot, {
   onClearSave:     () => { clearSave(); location.reload() },
   onSoundChange:   (on) => setMuted(!on),
@@ -360,10 +365,12 @@ createSettingsButton(uiRoot, {
 
 // Which panel a zone asked for. One place, so adding an object with a panel
 // behind it is a line here and an entry in defs/interactions.js.
-function openPanel(panel, hallId = null) {
+function openPanel(panel, e = {}) {
   if (panel === 'shop')    shopModal.open(world.game)
   if (panel === 'upgrade') upgradeModal.open(world.game)
-  if (panel === 'hire')    hireModal.open(world.game, hallId)
+  if (panel === 'hire')    hireModal.open(world.game, e.hallId ?? null)
+  // П3: підвищення теж лише ПИТАЄ — гроші списує кнопка в панелі.
+  if (panel === 'promote') promoteModal.open(world.game, e.workerId)
 }
 
 let _lastRendered = null
@@ -397,6 +404,7 @@ function renderUI() {
   shopModal.update(world.game)
   upgradeModal.update(world.game)
   hireModal.update(world.game)
+  promoteModal.update(world.game)
   solderModal.update(world.game, coldWarning ? 'cold' : null)
 
   // The soldering strip follows the player's feet, not a button (C6) — and is

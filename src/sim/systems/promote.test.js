@@ -59,11 +59,28 @@ describe('F5 — підвищення просто на підлозі', () => {
     expect(promoteZone(w).cx).toBeCloseTo(agent.x, 0)
   })
 
-  it('постояти поруч — і рівень росте, гроші списуються', () => {
+  // П3: стояння поруч більше НЕ платить. Це був єдиний об'єкт у цеху, який
+  // списував гроші сам — і випадковий прохід повз власного техніка коштував
+  // $240 без жодного пояснення.
+  it('постояти поруч — це питання, а не покупка', () => {
+    const w = shop()
+    const before = w.game.money
+    const events = standNextTo(w, ZONE_DWELL_PROMOTE_MS + 400)
+
+    const panels = events.filter(e => e.t === EV.PANEL_REQUESTED && e.panel === 'promote')
+    expect(panels).toHaveLength(1)
+    expect(panels[0].workerId).toBe(w.game.workers[0].id)
+    // Головне: нічого не сталось, поки гравець не натиснув кнопку.
+    expect(events.map(e => e.t)).not.toContain(EV.WORKER_PROMOTED)
+    expect(w.game.workers[0].level).toBe(0)
+    expect(w.game.money).toBe(before)
+  })
+
+  it('платить кнопка в панелі — і рівень росте', () => {
     const w = shop()
     const cost = promoteCost('courier', 0)
     const before = w.game.money
-    const events = standNextTo(w, ZONE_DWELL_PROMOTE_MS + 400)
+    const events = dispatch(w, 'promoteWorker', { workerId: w.game.workers[0].id })
 
     expect(events.map(e => e.t)).toContain(EV.WORKER_PROMOTED)
     expect(w.game.workers[0].level).toBe(1)
@@ -73,17 +90,17 @@ describe('F5 — підвищення просто на підлозі', () => {
   it('підвищення одразу змінює швидкість агента, а не після перезавантаження', () => {
     const w = shop()
     const was = workerAgent(w).speed
-    standNextTo(w, ZONE_DWELL_PROMOTE_MS + 400)
+    dispatch(w, 'promoteWorker', { workerId: w.game.workers[0].id })
     run(w, 200)
     expect(workerAgent(w).speed).toBe(roleLevelData('courier', 1).speed)
     expect(workerAgent(w).speed).toBeGreaterThan(was)
   })
 
-  it('без грошей зона мовчить — стояти дарма не просять', () => {
+  it('без грошей зона мовчить — панель, яка може лише відмовити, не відкривається', () => {
     const w = shop()
     w.game = { ...w.game, money: 0 }
     const events = standNextTo(w, ZONE_DWELL_PROMOTE_MS + 400)
-    expect(events.map(e => e.t)).not.toContain(EV.WORKER_PROMOTED)
+    expect(events.map(e => e.t)).not.toContain(EV.PANEL_REQUESTED)
     expect(w.game.workers[0].level).toBe(0)
   })
 
@@ -96,7 +113,7 @@ describe('F5 — підвищення просто на підлозі', () => {
     }
     expect(promoteCost('courier', max)).toBeNull()
     const events = standNextTo(w, ZONE_DWELL_PROMOTE_MS + 400)
-    expect(events.map(e => e.t)).not.toContain(EV.WORKER_PROMOTED)
+    expect(events.map(e => e.t)).not.toContain(EV.PANEL_REQUESTED)
   })
 
   it('кожен наступний рівень дорожчий', () => {

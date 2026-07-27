@@ -851,6 +851,49 @@ body {
   cursor: pointer;
 }
 
+/* === Promotion panel (П3) === */
+
+/* Одне питання з однією кнопкою — на всю ширину модалки воно виглядало б як
+   порожній магазин. */
+.modal--narrow { max-width: 320px; }
+
+.promote-level {
+  font-family: monospace;
+  font-size: 1.05rem;
+  color: #ffd76a;
+  letter-spacing: 0.12em;
+  margin-bottom: 4px;
+}
+
+.promote-level__text {
+  font-family: inherit;
+  font-size: 0.72rem;
+  color: #9ab;
+  letter-spacing: normal;
+  margin-left: 8px;
+}
+
+.promote-stats {
+  margin: 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.promote-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.82rem;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.promote-stat__label { color: #9ab; }
+.promote-stat__value { color: #ddd; font-family: monospace; }
+.promote-stat__value b { color: #7de07d; }
+
 /* Виконана ціль. Посеред екрана, а не в кутку: це момент, заради якого
    гравець тиснув на педалі останні дві хвилини. */
 .quest-toast {
