@@ -688,6 +688,92 @@ const nInnocent = await page.evaluate(() => {
 })
 console.log(`  cat sat in the delivery slot: carrying ${nInnocent.carrying}, box ${nInnocent.status}`)
 
+// ── P. The quest tracker (П1) ─────────────────────────────
+console.log('\n### P. The quest tracker')
+await boot(seedState({ solderingLevel: 2 }, { money: 400, ordersPlaced: 3 }))
+await page.waitForTimeout(600)
+
+const questCard = () => page.evaluate(() => {
+  const el = document.querySelector('#quest-tracker .quest--primary')
+  return el ? {
+    title: el.querySelector('.quest__title')?.textContent.trim(),
+    meta:  el.querySelector('.quest__meta')?.textContent.trim(),
+    hint:  el.querySelector('.quest__hint')?.textContent.trim() ?? null,
+    fill:  el.querySelector('.quest__fill')?.style.width,
+    pinned: el.classList.contains('quest--pinned'),
+  } : null
+})
+// Куди насправді дивиться стрілка на екрані: порівнюємо її поворот із
+// напрямком на найближчу шафу. Питати сим про ціль було б перевіркою коду
+// самим кодом — а зламатись може саме малювання.
+const arrowAtRack = () => page.evaluate(() => {
+  const w = globalThis.__world
+  const arrow = globalThis.__refs.arrow
+  if (!arrow?.graphics?.visible) return false
+  const p = w.agents.find(a => a.kind === 'player')
+  const rack = w.zones.filter(z => z.kind === 'rack')
+    .sort((a, b) => Math.hypot(a.cx - p.x, a.cy - p.y) - Math.hypot(b.cx - p.x, b.cy - p.y))[0]
+  if (!rack) return false
+  const want = Math.atan2(rack.cy - p.y, rack.cx - p.x) + Math.PI / 2
+  const diff = Math.abs(((arrow.rotation - want + Math.PI) % (2 * Math.PI)) - Math.PI)
+  return diff < 0.25
+})
+
+const pBefore = await questCard()
+console.log(`  card: "${pBefore?.title}" ${pBefore?.meta} fill=${pBefore?.fill}`)
+
+// Умова, яка не є грошима, мусить бути написана словами: смужка вміє показати
+// рівно одне число, а гараж хоче ще й паяльник. Гараж тут не головна ціль
+// (паяльник іде раніше), тож заразом перевіряємо, що список розгортається.
+await boot(seedState({ solderingLevel: 1 }, { money: 900, ordersPlaced: 3 }))
+await page.waitForTimeout(600)
+const pCollapsed = await page.evaluate(() => document.querySelectorAll('#quest-tracker .quest').length)
+await page.click('#quest-more')
+await page.waitForTimeout(300)
+const pExpanded = await page.evaluate(() => document.querySelectorAll('#quest-tracker .quest').length)
+const pHint = await page.evaluate(() => {
+  const card = [...document.querySelectorAll('#quest-tracker .quest')]
+    .find(el => el.querySelector('.quest__title')?.textContent.includes('Гараж'))
+  return card?.querySelector('.quest__hint')?.textContent.trim() ?? null
+})
+console.log(`  goals shown ${pCollapsed} → ${pExpanded} when expanded; ` +
+            `garage hint="${pHint}"`)
+
+await boot(seedState({ solderingLevel: 2 }, { money: 400, ordersPlaced: 3 }))
+await page.waitForTimeout(600)
+
+// Тап по картці закріплює ціль, і стрілка їде до шафи.
+await page.click('#quest-tracker .quest--primary')
+await page.waitForTimeout(500)
+const pPinned  = await questCard()
+const pPinnedId  = await page.evaluate(() => globalThis.__world.game.pinnedQuestId)
+const pArrowRack = await arrowAtRack()
+console.log(`  tapped → pinned=${pPinnedId}, card highlighted: ${pPinned?.pinned}, ` +
+            `arrow points at the rack: ${pArrowRack}`)
+
+// Той самий тап удруге — знімає закріплення.
+await page.click('#quest-tracker .quest--primary')
+await page.waitForTimeout(400)
+const pUnpinned = await page.evaluate(() => globalThis.__world.game.pinnedQuestId)
+console.log(`  tapped again → pinned=${pUnpinned}`)
+
+// Виконуємо ціль через шафу — картка має зникнути, а тост з'явитись.
+await page.evaluate(() => {
+  const w = globalThis.__world
+  w.game = { ...w.game, money: 9999 }
+})
+await page.waitForTimeout(400)
+const pGoalTitle = (await questCard())?.title
+await openPanelAt('rack')
+await page.click('#room-btn').catch(() => {})
+await page.waitForTimeout(700)
+const pToast = await page.evaluate(() => {
+  const t = document.querySelector('.quest-toast')
+  return t && !t.hasAttribute('hidden') ? t.textContent.trim() : null
+})
+const pAfter = await questCard()
+console.log(`  goal "${pGoalTitle}" done → toast "${pToast}", card now "${pAfter?.title}"`)
+
 // ── O. Sound, music and the "player only" rule (A3–A6) ────
 console.log('\n### O. Audio')
 await boot(seedState({}))
@@ -794,6 +880,16 @@ console.log(errors.length ? errors.join('\n---\n') : '(none)')
 
 const money = (s) => parseFloat(s.money.replace('$', ''))
 const checks = [
+  ['P: the tracker shows a goal with a money bar', !!pBefore?.title && !!pBefore?.meta],
+  ['P: the bar reflects the money actually held', pBefore?.fill !== '0%' && pBefore?.fill !== '100%'],
+  ['P: the list expands to the other goals', pExpanded > pCollapsed],
+  ['P: unmet conditions other than money are spelled out',
+   !!pHint && pHint.includes('Паяльник') && !pHint.includes('Потрібно $')],
+  ['P: tapping the card pins the goal',    pPinnedId !== null && pPinned?.pinned === true],
+  ['P: and the arrow turns to its object', pArrowRack === true],
+  ['P: tapping it again unpins',           pUnpinned === null],
+  ['P: finishing a goal announces itself', !!pToast],
+  ['P: and the tracker moves on to the next one', !!pAfter && pAfter.title !== pGoalTitle],
   ['A: slot zone put the box in hand',    aPick.carrying.includes('kit_box')],
   ['A: bench zone started assembly',      aDrop.phase === 'ASSEMBLY' && aDrop.carrying.length === 0],
   ['A: bench finished with someone at it', aReady.phase === 'READY'],

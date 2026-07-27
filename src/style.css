@@ -758,6 +758,125 @@ body {
   text-align: center;
 }
 
+/* === Quest tracker (П1) === */
+
+/* Знизу зліва, над рядком підказки: верхня смуга екрана вже зайнята грошима,
+   стрічкою доставок і смужкою пайки, а тут картка ще й потрапляє під великий
+   палець — по ній треба тапати. */
+#quest-tracker {
+  position: absolute;
+  bottom: calc(52px + env(safe-area-inset-bottom));
+  left: calc(12px + env(safe-area-inset-left));
+  width: min(64vw, 232px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: auto;
+  z-index: 60;
+}
+
+#quest-tracker[hidden] { display: none; }
+
+.quest {
+  background: rgba(44, 42, 60, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-left: 3px solid rgba(125, 224, 125, 0.5);
+  border-radius: 10px;
+  padding: 7px 10px;
+  cursor: pointer;
+  transition: transform 90ms ease-out, background 120ms ease-out;
+}
+
+.quest:active { transform: scale(0.97); }
+
+/* Другорядні цілі — тихіші за головну, інакше розгорнутий список читається як
+   чотири однакові вимоги. */
+.quest--sub {
+  opacity: 0.72;
+  padding: 5px 10px;
+}
+
+.quest--pinned {
+  border-left-color: #f2c14e;
+  background: rgba(60, 54, 62, 0.9);
+}
+
+.quest--ready .quest__fill { background: #7de07d; }
+
+.quest__title {
+  font-size: 0.8rem;
+  color: #e8e8f0;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+}
+
+.quest__bar {
+  margin-top: 5px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.quest__fill {
+  height: 100%;
+  border-radius: 3px;
+  background: #5a9ad4;
+  transition: width 220ms ease-out;
+}
+
+.quest__meta {
+  margin-top: 3px;
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: #9ab;
+}
+
+.quest__hint {
+  margin-top: 3px;
+  font-size: 0.68rem;
+  color: #c89a6a;
+  line-height: 1.25;
+}
+
+.quest__more {
+  align-self: flex-start;
+  background: rgba(44, 42, 60, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: #9ab;
+  font-size: 0.68rem;
+  font-family: inherit;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+
+/* Виконана ціль. Посеред екрана, а не в кутку: це момент, заради якого
+   гравець тиснув на педалі останні дві хвилини. */
+.quest-toast {
+  position: absolute;
+  bottom: calc(38% + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(40, 62, 44, 0.92);
+  border: 1px solid rgba(125, 224, 125, 0.45);
+  color: #d8f5d8;
+  font-size: 0.9rem;
+  padding: 8px 16px;
+  border-radius: 20px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 70;
+  animation: quest-toast-in 220ms ease-out;
+}
+
+.quest-toast[hidden] { display: none; }
+
+@keyframes quest-toast-in {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
 /* === Onboarding hint === */
 
 #onboarding {

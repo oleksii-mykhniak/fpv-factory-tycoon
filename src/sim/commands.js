@@ -144,6 +144,14 @@ const HANDLERS = {
     emit(events, EV.LOCATION_CHANGED, { locationId })
   },
 
+  // Тап по картці квесту (П1). Нічого не купує — лише каже стрілці, куди
+  // вести. Команда, а не поле в UI, бо це стан гри: закріплена ціль має
+  // пережити перезапуск.
+  pinQuest(world, { questId }, events) {
+    world.game = { ...world.game, pinnedQuestId: questId ?? null }
+    emit(events, EV.STATE_DIRTY)
+  },
+
   // Buy the next room of the flat (П2). The garage used to be a move; the only
   // thing that changed is that the world grows instead of being replaced —
   // which is why this is the hall command with a different noun.

@@ -24,6 +24,7 @@ import { playerStation, guidanceActive, ironIsHandsOff, incomePerSec } from './s
 import { SYSTEMS } from './sim/systems/index.js'
 
 import { createHUD } from './ui/hud.js'
+import { createQuestTracker } from './ui/questTracker.js'
 import { createSettingsButton } from './ui/settingsButton.js'
 import { createShopModal } from './ui/shopModal.js'
 import { createUpgradeModal } from './ui/upgradeModal.js'
@@ -203,6 +204,7 @@ const effects = createEffects({
   onColdSolder: (missMsg) => { coldWarning = missMsg ?? 'cold'; uiDirty = true },
   // Trigger zones ask; the view decides how to answer (C2).
   onSaleMade:      () => offerSaleBonus(),
+  onQuestDone:     ({ questId }) => questTracker.flash(questId),
   onMinigame:      ({ game, agentId }) => openMinigame(game, agentId),
   // Walking up to the laptop / rack / board is what opens these now (S2).
   onPanel:         ({ panel, hallId }) => openPanel(panel, hallId),
@@ -239,6 +241,12 @@ function present() {
 // ── UI ────────────────────────────────────────────────────
 
 const hud = createHUD(uiRoot)
+
+// Квест-трекер (П1): що робимо далі й скільки лишилось. Тап закріплює ціль —
+// далі стрілка веде саме до неї.
+const questTracker = createQuestTracker(uiRoot, {
+  onPin: (questId) => { send('pinQuest', { questId }); uiDirty = true; present() },
+})
 
 const shopModal = createShopModal(uiRoot, {
   onOrder: (kitId) => { dismissOnboarding(); send('order', { kitId }) },
@@ -385,6 +393,7 @@ function renderUI() {
     guidanceActive(world.game),
     incomePerSec(world.salesLog, world.now),
   )
+  questTracker.update(world.game)
   shopModal.update(world.game)
   upgradeModal.update(world.game)
   hireModal.update(world.game)

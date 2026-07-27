@@ -15,7 +15,7 @@
 import { JOYSTICK_RADIUS, JOYSTICK_ZONE_H_RATIO } from '../state/config.js'
 
 // A pointer that starts on UI chrome belongs to that chrome, not to movement.
-const CHROME = '.modal-overlay, #settings-btn, #onboarding, #load-overlay'
+const CHROME = '.modal-overlay, #settings-btn, #onboarding, #load-overlay, #quest-tracker'
 
 export function createJoystick(host, { isBlocked = () => false } = {}) {
   const layer = document.createElement('div')

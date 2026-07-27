@@ -11,7 +11,7 @@ import { playSfx } from '../audio/sfx.js'
 
 export function createEffects({
   getRefs, haptic, onStateDirty, onColdSolder,
-  onSaleMade, onMinigame, onPanel,
+  onSaleMade, onMinigame, onPanel, onQuestDone,
 }) {
   // Each station draws its own progress card (C3).
   const progressOf = (stationId) =>
@@ -90,6 +90,9 @@ export function createEffects({
     [EV.WORKER_PROMOTED]: () => { playSfx('promote'); haptic('medium') },
     [EV.HALL_UNLOCKED]:   () => { playSfx('hall');    haptic('heavy') },
     [EV.ROOM_UNLOCKED]:   () => { playSfx('hall');    haptic('heavy') },
+    // Ціль виконано (П1) — та сама нагорода, що й за покупку, бо квест і є
+    // покупкою, яку гравець собі пообіцяв.
+    [EV.QUEST_DONE]:      (e) => { playSfx('upgrade'); haptic('medium'); onQuestDone?.(e) },
     [EV.LOCATION_CHANGED]: () => { playSfx('hall');   haptic('heavy') },
 
     // Pass the event through: dropping the payload here once crashed the whole

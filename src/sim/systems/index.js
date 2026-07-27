@@ -13,6 +13,8 @@
 //   zone     → occupancy and dwell progress (detection only)
 //   interact → applies whatever a zone decided should fire
 //   station  → advances assembly on the bench
+//   quest    → notices a goal that stopped being one (П1); last, so it sees
+//              everything this tick already did
 //
 // C2–C5 insert job/path/zone/interaction systems into this list; nothing else in
 // the codebase needs to know they exist.
@@ -29,6 +31,7 @@ import { promoteZoneSystem } from './promote.js'
 import { zoneSystem }        from './zone.js'
 import { interactionSystem } from './interaction.js'
 import { stationSystem }     from './station.js'
+import { questSystem }       from './quest.js'
 
 export const SYSTEMS = Object.freeze([
   intentSystem,
@@ -43,4 +46,5 @@ export const SYSTEMS = Object.freeze([
   zoneSystem,
   interactionSystem,
   stationSystem,
+  questSystem,
 ])

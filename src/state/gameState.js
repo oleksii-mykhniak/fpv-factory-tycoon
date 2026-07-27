@@ -128,6 +128,9 @@ export function createState() {
     // have to ask whether the field exists.
     unlockedRooms:     [FIRST_ROOM_ID],
     onboarded:         false,
+    // Яку ціль гравець закріпив тапом (П1). Єдине, що квести пишуть у сейв —
+    // самі вони виводяться зі стану щоразу (sim/quests.js).
+    pinnedQuestId:     null,
     scrapAvailable:    false, // true when player has "ordered" scrap from the trash
     // All deliveries: [{id, kitId, slotIndex, readyAt, status}]
     // status 'transit'  = en-route or arrived-but-not-picked-up

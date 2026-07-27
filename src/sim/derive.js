@@ -19,6 +19,7 @@ import {
   canMoveToLocation, LOCATION_ORDER,
 } from '../state/locations.js'
 import { ROLE_ORDER, roleLevelData } from '../defs/roles.js'
+import { pinnedQuest } from './quests.js'
 
 // Cheapest kit the player could actually buy. Free kits (scrap) are not
 // purchases and must not count.
@@ -201,6 +202,19 @@ export function scrapGuidanceActive(game) {
 export function nextObjective(world, interactions) {
   const player = (world.agents ?? []).find(a => a.kind === 'player')
   if (!player) return null
+
+  // Закріплена ціль (П1) перебиває петлю — і навмисно раніше за перевірку
+  // «чи ще діють підказки»: підказки замовкають після кількох замовлень, а
+  // стрілка, яку гравець попросив сам, замовкати не має.
+  const quest = pinnedQuest(world.game)
+  if (quest) {
+    const zones = (world.zones ?? []).filter(z => z.kind === quest.zoneKind)
+    if (zones.length) {
+      return zones.reduce((best, z) =>
+        Math.hypot(z.cx - player.x, z.cy - player.y) <
+        Math.hypot(best.cx - player.x, best.cy - player.y) ? z : best)
+    }
+  }
 
   const general = guidanceActive(world.game)
   const scrap   = scrapGuidanceActive(world.game)
