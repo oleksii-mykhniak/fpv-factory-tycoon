@@ -14,7 +14,7 @@ import {
   burnKit, abandonBurntDrone,
   buyUpgrade as buyUpgradeState, moveToLocation as moveToLocationState,
   canOpenPiggy, collectPiggy as collectPiggyState,
-  startScrap as startScrapState, cancelScrap, unlockHall as unlockHallState,
+  cancelScrap, unlockHall as unlockHallState,
   unlockRoom as unlockRoomState,
   calcPrice, getStation, focusStation, idleStations, syncStations,
   hireWorker as hireWorkerState, nextHireCost,
@@ -205,10 +205,8 @@ const HANDLERS = {
     emit(events, EV.MONEY_GAINED, { amount: world.game.money - before, reason: 'piggy' })
   },
 
-  startScrap(world, _p, events) {
-    world.game = startScrapState(world.game)
-    emit(events, EV.SCRAP_REQUESTED)
-  },
+  // `startScrap` прибрано: смітник більше не «замовляють» у ноутбуці, до нього
+  // просто підходять (див. beginScrapRun).
 
   scrapFailed(world, { consolation = 0 }, events) {
     world.game = cancelScrap(world.game, consolation)

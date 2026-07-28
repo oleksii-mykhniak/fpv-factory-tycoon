@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   createState, Phase, DeliveryStatus, KIT_TYPES,
   orderKit, pickupDelivery, buyUpgrade,
-  syncStations, focusStation, startScrap, nextHireCost,
+  syncStations, focusStation, beginScrapRun, nextHireCost,
   startAssembly as _startAssembly,
   recordSolderPoint as _recordSolderPoint,
   finishAssembly as _finishAssembly,
@@ -1120,16 +1120,13 @@ describe('C3: кілька станцій', () => {
     expect(() => _startAssembly(s, 'station-9')).toThrow('не знайдено')
   })
 
-  it('startScrap потребує вільної станції', () => {
-    let s = createState()
-    s = loadStation(s, 'station-0')
-    expect(() => startScrap(s)).toThrow('немає вільної станції')
-
-    // Гараж, а не фабрика: на фабриці смітника немає взагалі (F1.3), тож там
-    // цей тест перевіряв би не те правило.
-    const two = { ...loadStation(twoStations(), 'station-0'),
-      locationId: 'apartment', unlockedRooms: ['flat', 'garage'] }
-    expect(startScrap(two).scrapAvailable).toBe(true)
+  it('копирсання в смітнику лише рахується — станом гри воно не керує', () => {
+    // Умова «чи можна зараз» живе в зоні (interactions.trashbin), а не тут:
+    // смітник став самообслуговуванням, і стан гри від підходу до нього не
+    // перемикається — росте тільки лічильник, на якому тримаються підказки.
+    const s = beginScrapRun(createState())
+    expect(s.scrapRuns).toBe(1)
+    expect(beginScrapRun(s).scrapRuns).toBe(2)
   })
 
   it('слоти доставки більше не блокуються зайнятим верстаком', () => {
@@ -1278,8 +1275,8 @@ describe('F1 — фабрика', () => {
     expect(ruleAt(createState(), 'hasTrash')).toBe(true)
   })
 
-  it('брухт на фабриці не замовляється взагалі', () => {
-    expect(() => startScrap(toFactory())).toThrow('немає смітника')
+  it('на фабриці смітника немає — і рятує там безкоштовний комплект', () => {
+    expect(ruleAt(toFactory(), 'hasTrash')).toBe(false)
   })
 
   it('особисті треки заморожуються на рівні, з яким приїхав', () => {

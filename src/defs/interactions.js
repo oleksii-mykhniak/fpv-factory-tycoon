@@ -20,7 +20,7 @@ import {
   Phase, DeliveryStatus, KIT_TYPES,
   pickupDelivery, startAssembly, startScrapAssembly, getStation,
   sell as sellStation, calcPrice, takeOutput, orderKit, abandonBurntDrone,
-  workerById,
+  workerById, beginScrapRun, idleStations,
 } from '../state/gameState.js'
 import {
   ZONE_DWELL_INSTANT_MS, ZONE_DWELL_BENCH_MS, ZONE_DWELL_OUTPUT_MS,
@@ -30,7 +30,7 @@ import {
 import { EV, emit } from '../sim/events.js'
 import {
   piggyShouldShow, shopNeedsAttention, upgradeNeedsAttention, hireNeedsAttention,
-  rescueKitAvailable,
+  rescueKitAvailable, cheapestKitCost,
   managerOrderChoice,
 } from '../sim/derive.js'
 import { hiringAllowed } from '../state/locations.js'
@@ -201,9 +201,22 @@ export const INTERACTIONS = {
     dwellMs: ZONE_DWELL_TRASH_MS,
     repeat:  false,
     accepts:  'any',
-    enabled: (world, _zone, agent) => world.game.scrapAvailable && carryEmpty(agent),
-    run: (_world, _zone, agent, events) =>
-      emit(events, EV.MINIGAME_REQUESTED, { agentId: agent.id, game: 'scrap' }),
+    // Самообслуговування: копирсатись у смітнику можна будь-коли, аби були
+    // вільні руки й вільний верстак, куди принести деталі. Умови «спершу
+    // замов брухт у ноутбуці» більше немає — саме вона робила безкоштовний
+    // порятунок платним у кроках.
+    enabled: (world, _zone, agent) =>
+      carryEmpty(agent) && idleStations(world.game).length > 0,
+    // Копирсатись можна завжди, але РАДИТИ це варто лише коли інакше ніяк:
+    // безкоштовний дрон із брухту дешевий, і стрілка, яка тягне до смітника
+    // при повній касі, вчила б грати гірше. `enabled` — «тут щось станеться»,
+    // `attention` — «сюди зараз варто».
+    attention: (world) => world.game.money < cheapestKitCost,
+    run(world, _zone, agent, events) {
+      world.game = beginScrapRun(world.game)
+      emit(events, EV.MINIGAME_REQUESTED, { agentId: agent.id, game: 'scrap' })
+      emit(events, EV.STATE_DIRTY)
+    },
   },
 
   // ── Panels as places (S2) ───────────────────────────────

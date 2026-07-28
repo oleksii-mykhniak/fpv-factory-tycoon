@@ -55,7 +55,6 @@ function hint(state, carrying) {
 
   switch (station?.phase ?? Phase.IDLE) {
     case Phase.IDLE: {
-      if (state.scrapAvailable) return 'Іди до смітника — там є деталі'
       const deliveries = state.deliveries ?? []
       if (deliveries.some(d => d.status === DeliveryStatus.CARRYING)) return 'Несемо на стіл…'
       const arrived = deliveries.some(d => d.status === DeliveryStatus.TRANSIT && d.readyAt <= Date.now())

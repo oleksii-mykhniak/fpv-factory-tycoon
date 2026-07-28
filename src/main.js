@@ -273,7 +273,6 @@ const unlockCard = createUnlockCard(uiRoot)
 
 const shopModal = createShopModal(uiRoot, {
   onOrder: (kitId) => { dismissOnboarding(); send('order', { kitId }) },
-  onScrapStart: () => send('startScrap'),
 })
 
 const upgradeModal = createUpgradeModal(uiRoot, {

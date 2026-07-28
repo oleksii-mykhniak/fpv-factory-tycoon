@@ -363,16 +363,33 @@ describe('стрілка і квест синхронні', () => {
 
   it('зона, на яку показує стрілка, справді щось робить', () => {
     // Стрілка на зону, яка при підході нічого не зробить, — гірша за жодну.
-    // Виняток — місце цілі: до шафи ведуть, щоб КУПИТИ, а не щоб «спрацювало».
+    // Виняток рівно один: місце цілі-покупки (до шафи ведуть, щоб КУПИТИ, а не
+    // щоб «спрацювало»).
+    //
+    // Зони вставок сюди ВХОДЯТЬ, і це не дрібниця: перший захід їх пропускав, і
+    // тому проґавив, що підказка «розбери брухт у смітнику» вела до смітника,
+    // який без «замовлення» в ноутбуці не робив нічого.
     for (const [name, state] of cases()) {
       const w = world(state)
       w.arrowUntil = w.now + ARROW_REQUEST_MS
       const target = nextObjective(w, INTERACTIONS)
       if (!target) continue
       if (target.kind === questZoneKind(state)) continue
-      if (target.kind === interruptQuest(state)?.zoneKind) continue
       const player = w.agents.find(a => a.kind === 'player')
       expect(INTERACTIONS[target.kind].enabled(w, target, player), `${name}: ${target.kind}`)
+        .toBe(true)
+    }
+  })
+
+  it('вставка веде туди, де підхід справді щось зробить', () => {
+    for (const [name, state] of cases()) {
+      const stuck = interruptQuest(state)
+      if (!stuck) continue
+      const w = world(state)
+      const zone = (w.zones ?? []).find(z => z.kind === stuck.zoneKind)
+      expect(zone, `${name}: зони ${stuck.zoneKind} тут немає`).toBeTruthy()
+      const player = w.agents.find(a => a.kind === 'player')
+      expect(INTERACTIONS[zone.kind].enabled(w, zone, player), `${name}: ${zone.kind}`)
         .toBe(true)
     }
   })
@@ -442,10 +459,27 @@ describe('позаланцюгові вставки', () => {
     expect(questIndex(clean)).toBe(questIndex(burnt))
   })
 
-  it('порожня каса веде до смітника, а коли брухт уже замовлено — до скарбнички', () => {
+  it('порожня каса веде до смітника — туди, де деталі безкоштовні', () => {
     const broke = withStats({ money: 1, ordersPlaced: 9 }, { assembled: 3, sold: 3 })
     expect(interruptQuest(broke).zoneKind).toBe('trashbin')
-    expect(interruptQuest({ ...broke, scrapAvailable: true }).zoneKind).toBe('piggy')
+  })
+
+  it('смітник радять лише без грошей — при повній касі він мовчить', () => {
+    // Копирсатись можна завжди, але це порятунок, а не стратегія: дрон із
+    // брухту дешевий, і стрілка до смітника при грошах вчила б грати гірше.
+    const rich = withStats({ money: 9999, ordersPlaced: 9 }, { assembled: 3, sold: 3 })
+    expect(interruptQuest(rich)).toBeNull()
+    const w = world(rich)
+    w.arrowUntil = w.now + ARROW_REQUEST_MS
+    expect(nextObjective(w, INTERACTIONS)?.kind).not.toBe('trashbin')
+  })
+
+  it('коли нема куди принести деталі, смітник не пропонують', () => {
+    // Єдиний верстак зайнято — копирсання нічого не дасть, і вести туди нікуди.
+    const busy = withStats({ money: 1, ordersPlaced: 9, stations: [{
+      id: 'station-0', defId: 'workbench', phase: 'ASSEMBLY', kitId: 'mini_drone',
+      solderPoints: [], quality: null, coldPenalty: 0 }] }, { assembled: 3, sold: 3 })
+    expect(interruptQuest(busy)?.zoneKind).not.toBe('trashbin')
   })
 
   it('на фабриці порятунок інший, тож вставки немає', () => {

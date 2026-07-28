@@ -29,7 +29,7 @@ function priceRange(kit, priceMultiplier) {
   return `$${min.toFixed(0)}–$${max.toFixed(0)}`
 }
 
-export function createShopModal(root, { onOrder, onScrapStart }) {
+export function createShopModal(root, { onOrder }) {
   const overlay = document.createElement('div')
   overlay.id = 'shop-modal'
   overlay.className = 'modal-overlay'
@@ -161,50 +161,10 @@ export function createShopModal(root, { onOrder, onScrapStart }) {
       })
     }
 
-    // Scrap drone card — free, Tinder mini-game, always at bottom.
-    // Only where there is a bin to salvage from (F1.3).
-    if (!ruleAt(state, 'hasTrash')) return
-
-    const scrapKit      = KIT_TYPES['scrap_drone']
-    const scrapSellMin  = calcPrice(scrapKit.basePrice, 0,   state.upgrades.priceMultiplier)
-    const scrapSellMax  = calcPrice(scrapKit.basePrice, 1.0, state.upgrades.priceMultiplier)
-    const scrapCard = document.createElement('div')
-    scrapCard.className = 'kit-card kit-card--scrap'
-
-    if (idleStations(state).length && !state.scrapAvailable) {
-      scrapCard.innerHTML = `
-        <div class="kit-card__header">
-          <span class="kit-card__emoji">♻️</span>
-          <div class="kit-card__info">
-            <div class="kit-card__name">Дрон з брухту</div>
-            <div class="kit-card__meta">Безкоштовно · Тіндер-гра</div>
-          </div>
-          <div class="kit-card__prices">
-            <div class="kit-card__buy-price">$0</div>
-            <div class="kit-card__sell-range">$${scrapSellMin.toFixed(0)}–$${scrapSellMax.toFixed(0)}</div>
-          </div>
-        </div>
-        <button class="btn btn--success kit-card__btn" id="btn-scrap-start">
-          Збирати зі смітника — $0
-        </button>
-      `
-      body.appendChild(scrapCard)
-      scrapCard.querySelector('#btn-scrap-start').addEventListener('click', () => {
-        onScrapStart?.()
-        close()
-      })
-    } else if (state.scrapAvailable) {
-      scrapCard.innerHTML = `
-        <div class="kit-card__header">
-          <span class="kit-card__emoji">♻️</span>
-          <div class="kit-card__info">
-            <div class="kit-card__name">Іду до смітника…</div>
-            <div class="kit-card__meta">Воркер збирає деталі</div>
-          </div>
-        </div>
-      `
-      body.appendChild(scrapCard)
-    }
+    // Картку «Збирати зі смітника» прибрано: смітник став самообслуговуванням
+    // (див. interactions.trashbin). Пропонувати біля ноутбука безкоштовний
+    // порятунок, по який усе одно треба йти на вулицю, — це зайвий крок і
+    // друга назва однієї механіки.
   }
 
   return { open, close, update }

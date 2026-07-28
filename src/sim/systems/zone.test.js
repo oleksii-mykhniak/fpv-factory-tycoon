@@ -330,19 +330,29 @@ describe('sim/interactions — the full loop without a single tap', () => {
     expect(types(run(broke, 1000))).toContain(EV.MINIGAME_REQUESTED)
   })
 
-  it('the trash bin opens the salvage game only after it is ordered', () => {
+  // Смітник — самообслуговування: підійшов і копирсаєшся. Умови «спершу замов
+  // брухт у ноутбуці» більше немає, вона робила безкоштовний порятунок платним
+  // у кроках — і саме в неї впиралась підказка, коли грошей уже не було.
+  it('the trash bin opens the salvage game on arrival, no ordering first', () => {
     const w = world()
     standAt(w, zone('trashbin'))
-    expect(types(run(w, 3000))).not.toContain(EV.MINIGAME_REQUESTED)
-
-    dispatch(w, 'startScrap')
     const events = run(w, 3000)
     expect(events.find(e => e.t === EV.MINIGAME_REQUESTED)?.game).toBe('scrap')
+    expect(w.game.scrapRuns).toBe(1)
+  })
+
+  it('a busy shop has nowhere to put the parts, so the bin stays shut', () => {
+    const w = world()
+    dispatch(w, 'order', { kitId: 'mini_drone' })
+    standAt(w, zone(BENCH_ZONE))
+    dispatch(w, 'scrapCollected', { agentId: 'player' })
+    run(w, ZONE_DWELL_BENCH_MS + 200)          // єдиний верстак зайнято
+    standAt(w, zone('trashbin'))
+    expect(types(run(w, 3000))).not.toContain(EV.MINIGAME_REQUESTED)
   })
 
   it('salvaged parts are carried to the bench, not teleported there', () => {
     const w = world()
-    dispatch(w, 'startScrap')
     dispatch(w, 'scrapCollected', { agentId: 'player' })
     expect(carrying(w)).toEqual(['scrap'])
     expect(bench(w).phase).toBe(Phase.IDLE)

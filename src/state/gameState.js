@@ -143,7 +143,6 @@ export function createState() {
       bestRate:    0,   // найвищий $/сек, який цех колись показував
       soldByKit:   {},  // { racing_drone: 2, … } — для квестів на тип дрона
     },
-    scrapAvailable:    false, // true when player has "ordered" scrap from the trash
     // All deliveries: [{id, kitId, slotIndex, readyAt, status}]
     // status 'transit'  = en-route or arrived-but-not-picked-up
     // status 'carrying' = worker is carrying it to bench
@@ -425,14 +424,19 @@ export function freeSlots(state) {
 
 // ── Scrap (Tinder mini-game → free drone assembly) ───────
 
-export function startScrap(state) {
-  if (!ruleAt(state, 'hasTrash'))
-    throw new Error('startScrap: у цій локації немає смітника')
-  if (!idleStations(state).length)
-    throw new Error('startScrap: немає вільної станції')
-  if (state.scrapAvailable)
-    throw new Error('startScrap: вже активовано')
-  return { ...state, scrapAvailable: true, scrapRuns: (state.scrapRuns ?? 0) + 1 }
+// Гравець підійшов до смітника й почав копирсатись.
+//
+// Раніше це був ДРУГИЙ крок: спершу «замовити брухт» у ноутбуці (прапорець
+// `scrapAvailable`), і лише тоді смітник узагалі щось робив. Тобто безкоштовний
+// порятунок вимагав сходити по нього до столу — і саме туди впиралась підказка
+// «розбери брухт у смітнику», коли грошей уже не було. Тепер смітник — це
+// самообслуговування: підійшов і копирсаєшся.
+//
+// Лічильник лишається: на ньому тримається окрема пільга підказок для смітника
+// (scrapGuidanceActive), бо кілька чистих циклів можуть пройти без жодного
+// перегріву, і тоді про смітник гравець не дізнався б ніколи.
+export function beginScrapRun(state) {
+  return { ...state, scrapRuns: (state.scrapRuns ?? 0) + 1 }
 }
 
 // Salvaged parts are put down on a station: a free drone starts assembling.
@@ -446,13 +450,13 @@ export function startScrapAssembly(state, stationId) {
       phase: Phase.ASSEMBLY,
       kitId: 'scrap_drone',
     })),
-    scrapAvailable: false,
   }
 }
 
-// Called when Tinder game fails — clear scrap mode and award consolation UAH.
+// Тіндер-гру програно — лишається втішний приз. Стану, який треба «прибрати»,
+// більше немає: смітник ні на що не перемикає гру, тому це просто гроші.
 export function cancelScrap(state, consolation = 0) {
-  return { ...state, scrapAvailable: false, money: state.money + consolation }
+  return { ...state, money: state.money + consolation }
 }
 
 // ── Piggy bank ────────────────────────────────────────────

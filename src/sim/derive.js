@@ -236,7 +236,11 @@ export function interruptQuest(game) {
     && !busyStations(game).length
   if (!broke) return null
 
-  if (ruleAt(game, 'hasTrash') && !game.scrapAvailable) {
+  // Смітник — тільки якщо там справді є що зробити: вільний верстак, куди
+  // принести деталі. Стрілка на зону, яка при підході нічого не зробить, гірша
+  // за жодну — і саме це тут раніше й було, бо смітник вимагав «замовлення» в
+  // ноутбуці.
+  if (ruleAt(game, 'hasTrash') && idleStations(game).length) {
     return {
       id:       'salvage_run',
       kind:     'do',

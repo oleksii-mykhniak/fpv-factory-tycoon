@@ -129,7 +129,7 @@ const seedState = (upgrades, extra = {}) => ({
   savedAt: Date.now(),
   state: {
     money: 1000, lastPiggyAt: null, locationId: 'apartment', onboarded: true,
-    scrapAvailable: false, deliveries: [],
+    deliveries: [],
     stations: [{ id: 'station-0', defId: 'workbench', phase: 'IDLE', kitId: null,
                  solderPoints: [], quality: null, coldPenalty: 0 }],
     upgrades: {
@@ -189,9 +189,10 @@ await boot(seedState({}, { money: 5 }))
 await goTo('piggy'); await page.waitForTimeout(900)
 const bPiggy = await log('piggy zone while broke')
 
-await boot(seedState({}, { scrapAvailable: true }))
+// Смітник — самообслуговування: жодного «замовлення» в ноутбуці перед цим.
+await boot(seedState({}, { money: 5 }))
 await goTo('trashbin'); await page.waitForTimeout(2000)
-const bTrash = await log('trash zone with salvage ordered')
+const bTrash = await log('trash zone, walked up with no ordering')
 
 // ── D. Two stations at once (C3) ──────────────────────────
 console.log('\n### D. Two benches in parallel')
