@@ -830,6 +830,23 @@ const pArrowRich = await arrowAt('rack')
 console.log(`  "${pPoor?.title}" ${pPoor?.meta} → стрілка на шафу: ${pArrowPoor} (грошей нема)`)
 console.log(`  з грошима: ${pRich?.meta} ready=${pRich?.ready} → стрілка на шафу: ${pArrowRich}`)
 
+// Картку можна згорнути в значок — і вибір переживає перезапуск.
+await page.click('.quest__toggle')
+await page.waitForTimeout(300)
+const pFolded = await page.evaluate(() => {
+  const el = document.getElementById('quest-tracker')
+  return {
+    collapsed: el.hasAttribute('data-collapsed'),
+    width: Math.round(el.getBoundingClientRect().width),
+    stored: localStorage.getItem('fpv_quest_collapsed'),
+  }
+})
+await page.click('.quest--collapsed')
+await page.waitForTimeout(300)
+const pUnfolded = await page.evaluate(() =>
+  !document.getElementById('quest-tracker').hasAttribute('data-collapsed'))
+console.log(`  згорнута: ${pFolded.collapsed} (${pFolded.width}px, збережено ${pFolded.stored}) → розгорнута: ${pUnfolded}`)
+
 // Позаланцюгові вставки (Р1): згорілий комплект і порожня каса перебивають
 // ціль, бо це те, що стоїть на місці прямо зараз.
 await boot(seedState({}, { money: 3, ordersPlaced: 9, scrapRuns: 9, stats: P_STATS }))
@@ -993,6 +1010,9 @@ const checks = [
   ['P: a purchase shows a money bar',      !!pPoor?.meta && pPoor.meta.includes('$')],
   ['P: no arrow to the rack while broke',  pArrowPoor === false],
   ['P: a tap on the card brings the arrow back', pArrowRich === true],
+  ['P: the card folds into a badge',       pFolded.collapsed && pFolded.width < 60],
+  ['P: and the choice is remembered',      pFolded.stored === '1'],
+  ['P: tapping the badge opens it again',  pUnfolded === true],
   // Вставки: ціль ланцюга чекає, поки цех застряг.
   ['P: an empty till interrupts the goal', pBroke?.title?.includes('смітник')],
   ['P: a burnt kit interrupts the goal',   pBurnt?.title?.includes('згорілий')],

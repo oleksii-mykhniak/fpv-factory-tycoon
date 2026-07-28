@@ -22,9 +22,25 @@
 //   смужка    — скільки лишилось ($ для покупки, штуки для дії)
 //   why/hint  — чому це варте грошей або чому ще не можна
 //   step      — «неси коробку до верстака», поки петля ще нова
+//
+// І її можна згорнути в значок: ціль корисна, але не щосекунди, а екран
+// телефона малий. Вибір запам'ятовується між запусками — гравець згортає її
+// саме тому, що вона заважає.
 
 import { activeQuest } from '../sim/quests.js'
 import { interruptQuest } from '../sim/derive.js'
+
+// Згорнута картка — це вибір гравця про ЕКРАН, а не стан цеху, тому в сейв гри
+// вона не йде. Але й у пам'яті вкладки їй не місце: гравець згорнув її саме
+// тому, що вона заважає, і після перезапуску вона не має розгортатись назад.
+const COLLAPSE_KEY = 'fpv_quest_collapsed'
+
+const readCollapsed = () => {
+  try { return localStorage.getItem(COLLAPSE_KEY) === '1' } catch { return false }
+}
+const writeCollapsed = (on) => {
+  try { localStorage.setItem(COLLAPSE_KEY, on ? '1' : '0') } catch {}
+}
 
 export function createQuestTracker(root, { onShowArrow } = {}) {
   const el = document.createElement('div')
@@ -32,7 +48,22 @@ export function createQuestTracker(root, { onShowArrow } = {}) {
   el.setAttribute('hidden', '')
   root.appendChild(el)
 
-  el.addEventListener('click', () => onShowArrow?.())
+  let collapsed = readCollapsed()
+
+  // Дві дії на одній картці, тому вони розведені по цілях кліку: кнопка згортає,
+  // решта картки просить стрілку. Без stopPropagation тап по кнопці робив би і
+  // те, і те.
+  el.addEventListener('click', (e) => {
+    if (e.target.closest('[data-collapse]')) {
+      e.stopPropagation()
+      collapsed = !collapsed
+      writeCollapsed(collapsed)
+      lastKey = null       // згортання — стан панелі, гру воно не міняє
+      redraw()
+      return
+    }
+    if (!collapsed) onShowArrow?.()
+  })
 
   // Виконану ціль уже не порахувати зі стану — її там немає. Тому назви
   // тримаємо з останнього малювання: тост має що показати рівно тому, що
@@ -46,6 +77,7 @@ export function createQuestTracker(root, { onShowArrow } = {}) {
   root.appendChild(toast)
 
   let lastKey = null
+  let lastArgs = null       // щоб перемальовувати після згортання без нового тіка
 
   // `stepHint` — рядок петлі від HUD (Р2), або null коли підказки вже вимкнено.
   // `quiet` — поки на екрані смужка пайки: вона займає ту саму висоту, і
@@ -53,6 +85,17 @@ export function createQuestTracker(root, { onShowArrow } = {}) {
   // `askable` — чи тап зараз щось зробить (стрілки на екрані немає). Малюємо
   // компас лише тоді: підказка про дію, якої нема, гірша за жодну.
   function update(state, stepHint = null, quiet = false, askable = false) {
+    lastArgs = { state, stepHint, quiet, askable }
+    render(lastArgs)
+  }
+
+  // Перемальовування після згортання: renderUI сюди не зайде, поки не зміниться
+  // стан гри, і панель лишилась би в старому вигляді до найближчої покупки.
+  function redraw() {
+    if (lastArgs) render(lastArgs)
+  }
+
+  function render({ state, stepHint, quiet, askable }) {
     if (quiet) el.setAttribute('data-quiet', '')
     else       el.removeAttribute('data-quiet')
 
@@ -71,13 +114,17 @@ export function createQuestTracker(root, { onShowArrow } = {}) {
     // кадр, а innerHTML посеред тапу з'їдає сам тап.
     const key = JSON.stringify([
       quest.id, quest.title, Math.floor(quest.have), quest.need,
-      quest.hint, stepHint, askable,
+      quest.hint, stepHint, askable, collapsed,
     ])
     if (key === lastKey) return
     lastKey = key
 
     el.removeAttribute('hidden')
-    el.innerHTML = card(quest, stepHint, askable)
+    // Атрибут стискає й сам контейнер: інакше згорнута картка лишала б смугу
+    // невидимої області, яка їсть тапи по грі під нею.
+    if (collapsed) el.setAttribute('data-collapsed', '')
+    else           el.removeAttribute('data-collapsed')
+    el.innerHTML = collapsed ? collapsedCard(quest) : card(quest, stepHint, askable)
   }
 
   // Ціль виконано. Без цього момент непомітний: картка просто змінює текст, а
@@ -92,6 +139,17 @@ export function createQuestTracker(root, { onShowArrow } = {}) {
   }
 
   return { update, flash }
+}
+
+// Згорнутий вигляд: значок цілі й нічого більше. Не «менша картка», а саме
+// значок — гравець згорнув її, бо вона відволікала, і півкартки відволікали б
+// рівно наполовину менше.
+function collapsedCard(quest) {
+  return `
+    <div class="quest quest--collapsed" data-collapse>
+      <span class="quest__pin">${quest.ready ? '✅' : '🎯'}</span>
+    </div>
+  `
 }
 
 function card(quest, stepHint, askable) {
@@ -110,7 +168,10 @@ function card(quest, stepHint, askable) {
 
   return `
     <div class="quest quest--primary ${quest.ready ? 'quest--ready' : ''}">
-      <div class="quest__title">${quest.ready ? '✅ ' : ''}${quest.title}</div>
+      <div class="quest__head">
+        <span class="quest__title">${quest.ready ? '✅ ' : ''}${quest.title}</span>
+        <button class="quest__toggle" data-collapse aria-label="Згорнути">▾</button>
+      </div>
       ${showBar ? `
         <div class="quest__bar"><div class="quest__fill" style="width:${pct}%"></div></div>
         <div class="quest__meta">${meta}</div>
