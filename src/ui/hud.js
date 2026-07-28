@@ -11,20 +11,19 @@ export function createHUD(root) {
     <div class="hud__rate-wrap">
       <span class="hud__rate" id="hud-rate" hidden></span>
     </div>
-    <div class="hud__hint" id="hud-hint"></div>
   `
   root.appendChild(el)
 
-  // carrying: item types in the player's hands, so the hint can name the next
-  // physical step rather than a tap target (C2).
-  // guidance: the running "what to do next" line is training wheels and stops
-  // after the first few orders (C7), leaving just the money on screen.
   // rate: $/sec over the last minute of actual sales (F7). Hidden until the
   // shop has actually earned something — a permanent "$0.00/сек" is noise, and
   // the first sale making it appear is a moment worth having.
-  function update(state, carrying = [], guidance = true, rate = 0) {
+  //
+  // Рядка підсказки тут більше немає (Стадія 9 / Р2): смуга внизу екрана
+  // заважала, а про «що робити» говорили три системи одночасно. Тепер HUD — це
+  // рівно гроші й темп, а крок петлі рахує `stepHint()` нижче і показує картка
+  // квесту.
+  function update(state, rate = 0) {
     el.querySelector('#hud-money').textContent = `$${state.money.toFixed(2)}`
-    el.querySelector('#hud-hint').textContent  = guidance ? hint(state, carrying) : ''
 
     const rateEl = el.querySelector('#hud-rate')
     if (rate > 0) {
@@ -36,6 +35,13 @@ export function createHUD(root) {
   }
 
   return { update }
+}
+
+// Крок петлі — що робити з тим, що зараз у руках і на верстаку. Живе далі тут
+// (це знання про фази станції, не про квести), але тепер це чиста функція, яку
+// малює картка квесту. Повертає '' коли підказки вже не потрібні.
+export function stepHint(state, carrying = [], guidance = true) {
+  return guidance ? hint(state, carrying) : ''
 }
 
 function hint(state, carrying) {

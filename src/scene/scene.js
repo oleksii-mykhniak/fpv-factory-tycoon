@@ -478,6 +478,68 @@ function createBenchProgress(scene, benchActor) {
   return { startStep, advanceDots, hide, showResult }
 }
 
+// Картка «комплект згорів» над верстаком (Стадія 9 / Р7).
+//
+// Окремо від createBenchProgress навмисно: та картка живе, поки збірка ЙДЕ, і
+// зникає на кожному переході фази. Ця мусить висіти саме тоді, коли та зникла —
+// поки згорілий комплект лежить на верстаку. Одна картка на дві протилежні
+// умови видимості неминуче гасила б себе не в той момент.
+//
+// Два рядки, бо це дві різні думки: перший каже, ЩО сталось (і на якому кроці —
+// без цього перегрів читається як випадковість), другий — ЩО РОБИТИ, а це
+// єдина підказка про те, що згорілий комплект узагалі можна прибрати.
+function createBurntNotice(scene, benchActor) {
+  const add = (a) => { scene.add(track(a)); return a }
+  // Ширина від ТЕКСТУ, а не від верстака: monospace 12 px — це ~7.2 px на
+  // символ, і найдовший рядок («🔥 Перегрів: Прошиваю польотний контролер») не
+  // мусить вилазити за підкладку. Перший захід міряв ширину верстака й обрізав
+  // саме те, що треба було прочитати.
+  const CARD_W = 250
+  const CARD_H = 44
+  const cx = benchActor.pos.x
+  const cy = benchActor.pos.y - benchActor.height / 2 - 8 - CARD_H / 2
+
+  const border = add(new ex.Actor({
+    pos: ex.vec(cx, cy), width: CARD_W + 2, height: CARD_H + 2,
+    z: 26, color: ex.Color.fromHex('#c05a2a'),
+  }))
+  const card = add(new ex.Actor({
+    pos: ex.vec(cx, cy), width: CARD_W, height: CARD_H,
+    z: 27, color: ex.Color.fromHex('#2a1614'),
+  }))
+
+  const line = (dy, hex, size) => add(new ex.Label({
+    text: '',
+    pos:  ex.vec(cx, cy + dy),
+    color: ex.Color.fromHex(hex),
+    font: new ex.Font({
+      family: 'monospace', size, unit: ex.FontUnit.Px,
+      textAlign: ex.TextAlign.Center, baseAlign: ex.BaseAlign.Middle,
+    }),
+    z: 28,
+  }))
+
+  const what = line(-CARD_H * 0.20, '#ff9a6a', 12)
+  const todo = line(CARD_H * 0.22, '#e8d0a0', 11)
+
+  const parts = [border, card, what, todo]
+  for (const p of parts) p.graphics.visible = false
+
+  return {
+    // Назовні віддаємо і самі актори: смоук-тест перевіряє, що над згорілим
+    // верстаком СПРАВДІ щось намальовано, а не що сим так вважає.
+    parts,
+    show(whatText, todoText) {
+      what.text = whatText
+      todo.text = todoText
+      for (const p of parts) p.graphics.visible = true
+    },
+    hide() {
+      for (const p of parts) p.graphics.visible = false
+    },
+  }
+}
+
 // ── Scene entry point ─────────────────────────────────────
 
 export async function initScene(canvas, { getWorld, onIntent, onLoadProgress, layout, world }) {
@@ -561,24 +623,14 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
       actor, boxOpen, drone,
       pulse:    addPulse(actor),
       progress: createBenchProgress(scene, actor),
-      // Said out loud over the bench when a kit burns. The modal that used to
-      // explain it closes itself, and a smoking drone with no words next to it
-      // reads as "the game broke", not as "that one is scrap".
-      burntLabel: (() => {
-        const lbl = new ex.Label({
-          text: '',
-          pos:  ex.vec(actor.pos.x, actor.pos.y - actor.height / 2 - 34),
-          z: 27,
-          color: ex.Color.fromHex('#ff9a6a'),
-          font: new ex.Font({
-            family: 'monospace', size: 13, unit: ex.FontUnit.Px,
-            textAlign: ex.TextAlign.Center, baseAlign: ex.BaseAlign.Middle,
-          }),
-        })
-        lbl.graphics.visible = false
-        scene.add(track(lbl))
-        return lbl
-      })(),
+      // Сказано вголос над верстаком, коли комплект згорів (Стадія 9 / Р7).
+      //
+      // Мітка була тут і раніше, але одним рядком у 13 px без підкладки — на
+      // тлі підлоги й дерева її просто не видно, тож на тесті це прочиталось як
+      // «текст блимнув і зник». Тепер це картка: рамка, фон і ДВА рядки —
+      // що сталось і що з цим робити. Висить, поки фаза BURNT, тобто поки
+      // хтось не підійде й не приберемо.
+      burnt: createBurntNotice(scene, actor),
       workSpot: placed.workSpot,
       surface:  placed.surface,
       outSpot:  placed.outSpot,

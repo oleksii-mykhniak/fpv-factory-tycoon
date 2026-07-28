@@ -38,6 +38,13 @@ export const FACTORY_HALLS = Object.freeze([
     // a second would only race the first to the same laptop.
     workerCaps: { courier: 1, tech: 1, seller: 1, manager: 0 },
     cost: 2400,
+    // Те саме, що й у кімнат квартири (Стадія 9 / Р4): відкрита одиниця
+    // простору сама розповідає, що з нею приїхало.
+    unlocks: [
+      '🔧 Два верстаки',
+      "🧑‍🔧 Три вакансії: кур'єр, технік, продавець",
+      '📦 Конвеєр носить коробки в цей цех',
+    ],
   },
   {
     id: 'hall-3',
@@ -46,6 +53,11 @@ export const FACTORY_HALLS = Object.freeze([
     benches: 2,
     workerCaps: { courier: 1, tech: 1, seller: 1, manager: 0 },
     cost: 6800,
+    unlocks: [
+      '🔧 Два верстаки',
+      "🧑‍🔧 Три вакансії: кур'єр, технік, продавець",
+      '📦 Конвеєр носить коробки в цей цех',
+    ],
   },
 ])
 

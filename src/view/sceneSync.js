@@ -31,6 +31,10 @@ import * as ex from 'excalibur'
 let _lastDroneSpriteKey = null
 let _prevCarryingId     = null
 
+// Мітка над верстаком малюється в canvas, де немає ні переносу рядків, ні
+// обрізання: довга назва кроку просто вилізе за підкладку. Тому ріжемо тут.
+const trim = (text, max) => text.length <= max ? text : `${text.slice(0, max - 1)}…`
+
 function applySprite(actor, key) {
   const src = getSprite(key)
   if (!src) return
@@ -94,14 +98,24 @@ export function syncScene(refs, world) {
     // Burnt kit: say so, over the bench, until somebody clears it. This is the
     // only feedback there is — the burn modal is not opened any more (F1.7),
     // and the fix is to stand at the bench, which nothing else would tell you.
-    if (view.burntLabel) {
-      const burnt = station.phase === Phase.BURNT
-      view.burntLabel.graphics.visible = burnt
-      if (burnt) {
-        const salvage = (KIT_TYPES[station.kitId]?.cost ?? 0) * SALVAGE_RATE
-        view.burntLabel.text = salvage > 0
-          ? `🔥 Згорів — стань тут, +$${salvage.toFixed(0)}`
-          : '🔥 Згорів — стань тут, щоб прибрати'
+    //
+    // Стадія 9 / Р7: тексту стало два рядки, і перший називає КРОК, на якому
+    // сталося перегрівання. Без нього перегрів читався як «щось блимнуло», а не
+    // як наслідок конкретної пайки — саме через це вся гілка згорілого
+    // комплекту здавалась поламкою.
+    if (view.burnt) {
+      if (station.phase === Phase.BURNT) {
+        const kit     = KIT_TYPES[station.kitId]
+        const step    = kit?.assemblySteps?.[station.solderPoints.length]
+        const salvage = (kit?.cost ?? 0) * SALVAGE_RATE
+        view.burnt.show(
+          step?.label ? `🔥 Перегрів: ${trim(step.label, 26)}` : '🔥 Комплект перегрітий',
+          salvage > 0
+            ? `Стань тут — утиль +$${salvage.toFixed(0)}`
+            : 'Стань тут, щоб прибрати',
+        )
+      } else {
+        view.burnt.hide()
       }
     }
 

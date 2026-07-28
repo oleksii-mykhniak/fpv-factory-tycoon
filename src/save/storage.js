@@ -8,7 +8,12 @@ const SAVE_KEY = 'fpv_factory_save'
 // Bumping this ALONE does not throw a save away: migrateState() in main.js has
 // been carrying old shapes forward since D6 and there is no reason to discard a
 // save we can still read. What throws a save away is raising the floor below.
-export const SAVE_VERSION = 3
+// 4 (Стадія 9 / Р1): у стані з'явились лічильники `stats` — на них тримаються
+// квести-дії. Це додавання, а не зміна форми, тому підлога НЕ піднімається:
+// сейв версії 3 читається далі, лічильники в ньому нульові, а щоб гравцеві з
+// фабрикою не пропонували «продай 3 дрони», ланцюг має умови `outgrown`
+// (див. sim/quests.js).
+export const SAVE_VERSION = 4
 
 // The oldest schema this build will still load. Raise it — deliberately, and
 // only alongside a comment saying why — when a change is too structural to

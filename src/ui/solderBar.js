@@ -1,6 +1,6 @@
 import { KIT_TYPES } from '../state/gameState.js'
 import { levelData } from '../state/upgrades.js'
-import { COLD_SOLDER_QUALITY_PENALTY } from '../state/config.js'
+import { COLD_SOLDER_QUALITY_PENALTY, COLD_MSG_MS } from '../state/config.js'
 import { createSolderGame } from './solderGame.js'
 
 // The soldering mini-game as a strip, not a modal (C6).
@@ -61,7 +61,7 @@ export function createSolderBar(root, { onSolderResult }) {
       const warn = el.querySelector('#sb-warn')
       warn.innerHTML = `${coldMsg} <b>−${Math.round(COLD_SOLDER_QUALITY_PENALTY * 100)}%</b>`
       warn.hidden = false
-      warnUntil = Date.now() + 2200
+      warnUntil = Date.now() + COLD_MSG_MS
     } else if (warnUntil && Date.now() > warnUntil) {
       el.querySelector('#sb-warn').hidden = true
       warnUntil = 0

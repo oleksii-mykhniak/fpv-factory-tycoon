@@ -409,12 +409,13 @@ describe('Реєстр апгрейдів (data-driven)', () => {
     }
   })
 
-  it('без нагляду паяє лише напівавтомат — станція знову вимагає рук', () => {
+  it('руками паяють два перші рівні, далі верстак робить це сам', () => {
     expect(levelData('soldering', 0).qualityMin).toBeUndefined()
     expect(levelData('soldering', 1).qualityMin).toBeUndefined()
     expect(levelData('soldering', 2).qualityMin).toBeGreaterThan(0)
-    // Рівень 3 навмисно без auto-темпу: автоматизація — це найм, а не апгрейд.
-    expect(levelData('soldering', 3).qualityMin).toBeUndefined()
+    // Стадія 9 / Р3: раніше тут стояло `toBeUndefined()` — рівень 3 забирав
+    // автоматику назад. Форму треку тепер сторожить upgrades.test.js.
+    expect(levelData('soldering', 3).qualityMin).toBeGreaterThan(0)
   })
 
   it('C6: вища прокачка — прощучіша зона й менший ризик перегріву', () => {

@@ -128,9 +128,21 @@ export function createState() {
     // have to ask whether the field exists.
     unlockedRooms:     [FIRST_ROOM_ID],
     onboarded:         false,
-    // Яку ціль гравець закріпив тапом (П1). Єдине, що квести пишуть у сейв —
-    // самі вони виводяться зі стану щоразу (sim/quests.js).
-    pinnedQuestId:     null,
+    // Історія цеху (Стадія 9 / Р1). Квести-дії («продай 3 дрони») не виводяться
+    // з поточного стану: проданого дрона в ньому вже немає. Тому — лічильники.
+    //
+    // КОЖНЕ поле тут монотонне (тільки росте). Це не дрібниця, а те, на чому
+    // тримається весь ланцюг квестів: активний квест — це перший, у якого
+    // `done` ще false, тож умова, яка може стати хибною знову, відкотила б
+    // гравця на пройдений крок.
+    stats: {
+      sold:        0,   // продано дронів (згорілий продати неможливо)
+      assembled:   0,   // доведено до READY
+      burnt:       0,   // згоріло комплектів
+      bestQuality: 0,   // найкраща якість збірки, [0..1]
+      bestRate:    0,   // найвищий $/сек, який цех колись показував
+      soldByKit:   {},  // { racing_drone: 2, … } — для квестів на тип дрона
+    },
     scrapAvailable:    false, // true when player has "ordered" scrap from the trash
     // All deliveries: [{id, kitId, slotIndex, readyAt, status}]
     // status 'transit'  = en-route or arrived-but-not-picked-up
@@ -272,6 +284,18 @@ export function applyColdSolderPenalty(state, stationId, amount) {
   }))
 }
 
+// Єдиний вхід у `stats` (Р1). Через нього, а не через розкладання об'єкта на
+// місці: сейв, записаний до Стадії 9, приходить без цього поля, і нормалізація
+// в одному місці означає, що жодна транзиція не мусить про це пам'ятати.
+const EMPTY_STATS = {
+  sold: 0, assembled: 0, burnt: 0, bestQuality: 0, bestRate: 0, soldByKit: {},
+}
+
+export function bumpStats(state, patch) {
+  const stats = { ...EMPTY_STATS, ...(state.stats ?? {}) }
+  return { ...state, stats: { ...stats, ...patch(stats) } }
+}
+
 export function finishAssembly(state, stationId) {
   const station = getStation(state, stationId)
   if (station.phase !== Phase.ASSEMBLY)
@@ -283,14 +307,20 @@ export function finishAssembly(state, stationId) {
     )
   const raw     = calcQuality(station.solderPoints)
   const quality = Math.max(0, raw - station.coldPenalty)
-  return withStation(state, stationId, s => ({ ...s, phase: Phase.READY, quality }))
+  return bumpStats(
+    withStation(state, stationId, s => ({ ...s, phase: Phase.READY, quality })),
+    (st) => ({ assembled: st.assembled + 1, bestQuality: Math.max(st.bestQuality, quality) }),
+  )
 }
 
 export function burnKit(state, stationId) {
   const station = getStation(state, stationId)
   if (station.phase !== Phase.ASSEMBLY)
     throw new Error(`burnKit: станція ${stationId} у фазі ${station.phase}`)
-  return withStation(state, stationId, s => ({ ...s, phase: Phase.BURNT }))
+  return bumpStats(
+    withStation(state, stationId, s => ({ ...s, phase: Phase.BURNT })),
+    (st) => ({ burnt: st.burnt + 1 }),
+  )
 }
 
 export function abandonBurntDrone(state, stationId, salvageRate = 0) {
@@ -307,7 +337,13 @@ export function sell(state, stationId) {
     throw new Error(`sell: станція ${stationId} у фазі ${station.phase}`)
   const kit   = KIT_TYPES[station.kitId]
   const price = calcPrice(kit.basePrice, station.quality, state.upgrades.priceMultiplier)
-  return _afterStationClear(state, stationId, state.money + price)
+  return bumpStats(
+    _afterStationClear(state, stationId, state.money + price),
+    (st) => ({
+      sold:      st.sold + 1,
+      soldByKit: { ...st.soldByKit, [station.kitId]: (st.soldByKit[station.kitId] ?? 0) + 1 },
+    }),
+  )
 }
 
 // After a station is cleared (sold or abandoned) it returns to IDLE. Deliveries

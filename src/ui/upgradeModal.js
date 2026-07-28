@@ -1,4 +1,5 @@
 import { UPGRADE_TRACKS } from '../state/upgrades.js'
+import { trackIntroduced } from '../sim/quests.js'
 import {
   openHallIds, nextHallId, canUnlockHall, openRoomIds, nextRoomId, canUnlockRoom,
 } from '../state/gameState.js'
@@ -47,47 +48,60 @@ export function createUpgradeModal(root, {
     const body = overlay.querySelector('#upgrade-body')
 
     // ── Upgrade tracks ────────────────────────────────────
-    const trackHTML = Object.entries(UPGRADE_TRACKS).map(([id, track]) => {
-      const level        = state.upgrades[track.stateKey] ?? 0
-      const maxLevel     = track.costs.length
-      const cap          = capFor(state, id)
-      const effectiveMax = Math.min(maxLevel, cap)
-      const nextInfo     = level < effectiveMax ? track.levels[level + 1] : null
-      const nextCost     = level < effectiveMax ? track.costs[level]      : null
-      const capLocked    = level >= cap && cap < maxLevel  // hit location cap before absolute max
-      const frozen       = state.frozenCaps?.[id] !== undefined && level >= cap
+    //
+    // Прогресивне розкриття (Стадія 9 / Р5). До цього панель показувала всі
+    // п'ять треків одночасно — у момент, коли купити можна було рівно один, —
+    // і викуплений трек лишався в списку назавжди рядком «Максимальний
+    // рівень». Три правила прибирають і те, і те:
+    //
+    //   стеля тут 0        → трек у цій локації не існує;
+    //   купувати нічого    → трек викуплено (або заморожено) — рядок зникає;
+    //   ланцюг не дійшов   → гравцеві ще не показували цей інструмент.
+    //
+    // Максимум по треку — не інформація, а сміття: він не каже, що робити.
+    // Замість нього внизу є один рядок про те, що інструменти скінчились.
+    const visible = Object.entries(UPGRADE_TRACKS).filter(([id]) => {
+      const level = state.upgrades[UPGRADE_TRACKS[id].stateKey] ?? 0
+      const max   = Math.min(UPGRADE_TRACKS[id].costs.length, capFor(state, id))
+      if (max <= 0)      return false
+      if (level >= max)  return false
+      return trackIntroduced(state, id)
+    })
+
+    const trackHTML = visible.map(([id, track]) => {
+      const level    = state.upgrades[track.stateKey] ?? 0
+      const nextInfo = track.levels[level + 1]
+      const nextCost = track.costs[level]
       // Money is the only gate. A busy bench used to block this too, from when
       // one bench was the whole game; with staff working nonstop that read as
       // "upgrades are broken".
-      const canBuy       = nextCost !== null && state.money >= nextCost
-
-      let footer = ''
-      if (nextInfo) {
-        footer = `
-          <button class="btn btn--upgrade" data-upgrade="${id}" ${canBuy ? '' : 'disabled'}>
-            → ${nextInfo.name} — $${nextCost}
-          </button>
-          <p class="upgrade-effect-hint">${nextInfo.effect}</p>
-        `
-      } else if (frozen) {
-        // A frozen track is not "come back later" — this is where it ends.
-        footer = '<p class="upgrade-effect-hint">Заморожено на фабриці — тут росте персонал</p>'
-      } else if (capLocked) {
-        footer = '<p class="upgrade-effect-hint">Ліміт локації — переїдьте далі</p>'
-      } else {
-        footer = '<p class="upgrade-effect-hint">Максимальний рівень</p>'
-      }
+      const canBuy   = state.money >= nextCost
 
       return `
         <div class="shop-section">
           <div class="shop-section__title">${track.name}</div>
           <div class="shop-upgrade">
             <span class="shop-upgrade__current">${track.levels[level].name}</span>
-            ${footer}
+            <button class="btn btn--upgrade" data-upgrade="${id}" ${canBuy ? '' : 'disabled'}>
+              → ${nextInfo.name} — $${nextCost}
+            </button>
+            <p class="upgrade-effect-hint">${nextInfo.effect}</p>
           </div>
         </div>
       `
     }).join('')
+
+    // Порожня панель читається як поламана, тому пустоту треба назвати. Слова
+    // різні: у квартирі інструменти ще будуть, на фабриці — вже ні.
+    const emptyHTML = visible.length ? '' : `
+      <div class="shop-section">
+        <div class="shop-upgrade">
+          <p class="upgrade-effect-hint">${isTerminal(state)
+            ? 'Інструменти викуплено — далі росте персонал'
+            : 'Інструменти цієї локації викуплено'}</p>
+        </div>
+      </div>
+    `
 
     // ── Rooms of the flat (П2) ────────────────────────────
     // Written like the hall card below, because it is the same offer: pay, and
@@ -200,7 +214,7 @@ export function createUpgradeModal(root, {
 
     // Hiring moved out to its own panel behind the job board (S2): the rack is
     // where tools are bought, the board by the door is where people are taken on.
-    body.innerHTML = trackHTML + roomHTML + locationHTML
+    body.innerHTML = trackHTML + emptyHTML + roomHTML + locationHTML
 
     body.querySelectorAll('[data-upgrade]').forEach(btn => {
       btn.addEventListener('click', () => onBuyUpgrade(btn.dataset.upgrade))

@@ -19,7 +19,7 @@ import {
   canMoveToLocation, LOCATION_ORDER,
 } from '../state/locations.js'
 import { ROLE_ORDER, roleLevelData } from '../defs/roles.js'
-import { pinnedQuest } from './quests.js'
+import { questZoneKind } from './quests.js'
 
 // Cheapest kit the player could actually buy. Free kits (scrap) are not
 // purchases and must not count.
@@ -203,21 +203,38 @@ export function nextObjective(world, interactions) {
   const player = (world.agents ?? []).find(a => a.kind === 'player')
   if (!player) return null
 
-  // Закріплена ціль (П1) перебиває петлю — і навмисно раніше за перевірку
-  // «чи ще діють підказки»: підказки замовкають після кількох замовлень, а
-  // стрілка, яку гравець попросив сам, замовкати не має.
-  const quest = pinnedQuest(world.game)
-  if (quest) {
-    const zones = (world.zones ?? []).filter(z => z.kind === quest.zoneKind)
-    if (zones.length) {
-      return zones.reduce((best, z) =>
-        Math.hypot(z.cx - player.x, z.cy - player.y) <
-        Math.hypot(best.cx - player.x, best.cy - player.y) ? z : best)
-    }
+  const nearest = (kind) => {
+    const zones = (world.zones ?? []).filter(z => z.kind === kind)
+    if (!zones.length) return null
+    return zones.reduce((best, z) =>
+      Math.hypot(z.cx - player.x, z.cy - player.y) <
+      Math.hypot(best.cx - player.x, best.cy - player.y) ? z : best)
   }
 
   const general = guidanceActive(world.game)
   const scrap   = scrapGuidanceActive(world.game)
+
+  // Порядок у Стадії 9 перевернуто. До неї закріплений квест бив усе — і
+  // стрілка тягла до шафи, поки в руках була коробка. Тепер спершу незавершена
+  // ФІЗИЧНА дія (щось у руках, готовий дрон на верстаку, згорілий верстак), і
+  // лише коли петля чиста — зона активного квесту.
+  const loop = loopObjective(world, interactions, player, general, scrap)
+  if (loop) return loop
+
+  // Ціль ланцюга (Р1) не замовкає разом з підказками: підказки вчать петлю,
+  // ланцюг веде по грі, і він потрібен якраз тоді, коли петля вже звична.
+  const quest = nearest(questZoneKind(world.game))
+  if (quest) return quest
+
+  // Стіл — остання інстанція. Замовити ще один комплект завжди «можна», тому
+  // без цього розділення стіл забирав стрілку в кожної цілі, поки діють
+  // підказки: гроші на паяльник — це майже завжди й гроші на комплект.
+  return loopObjective(world, interactions, player, general, scrap, true)
+}
+
+// Найближча корисна зона в межах одного оберту петлі — те, чим стрілка була до
+// Стадії 9. Повертає null, коли робити нічого або підказки вже вимкнено.
+function loopObjective(world, interactions, player, general, scrap, withDesk = false) {
   if (!general && !scrap) return null
 
   // Order matters: finish what is in your hands before starting something new.
@@ -234,6 +251,8 @@ export function nextObjective(world, interactions) {
   for (const zone of world.zones ?? []) {
     // The bin keeps its arrow after the general hints have stopped.
     if (zone.kind === 'trashbin' ? !scrap : !general) continue
+    // Стіл розглядається лише в другому заході — після цілі ланцюга (Стадія 9).
+    if (zone.kind === 'desk' && !withDesk) continue
     const rank = PRIORITY.indexOf(zone.kind)
     if (rank < 0 || rank > bestRank) continue
     const def = interactions[zone.kind]

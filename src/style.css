@@ -87,22 +87,8 @@ body {
 
 .hud__rate[hidden] { display: none; }
 
-.hud__hint {
-  position: absolute;
-  /* The bottom bar used to hold this clear of the screen edge; without it the
-     hint has to keep itself off the home indicator. */
-  bottom: calc(16px + env(safe-area-inset-bottom));
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.82rem;
-  color: #bbb;
-  background: rgba(44, 42, 60, 0.8);
-  padding: 5px 12px;
-  border-radius: 20px;
-  white-space: nowrap;
-  pointer-events: none;
-  letter-spacing: 0.03em;
-}
+/* .hud__hint прибрано в Стадії 9 / Р2: смуга підказок унизу екрана
+   заважала, а крок петлі переїхав рядком у картку квесту (.quest__step). */
 
 .hud__delivery-strip {
   position: absolute;
@@ -764,56 +750,60 @@ body {
   text-align: center;
 }
 
-/* === Quest tracker (П1) === */
+/* === Quest card (Стадія 9 / Р1) === */
 
-/* Знизу зліва, над рядком підказки: верхня смуга екрана вже зайнята грошима,
-   стрічкою доставок і смужкою пайки, а тут картка ще й потрапляє під великий
-   палець — по ній треба тапати. */
+/* Знизу зліва. Верхня смуга екрана вже зайнята грошима, стрічкою доставок і
+   смужкою пайки; унизу тепер вільно — рядок підказок звідти пішов (Р2).
+   pointer-events: none — картка більше не клікається, тапати нема по чому:
+   активна ціль одна, вибирати нічого. */
 #quest-tracker {
   position: absolute;
-  bottom: calc(52px + env(safe-area-inset-bottom));
+  bottom: calc(16px + env(safe-area-inset-bottom));
   left: calc(12px + env(safe-area-inset-left));
-  width: min(64vw, 232px);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  pointer-events: auto;
+  width: min(70vw, 250px);
+  pointer-events: none;
   z-index: 60;
 }
 
 #quest-tracker[hidden] { display: none; }
 
 .quest {
-  background: rgba(44, 42, 60, 0.86);
+  background: rgba(44, 42, 60, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-left: 3px solid rgba(125, 224, 125, 0.5);
   border-radius: 10px;
-  padding: 7px 10px;
-  cursor: pointer;
-  transition: transform 90ms ease-out, background 120ms ease-out;
+  padding: 8px 10px;
 }
 
-.quest:active { transform: scale(0.97); }
-
-/* Другорядні цілі — тихіші за головну, інакше розгорнутий список читається як
-   чотири однакові вимоги. */
-.quest--sub {
-  opacity: 0.72;
-  padding: 5px 10px;
-}
-
-.quest--pinned {
-  border-left-color: #f2c14e;
-  background: rgba(60, 54, 62, 0.9);
+/* Ціль по грошах зібрано — підсвічуємо рамку, а не лише смужку: гравець
+   дивиться на картку кутиком ока і кольору всередині може не побачити. */
+.quest--ready {
+  border-left-color: #7de07d;
+  background: rgba(46, 58, 46, 0.9);
 }
 
 .quest--ready .quest__fill { background: #7de07d; }
 
+.quest__head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
 .quest__title {
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   color: #e8e8f0;
   letter-spacing: 0.01em;
   line-height: 1.25;
+  flex: 1;
+}
+
+/* «7/24» — відчуття довжини гри, якого одна картка сама по собі не дає. */
+.quest__count {
+  font-family: monospace;
+  font-size: 0.62rem;
+  color: #7a7a92;
+  white-space: nowrap;
 }
 
 .quest__bar {
@@ -845,16 +835,23 @@ body {
   line-height: 1.25;
 }
 
-.quest__more {
-  align-self: flex-start;
-  background: rgba(44, 42, 60, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  color: #9ab;
-  font-size: 0.68rem;
-  font-family: inherit;
-  padding: 3px 9px;
-  cursor: pointer;
+/* Чому це варте грошей — рядок, якого раніше не було ніде, крім модалки. */
+.quest__why {
+  margin-top: 4px;
+  font-size: 0.66rem;
+  color: #8a9ab0;
+  line-height: 1.3;
+}
+
+/* Крок петлі — те, що до Стадії 9 було нижньою панеллю (Р2). Живе тільки поки
+   діють підказки, тому виглядає як тимчасова приписка, а не як частина цілі. */
+.quest__step {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.7rem;
+  color: #d8d8e4;
+  line-height: 1.25;
 }
 
 /* === Promotion panel (П3) === */
@@ -1329,4 +1326,53 @@ body {
 .offline-report__away {
   color: #9fb0d8;
   margin-bottom: 10px;
+}
+
+/* === Картка «відкрито» (Стадія 9 / Р4) === */
+
+.unlock-card {
+  /* Вужча за звичайну модалку: це не панель із вибором, а одна новина. */
+  max-width: 320px;
+  text-align: center;
+}
+
+.unlock-card__title {
+  font-family: 'Fredoka One', cursive;
+  font-size: 1.35rem;
+  color: #7de07d;
+  line-height: 1.2;
+}
+
+.unlock-card__sub {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: #9ab;
+}
+
+.unlock-card__list {
+  margin: 12px 0 14px;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.unlock-card__list li {
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.84rem;
+  color: #e8e8f0;
+  line-height: 1.3;
+}
+
+/* Нічна зміна (Стадія 9 / Р6) — рядок про те, що цех крутився сам. Виділений,
+   бо це нагорода за пройдений ланцюг, а не ще один пункт звіту. */
+.offline-report__cycles {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(125, 224, 125, 0.12);
+  color: #9fe09f;
+  font-size: 0.86rem;
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { settleOffline } from './offline.js'
 import { createState, Phase, KIT_TYPES } from '../state/gameState.js'
-import { OFFLINE_CAP_MS } from '../state/config.js'
+import { OFFLINE_CAP_MS, OFFLINE_EFFICIENCY } from '../state/config.js'
 
 const HOUR = 3_600_000
 
@@ -73,5 +73,58 @@ describe('sim/settleOffline', () => {
   it('leaves the state untouched when nothing could happen', () => {
     const s = shop()
     expect(settleOffline(s, 2 * HOUR).state).toBe(s)
+  })
+})
+
+// Стадія 9 / Р6. Головне тут — що поведінка НЕ змінилась ні для кого, крім
+// цеху з повним штатом: офлайн-дохід має бути нагородою за пройдену драбину, а
+// не тихою зміною балансу для всіх.
+describe('Р6 — цех із повним штатом працює вночі', () => {
+  const ALL = ['courier', 'tech', 'seller', 'manager']
+
+  // Гараж: там є вакансії на трьох, і саме там штат уперше може бути повним.
+  const staffed = (extra = {}) => ({
+    ...shop({ solderingLevel: 2, workers: ALL }),
+    unlockedRooms: ['flat', 'garage'],
+    money: 2000,
+    ...extra,
+  })
+
+  it('без повного штату не з’являється жодного циклу', () => {
+    for (const missing of ALL) {
+      const roles = ALL.filter(r => r !== missing)
+      const r = settleOffline({ ...staffed(), workers: roles.map((role, i) => ({ id: `${role}${i}`, role, level: 0, hiredAt: 0 })) }, 2 * HOUR)
+      expect(r.cycles).toBe(0)
+    }
+  })
+
+  it('повний штат — цикли, гроші й лічильники квестів', () => {
+    const s = staffed()
+    const r = settleOffline(s, 2 * HOUR)
+    expect(r.cycles).toBeGreaterThan(0)
+    expect(r.earned).toBeGreaterThan(0)
+    expect(r.state.money).toBeGreaterThan(s.money)
+    // Продане вночі однаково продане: ціль «продай 10» не має цього не бачити.
+    expect(r.state.stats.sold).toBe(r.sold)
+  })
+
+  it('каса ніколи не йде в мінус — цикли впираються в гроші', () => {
+    const r = settleOffline(staffed({ money: 100 }), 4 * HOUR)
+    expect(r.state.money).toBeGreaterThanOrEqual(0)
+  })
+
+  it('довша відсутність — більше циклів, але не більше за ліміт', () => {
+    const short = settleOffline(staffed({ money: 99999 }), 1 * HOUR)
+    const long  = settleOffline(staffed({ money: 99999 }), 4 * HOUR)
+    const over  = settleOffline(staffed({ money: 99999 }), 40 * HOUR)
+    expect(long.cycles).toBeGreaterThan(short.cycles)
+    expect(over.cycles).toBe(long.cycles)
+  })
+
+  it('офлайн платить менше за живий цех', () => {
+    // Та сама година: офлайн бере лише OFFLINE_EFFICIENCY від можливого темпу.
+    const r = settleOffline(staffed({ money: 99999 }), 1 * HOUR)
+    const perfect = r.cycles / OFFLINE_EFFICIENCY
+    expect(r.cycles).toBeLessThan(perfect)
   })
 })

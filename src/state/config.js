@@ -52,15 +52,26 @@ export const SEMIAUTO_QUALITY_MAX    = 0.75
 export const SEMIAUTO_POINT_DELAY_MS = 1200
 
 // ── Upgrade: Soldering station (level 3) ─────────────────
-// Was "auto-solder": a bench that soldered itself at 0.75–0.88. It had no place
-// left. Hiring a technician already buys hands-off assembly, and it is people
-// the game grows through — an upgrade that ALSO removed the player from the
-// bench competed with hiring while making the best-margin path (your own hands)
-// pointless to ever use again. So level 3 no longer works alone: it is the best
-// possible iron FOR YOU. No overheat at all, and a green zone nearly three
-// times the width of the starting one.
+// The top of the track, and it has to READ like the top: Stage 9 found the
+// track going manual → manual → semi-auto → manual, because this level once
+// had its unattended rate taken away to stop it competing with hiring a
+// technician. That fixed the balance by breaking the promise — a player who
+// paid $600 got the mini-game back.
+//
+// The competition was a misreading anyway: a station is a BENCH, a technician
+// is a PERSON. This level still produces nothing at an empty bench (see
+// workSource) — what it does is raise the ceiling for whoever stands there,
+// including a hired tech, because workSource takes the best of both on every
+// axis. So the station makes your staff better instead of replacing them,
+// which is the right shape for a tycoon.
 export const SOLDER_STATION_GREEN_HALF      = 0.34
 export const SOLDER_STATION_OVERHEAT_CHANCE = 0
+// Strictly better than the semi-auto on every axis — the tests assert this, so
+// a balance pass can never quietly reintroduce the regression.
+export const SOLDER_STATION_QUALITY_MIN    = 0.80
+export const SOLDER_STATION_QUALITY_MAX    = 0.92
+export const SOLDER_STATION_POINT_DELAY_MS = 900
+export const SOLDER_STATION_MISS_CHANCE    = 0.03
 
 // ── Risk on the unattended path ──────────────────────────
 // Until now only the player's own taps could go wrong: a bench run by a
@@ -83,6 +94,10 @@ export const AUTO_OVERHEAT_SHARE = 0.20
 // minute rather than a projection: a tycoon number the player cannot check
 // against what just happened is a number they stop believing.
 export const INCOME_WINDOW_MS = 60_000
+// Остання ціль ланцюга квестів (Стадія 9 / Р1): $/сек, на якому гра вважається
+// пройденою. Читається з того самого числа в HUD, тому мета перевіряється очима,
+// а не поясненням.
+export const ENDGAME_RATE_TARGET = 10
 
 // ── Conveyor (F3) ────────────────────────────────────────
 // Belt speed in world units per second. A courier walks at 170–240, so the belt
@@ -184,6 +199,18 @@ export const MANAGER_COOLDOWN_MS = 4000
 // How much of a closed-app absence is ever paid out (C7).
 export const OFFLINE_CAP_MS = 4 * 60 * 60 * 1000
 
+// ── Офлайн-цех (Стадія 9 / Р6) ───────────────────────────
+//
+// Доти офлайн лише доводив те, що вже було в роботі: без гравця ніхто не
+// замовляє комплекти, тож новий цикл почати нікому. Це правильно, поки штату
+// немає — і перестає бути правильним, коли найнято всіх чотирьох: менеджер
+// замовляє, кур'єр носить, технік паяє, продавець продає. Петля замикається
+// сама, і саме це має бути нагородою за пройдену драбину.
+//
+// Частка живого темпу, яку платить офлайн. Грати наживо мусить бути вигідніше:
+// офлайн не знає ні черг, ні того, що гравець сам стає до верстака.
+export const OFFLINE_EFFICIENCY = 0.6
+
 // Idle behaviour: workers with no job drift around the rest area instead of
 // standing frozen, which is what makes the shop look alive.
 // Small enough that a worker reads as standing at their own post rather than
@@ -268,6 +295,11 @@ export const GUIDANCE_ORDERS = 5
 // The salvage bin has its own allowance: five clean orders can go by without a
 // burnt kit, and then the bin would never have been pointed out.
 export const GUIDANCE_SCRAP_RUNS = 2
+
+// Скільки тримається повідомлення про холодну пайку в смужці (Стадія 9 / Р7).
+// Було 2200 мс числом усередині solderBar.js. Разом із карткою над верстаком це
+// одна тема — «що саме пішло не так», — і крутити її треба з одного місця.
+export const COLD_MSG_MS = 2500
 
 // ── Presentation ─────────────────────────────────────────
 // How far an actor closes the gap to its simulated position each rendered

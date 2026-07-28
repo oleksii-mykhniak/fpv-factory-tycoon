@@ -1,20 +1,24 @@
-// Квест-трекер (П1) — картка «над чим я зараз працюю».
+// Картка квесту (Стадія 9 / Р1+Р2) — «над чим я зараз працюю».
 //
-// Показує ОДНУ ціль, а не список: на телефоні три картки з'їдять пів екрана, а
-// сенс трекера в тому, щоб його можна було прочитати кутиком ока. Решта цілей
-// відкривається тапом по «ще N».
+// До цього тут був список: головна картка, «ще N», і тап, який закріплював
+// ціль. Стадія 9 звела все до ОДНІЄЇ картки без списку й без тапу — активний
+// крок ланцюга рівно один, тож обирати нема з чого, а стрілка веде до нього
+// завжди (див. sim/quests.js).
 //
-// Тап по картці ЗАКРІПЛЮЄ ціль — після цього стрілка веде до неї (див.
-// nextObjective). Тап по закріпленій знімає закріплення й повертає стрілку до
-// звичайної роботи по петлі.
+// Сюди ж переїхала нижня панель підсказок (Р2). Крок петлі («неси коробку до
+// верстака») був окремою смугою внизу екрана і заважав; тепер це третій рядок
+// картки — і тільки поки діють підказки, тобто перші кілька замовлень. Далі
+// лишається сама ціль.
 //
-// Прогрес тут — завжди гроші. Не тому, що інших умов не буває (гараж хоче ще й
-// паяльник рівня 2), а тому що смужка може показувати рівно одне число; решта
-// умов іде текстом під нею.
+// Що рядок — то одна думка:
+//   заголовок — що зробити
+//   смужка    — скільки лишилось ($ для покупки, штуки для дії)
+//   why/hint  — чому це варте грошей або чому ще не можна
+//   step      — «неси коробку до верстака», поки петля ще нова
 
-import { activeQuests } from '../sim/quests.js'
+import { activeQuest } from '../sim/quests.js'
 
-export function createQuestTracker(root, { onPin }) {
+export function createQuestTracker(root) {
   const el = document.createElement('div')
   el.id = 'quest-tracker'
   el.setAttribute('hidden', '')
@@ -31,69 +35,33 @@ export function createQuestTracker(root, { onPin }) {
   toast.setAttribute('hidden', '')
   root.appendChild(toast)
 
-  let expanded  = false
-  let lastKey   = null
-  let lastState = null
+  let lastKey = null
 
-  // Розгортання — це стан ПАНЕЛІ, а не гри, тож перемальовуємо тут самі. Через
-  // renderUI це не працює за визначенням: той виходить одразу, якщо стан гри не
-  // змінився, і список залишався б згорнутим до найближчої покупки.
-  el.addEventListener('click', (e) => {
-    const card = e.target.closest?.('[data-quest]')
-    if (card) {
-      // Порожній id — це тап по вже закріпленій картці: знімаємо закріплення.
-      onPin(card.dataset.quest || null)
-      expanded = false
-      return
-    }
-    if (e.target.closest?.('#quest-more')) {
-      expanded = !expanded
-      render()
-    }
-  })
-
-  function update(state) {
-    lastState = state
-    render()
-  }
-
-  function render() {
-    const state = lastState
-    if (!state) return
-    const quests = activeQuests(state)
-    for (const q of quests) titles.set(q.id, q.title)
-    if (!quests.length) {
+  // `stepHint` — рядок петлі від HUD (Р2), або null коли підказки вже вимкнено.
+  function update(state, stepHint = null) {
+    const quest = activeQuest(state)
+    if (!quest) {
       el.setAttribute('hidden', '')
       lastKey = null
       return
     }
+    titles.set(quest.id, quest.title)
 
-    const pinnedId = state.pinnedQuestId ?? null
-    // Закріплена ціль стоїть першою — інакше тап переставляв би картку під
-    // пальцем на іншу.
-    const head = quests.find(q => q.id === pinnedId) ?? quests[0]
-    const rest = quests.filter(q => q.id !== head.id)
-
-    // Малюємо лише коли справді щось змінилось: renderUI викликається на кожен
+    // Малюємо лише коли справді щось змінилось: update викликається на кожен
     // кадр, а innerHTML посеред тапу з'їдає сам тап.
-    const key = JSON.stringify([expanded, pinnedId, quests.map(q =>
-      [q.id, q.title, Math.floor(q.have), q.need, q.hint])])
+    const key = JSON.stringify([
+      quest.id, quest.title, Math.floor(quest.have), quest.need,
+      quest.hint, stepHint,
+    ])
     if (key === lastKey) return
     lastKey = key
 
     el.removeAttribute('hidden')
-    el.innerHTML = `
-      ${card(head, head.id === pinnedId, true)}
-      ${expanded ? rest.map(q => card(q, q.id === pinnedId, false)).join('') : ''}
-      ${rest.length ? `
-        <button id="quest-more" class="quest__more">
-          ${expanded ? '▲ згорнути' : `▼ ще ${rest.length}`}
-        </button>` : ''}
-    `
+    el.innerHTML = card(quest, stepHint)
   }
 
-  // Ціль виконано. Без цього момент непомітний: картка просто зникає, а вся
-  // стадія була про те, щоб прогрес було видно.
+  // Ціль виконано. Без цього момент непомітний: картка просто змінює текст, а
+  // вся ця робота була про те, щоб прогрес було видно.
   function flash(questId) {
     const title = titles.get(questId)
     if (!title) return
@@ -106,25 +74,33 @@ export function createQuestTracker(root, { onPin }) {
   return { update, flash }
 }
 
-function card(quest, pinned, primary) {
+function card(quest, stepHint) {
   const pct = quest.need > 0
     ? Math.max(0, Math.min(100, (quest.have / quest.need) * 100))
     : 100
-  const money = quest.need > 0
+  // Покупка міряється грошима, дія — штуками. Один і той самий $ у смужці
+  // «продай 3 дрони» був би брехнею про те, чого від гравця хочуть.
+  const meta = quest.kind === 'buy'
     ? `$${Math.floor(quest.have)} / $${quest.need}`
-    : ''
+    : `${Math.floor(quest.have)} / ${quest.need}`
+
+  // Смужка має сенс там, де є чого лишатись. «0 / 1» під «Замов перший
+  // комплект» не показує прогрес — вона повторює заголовок і забирає рядок.
+  const showBar = quest.need > 0 && !(quest.kind === 'do' && quest.need === 1)
 
   return `
-    <div class="quest ${primary ? 'quest--primary' : 'quest--sub'}
-                ${pinned ? 'quest--pinned' : ''}
-                ${quest.ready ? 'quest--ready' : ''}"
-         data-quest="${pinned ? '' : quest.id}">
-      <div class="quest__title">${quest.ready ? '✅ ' : ''}${quest.title}</div>
-      ${quest.need > 0 ? `
+    <div class="quest quest--primary ${quest.ready ? 'quest--ready' : ''}">
+      <div class="quest__head">
+        <span class="quest__title">${quest.ready ? '✅ ' : ''}${quest.title}</span>
+        <span class="quest__count">${quest.step}/${quest.total}</span>
+      </div>
+      ${showBar ? `
         <div class="quest__bar"><div class="quest__fill" style="width:${pct}%"></div></div>
-        <div class="quest__meta">${money}</div>
+        <div class="quest__meta">${meta}</div>
       ` : ''}
       ${quest.hint ? `<div class="quest__hint">${quest.hint}</div>` : ''}
+      ${quest.why  ? `<div class="quest__why">${quest.why}</div>` : ''}
+      ${stepHint   ? `<div class="quest__step">→ ${stepHint}</div>` : ''}
     </div>
   `
 }

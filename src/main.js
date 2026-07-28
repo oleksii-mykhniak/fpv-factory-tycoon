@@ -7,6 +7,8 @@ import {
 import { ADS_ENABLED, SCRAP_CONSOLATION, INPUT_DEADZONE } from './state/config.js'
 import { levelData } from './state/upgrades.js'
 import { currentLocation } from './state/locations.js'
+import { roomDef } from './defs/layouts/rooms.js'
+import { hallDef } from './defs/layouts/factory.js'
 import { setMuted, unlockAudio } from './audio/sfx.js'
 import { setMusicEnabled, startMusic } from './audio/music.js'
 import { showRewarded, PLACEMENTS } from './monetization/ads.js'
@@ -23,8 +25,9 @@ import { settleOffline } from './sim/offline.js'
 import { playerStation, guidanceActive, ironIsHandsOff, incomePerSec } from './sim/derive.js'
 import { SYSTEMS } from './sim/systems/index.js'
 
-import { createHUD } from './ui/hud.js'
+import { createHUD, stepHint } from './ui/hud.js'
 import { createQuestTracker } from './ui/questTracker.js'
+import { createUnlockCard } from './ui/unlockCard.js'
 import { createSettingsButton } from './ui/settingsButton.js'
 import { createShopModal } from './ui/shopModal.js'
 import { createUpgradeModal } from './ui/upgradeModal.js'
@@ -124,6 +127,9 @@ function initState() {
     ...defaults,
     ...saved.state,
     upgrades:   { ...defaults.upgrades, ...saved.state.upgrades },
+    // Лічильники (Стадія 9) мерджаться так само, як апгрейди: сейв версії 3 їх
+    // не має взагалі, а сейв, записаний до появи чергового поля, має половину.
+    stats:      { ...defaults.stats, ...saved.state.stats },
     locationId: saved.state.locationId ?? defaults.locationId,
   }
   return { state: migrateState(state), salesLog: saved.salesLog, savedAt: saved.savedAt }
@@ -253,11 +259,12 @@ function present() {
 
 const hud = createHUD(uiRoot)
 
-// Квест-трекер (П1): що робимо далі й скільки лишилось. Тап закріплює ціль —
-// далі стрілка веде саме до неї.
-const questTracker = createQuestTracker(uiRoot, {
-  onPin: (questId) => { send('pinQuest', { questId }); uiDirty = true; present() },
-})
+// Картка квесту (Стадія 9): один активний крок ланцюга і скільки до нього
+// лишилось. Тапу немає — вибирати нема з чого, стрілка веде до нього сама.
+const questTracker = createQuestTracker(uiRoot)
+
+// Картка «відкрито» (Р4): що приїхало з новою кімнатою або цехом.
+const unlockCard = createUnlockCard(uiRoot)
 
 const shopModal = createShopModal(uiRoot, {
   onOrder: (kitId) => { dismissOnboarding(); send('order', { kitId }) },
@@ -280,6 +287,17 @@ const upgradeModal = createUpgradeModal(uiRoot, {
   // Buying a room widens the flat: same rebuild as a hall (П2).
   onUnlockRoom: (roomId) => {
     send('unlockRoom', { roomId })
+    // Кімната розповідає, що з нею приїхало (Р4) — інакше найдорожча покупка
+    // першого акту виглядає як порожня кімната.
+    // Панель закривається: покупка відбулась, і читати про кімнату поверх
+    // прайс-листа, з якого її щойно купили, — це два екрани про одне.
+    upgradeModal.close?.()
+    const room = roomDef(roomId)
+    if (room) unlockCard.open({
+      title:    `${room.emoji ?? '🏠'} ${room.name} відкрито`,
+      subtitle: 'Що тепер можна:',
+      unlocks:  room.unlocks,
+    })
     sceneRefs = rebuildScene({ getWorld: () => world, onIntent, layout: world.layout, world })
     resetSceneSync()
     uiDirty = true
@@ -289,6 +307,13 @@ const upgradeModal = createUpgradeModal(uiRoot, {
   // rebuilt exactly like one.
   onUnlockHall: (hallId) => {
     send('unlockHall', { hallId })
+    upgradeModal.close?.()
+    const hall = hallDef(hallId)
+    if (hall) unlockCard.open({
+      title:    `🏭 ${hall.name} відкрито`,
+      subtitle: 'Що тепер можна:',
+      unlocks:  hall.unlocks,
+    })
     sceneRefs = rebuildScene({ getWorld: () => world, onIntent, layout: world.layout, world })
     resetSceneSync()
     uiDirty = true
@@ -404,13 +429,14 @@ function renderUI() {
   uiDirty = false
 
   const player = (world.agents ?? []).find(a => a.kind === 'player')
-  hud.update(
+  hud.update(world.game, incomePerSec(world.salesLog, world.now))
+  // Крок петлі рахує HUD (він знає фази станції), а показує картка квесту —
+  // нижньої панелі більше немає (Р2).
+  questTracker.update(world.game, stepHint(
     world.game,
     (player?.carrying ?? []).map(i => i.type),
     guidanceActive(world.game),
-    incomePerSec(world.salesLog, world.now),
-  )
-  questTracker.update(world.game)
+  ) || null)
   shopModal.update(world.game)
   upgradeModal.update(world.game)
   hireModal.update(world.game)
@@ -483,6 +509,10 @@ if (_offline && (_offline.assembled || _offline.sold)) {
         <p class="offline-report__away">Минуло ${away}</p>
         <p>🔧 Зібрано дронів: <b>${_offline.assembled}</b></p>
         ${_offline.sold ? `<p>📮 Продано: <b>${_offline.sold}</b> — <b>$${_offline.earned.toFixed(2)}</b></p>` : ''}
+        ${_offline.cycles
+          ? `<p class="offline-report__cycles">🏭 Цех працював сам: ${_offline.cycles} ${
+              _offline.cycles === 1 ? 'цикл' : 'циклів'} без вас</p>`
+          : ''}
         ${!_offline.sold && _offline.assembled
           ? '<p class="upgrade-effect-hint">Готові дрони чекають на верстаку — найміть продавця, щоб їх відносили</p>'
           : ''}

@@ -353,6 +353,15 @@ const hStart = await plan()
 await openPanelAt('rack')
 await page.click('#room-btn').catch(() => {})
 await page.waitForTimeout(1200)
+// Картка «Кімнату відкрито» (Р4) — модалка поверх усього; знімаємо її, інакше
+// далі нічого не натиснути.
+const hCard = await page.evaluate(() => {
+  const el = document.getElementById('unlock-card')
+  return el?.hasAttribute('hidden') ? null : el.innerText.split('\n').length
+})
+await page.click('#unlock-ok').catch(() => {})
+await page.waitForTimeout(300)
+console.log(`  картка «відкрито»: ${hCard ? `${hCard} рядків` : 'не показалась'}`)
 const hRoom = await plan()
 console.log(`  ${hStart.rooms} (${hStart.world}w, ${hStart.slots} slots, board ${hStart.board}, $${hStart.money})` +
             ` → ${hRoom.rooms} (${hRoom.world}w, ${hRoom.slots} slots, board ${hRoom.board}, $${hRoom.money})`)
@@ -423,11 +432,16 @@ await page.evaluate(() => {
 // The label has to appear BEFORE anyone clears it: it is the only explanation
 // the player gets that the drone burnt (A2 / V6).
 await page.waitForTimeout(600)
+// Стадія 9 / Р7: мітка стала карткою з двох рядків — причина і що робити.
 const iBurntLabel = await page.evaluate(() => {
   const v = globalThis.__refs.stations?.[0]
-  return { visible: v?.burntLabel?.graphics?.visible ?? false, text: v?.burntLabel?.text ?? '' }
+  const parts = v?.burnt?.parts ?? []
+  return {
+    visible: parts.some(p => p.graphics?.visible),
+    text:    parts.filter(p => typeof p.text === 'string').map(p => p.text).join(' / '),
+  }
 })
-console.log(`  burnt label: "${iBurntLabel.text}" (visible ${iBurntLabel.visible})`)
+console.log(`  burnt notice: "${iBurntLabel.text}" (visible ${iBurntLabel.visible})`)
 
 await goTo('zone-station-0')
 await page.waitForTimeout(2500)
@@ -745,91 +759,89 @@ console.log(`  $${rBefore.money} saved=${rBefore.saved} → one tap: "${rArmedTe
             `(saved=${rAfterOne}) → two taps: $${rAfter.money}, ` +
             `persisted=${rAfter.persisted}`)
 
-// ── P. The quest tracker (П1) ─────────────────────────────
-console.log('\n### P. The quest tracker')
-await boot(seedState({ solderingLevel: 2 }, { money: 400, ordersPlaced: 3 }))
-await page.waitForTimeout(600)
+// ── P. The quest card (Стадія 9 / Р1–Р2) ──────────────────
+console.log('\n### P. The quest card')
 
 const questCard = () => page.evaluate(() => {
-  const el = document.querySelector('#quest-tracker .quest--primary')
+  const el = document.querySelector('#quest-tracker .quest')
   return el ? {
     title: el.querySelector('.quest__title')?.textContent.trim(),
-    meta:  el.querySelector('.quest__meta')?.textContent.trim(),
+    count: el.querySelector('.quest__count')?.textContent.trim(),
+    meta:  el.querySelector('.quest__meta')?.textContent.trim() ?? null,
     hint:  el.querySelector('.quest__hint')?.textContent.trim() ?? null,
-    fill:  el.querySelector('.quest__fill')?.style.width,
-    pinned: el.classList.contains('quest--pinned'),
+    why:   el.querySelector('.quest__why')?.textContent.trim() ?? null,
+    step:  el.querySelector('.quest__step')?.textContent.trim() ?? null,
+    ready: el.classList.contains('quest--ready'),
   } : null
 })
 // Куди насправді дивиться стрілка на екрані: порівнюємо її поворот із
-// напрямком на найближчу шафу. Питати сим про ціль було б перевіркою коду
-// самим кодом — а зламатись може саме малювання.
-const arrowAtRack = () => page.evaluate(() => {
+// напрямком на найближчу зону вказаного типу. Питати сим про ціль було б
+// перевіркою коду самим кодом — а зламатись може саме малювання.
+const arrowAt = (kind) => page.evaluate((k) => {
   const w = globalThis.__world
   const arrow = globalThis.__refs.arrow
   if (!arrow?.graphics?.visible) return false
   const p = w.agents.find(a => a.kind === 'player')
-  const rack = w.zones.filter(z => z.kind === 'rack')
+  const z = w.zones.filter(z => z.kind === k)
     .sort((a, b) => Math.hypot(a.cx - p.x, a.cy - p.y) - Math.hypot(b.cx - p.x, b.cy - p.y))[0]
-  if (!rack) return false
-  const want = Math.atan2(rack.cy - p.y, rack.cx - p.x) + Math.PI / 2
+  if (!z) return false
+  const want = Math.atan2(z.cy - p.y, z.cx - p.x) + Math.PI / 2
   const diff = Math.abs(((arrow.rotation - want + Math.PI) % (2 * Math.PI)) - Math.PI)
   return diff < 0.25
-})
+}, kind)
 
-const pBefore = await questCard()
-console.log(`  card: "${pBefore?.title}" ${pBefore?.meta} fill=${pBefore?.fill}`)
-
-// Умова, яка не є грошима, мусить бути написана словами: смужка вміє показати
-// рівно одне число, а гараж хоче ще й паяльник. Гараж тут не головна ціль
-// (паяльник іде раніше), тож заразом перевіряємо, що список розгортається.
-await boot(seedState({ solderingLevel: 1 }, { money: 900, ordersPlaced: 3 }))
+// Рівно ОДНА картка — ні списку, ні кнопки «ще N»: це і є Р1.
+await boot(seedState({}, { money: 120 }))
 await page.waitForTimeout(600)
-const pCollapsed = await page.evaluate(() => document.querySelectorAll('#quest-tracker .quest').length)
-await page.click('#quest-more')
-await page.waitForTimeout(300)
-const pExpanded = await page.evaluate(() => document.querySelectorAll('#quest-tracker .quest').length)
-const pHint = await page.evaluate(() => {
-  const card = [...document.querySelectorAll('#quest-tracker .quest')]
-    .find(el => el.querySelector('.quest__title')?.textContent.includes('Гараж'))
-  return card?.querySelector('.quest__hint')?.textContent.trim() ?? null
-})
-console.log(`  goals shown ${pCollapsed} → ${pExpanded} when expanded; ` +
-            `garage hint="${pHint}"`)
+const pCount = await page.evaluate(() => ({
+  cards: document.querySelectorAll('#quest-tracker .quest').length,
+  more:  !!document.querySelector('#quest-more'),
+  hint:  !!document.getElementById('hud-hint'),
+}))
+const pFirst = await questCard()
+console.log(`  cards=${pCount.cards} more-button=${pCount.more} old-bottom-hint=${pCount.hint}`)
+console.log(`  "${pFirst?.title}" ${pFirst?.count} · крок петлі: "${pFirst?.step}"`)
 
-await boot(seedState({ solderingLevel: 2 }, { money: 400, ordersPlaced: 3 }))
+// Крок-покупка: смужка в грошах, стрілка на шафу — але лише коли грошей досить.
+await boot(seedState({}, { money: 20, ordersPlaced: 3, stats: { sold: 3, assembled: 3, burnt: 0, bestQuality: 0, bestRate: 0, soldByKit: {} } }))
 await page.waitForTimeout(600)
-
-// Тап по картці закріплює ціль, і стрілка їде до шафи.
-await page.click('#quest-tracker .quest--primary')
+const pPoor  = await questCard()
+const pArrowPoor = await arrowAt('rack')
+await page.evaluate(() => { globalThis.__world.game = { ...globalThis.__world.game, money: 9999 } })
 await page.waitForTimeout(500)
-const pPinned  = await questCard()
-const pPinnedId  = await page.evaluate(() => globalThis.__world.game.pinnedQuestId)
-const pArrowRack = await arrowAtRack()
-console.log(`  tapped → pinned=${pPinnedId}, card highlighted: ${pPinned?.pinned}, ` +
-            `arrow points at the rack: ${pArrowRack}`)
+const pRich  = await questCard()
+const pArrowRich = await arrowAt('rack')
+console.log(`  "${pPoor?.title}" ${pPoor?.meta} → стрілка на шафу: ${pArrowPoor} (грошей нема)`)
+console.log(`  з грошима: ${pRich?.meta} ready=${pRich?.ready} → стрілка на шафу: ${pArrowRich}`)
 
-// Той самий тап удруге — знімає закріплення.
-await page.click('#quest-tracker .quest--primary')
-await page.waitForTimeout(400)
-const pUnpinned = await page.evaluate(() => globalThis.__world.game.pinnedQuestId)
-console.log(`  tapped again → pinned=${pUnpinned}`)
-
-// Виконуємо ціль через шафу — картка має зникнути, а тост з'явитись.
-await page.evaluate(() => {
-  const w = globalThis.__world
-  w.game = { ...w.game, money: 9999 }
-})
-await page.waitForTimeout(400)
+// Виконуємо крок через шафу — картка змінюється, тост з'являється.
 const pGoalTitle = (await questCard())?.title
 await openPanelAt('rack')
-await page.click('#room-btn').catch(() => {})
+await page.click('[data-upgrade="soldering"]').catch(() => {})
 await page.waitForTimeout(700)
 const pToast = await page.evaluate(() => {
   const t = document.querySelector('.quest-toast')
   return t && !t.hasAttribute('hidden') ? t.textContent.trim() : null
 })
 const pAfter = await questCard()
-console.log(`  goal "${pGoalTitle}" done → toast "${pToast}", card now "${pAfter?.title}"`)
+console.log(`  "${pGoalTitle}" done → toast "${pToast}", тепер "${pAfter?.title}"`)
+
+// Р5: у шафі видно лише введені треки, викуплений рядок зникає.
+const rackTitles = () => page.evaluate(() => {
+  document.querySelector('#upgrade-modal')?.removeAttribute('hidden')
+  return [...document.querySelectorAll('#upgrade-body .shop-section__title')].map(el => el.textContent.trim())
+})
+const pTracks = await rackTitles()
+// Паяльник у квартирі має стелю 2 — доводимо його до неї й дивимось, чи рядок
+// зник. Це і є правило «максимум по треку — не інформація, а сміття».
+await page.evaluate(() => {
+  const w = globalThis.__world
+  w.game = { ...w.game, upgrades: { ...w.game.upgrades, solderingLevel: 2 } }
+})
+await page.waitForTimeout(600)
+const pMaxed = await rackTitles()
+console.log(`  шафа показує: ${JSON.stringify(pTracks)}`)
+console.log(`  після викупу паяльника до стелі: ${JSON.stringify(pMaxed)}`)
 
 // ── O. Sound, music and the "player only" rule (A3–A6) ────
 console.log('\n### O. Audio')
@@ -940,16 +952,20 @@ const checks = [
   ['R: one tap only arms the button',     rAfterOne === true && /ще раз/.test(rArmedText)],
   ['R: the second tap actually wipes it', rAfter.money !== rBefore.money && rAfter.soldering === 0],
   ['R: and the old shop never comes back', rAfter.persisted !== rBefore.money],
-  ['P: the tracker shows a goal with a money bar', !!pBefore?.title && !!pBefore?.meta],
-  ['P: the bar reflects the money actually held', pBefore?.fill !== '0%' && pBefore?.fill !== '100%'],
-  ['P: the list expands to the other goals', pExpanded > pCollapsed],
-  ['P: unmet conditions other than money are spelled out',
-   !!pHint && pHint.includes('Паяльник') && !pHint.includes('Потрібно $')],
-  ['P: tapping the card pins the goal',    pPinnedId !== null && pPinned?.pinned === true],
-  ['P: and the arrow turns to its object', pArrowRack === true],
-  ['P: tapping it again unpins',           pUnpinned === null],
-  ['P: finishing a goal announces itself', !!pToast],
-  ['P: and the tracker moves on to the next one', !!pAfter && pAfter.title !== pGoalTitle],
+  // Стадія 9 / Р1–Р2: одна картка, без списку, і нижньої панелі підказок немає.
+  ['H: the room announces what it brought', (hCard ?? 0) >= 4],
+  ['P: exactly one card on screen',        pCount.cards === 1 && pCount.more === false],
+  ['P: the old bottom hint bar is gone',   pCount.hint === false],
+  ['P: the loop step rides inside the card', !!pFirst?.step],
+  ['P: a one-off action shows no 0/1 bar', pFirst?.meta === null],
+  ['P: a purchase shows a money bar',      !!pPoor?.meta && pPoor.meta.includes('$')],
+  ['P: no arrow to the rack while broke',  pArrowPoor === false],
+  ['P: the arrow turns to the rack once affordable', pArrowRich === true],
+  ['P: finishing a step announces itself', !!pToast],
+  ['P: and the card moves on to the next one', !!pAfter && pAfter.title !== pGoalTitle],
+  // Р5: шафа показує лише введені треки, викуплений рядок зникає.
+  ['P: the rack hides tracks the chain has not reached', !pTracks.includes('Склад')],
+  ['P: and the maxed-out track is gone',   pTracks.includes('Паяльник') && !pMaxed.includes('Паяльник')],
   ['A: slot zone put the box in hand',    aPick.carrying.includes('kit_box')],
   ['A: bench zone started assembly',      aDrop.phase === 'ASSEMBLY' && aDrop.carrying.length === 0],
   ['A: bench finished with someone at it', aReady.phase === 'READY'],
@@ -1015,7 +1031,9 @@ const checks = [
   ['I: the factory opens with one hall of benches', iScene.stations === 2],
   ['I: an old "workshop" save lands in the factory', iMigrated === 'factory'],
   ['I: a burnt kit can be cleared on foot', iCleared.phase === 'IDLE'],
-  ['I: the bench says the kit burnt',      iBurntLabel.visible && iBurntLabel.text.includes('Згорів')],
+  // Р7: два рядки — причина перегріву і що з цим робити.
+  ['I: the bench says the kit burnt',      iBurntLabel.visible && iBurntLabel.text.includes('Перегрів')],
+  ['I: and says what to do about it',      iBurntLabel.text.includes('Стань тут')],
   ['I: sound files are actually there',    iSounds.duration > 0],
   ['O: every sound the code asks for exists', oMissing.length === 0],
   ['O: music has its own switch',          oSettings.includes('Музика')],

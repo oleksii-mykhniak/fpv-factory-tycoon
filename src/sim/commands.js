@@ -161,13 +161,8 @@ const HANDLERS = {
     emit(events, EV.STATE_DIRTY)
   },
 
-  // Тап по картці квесту (П1). Нічого не купує — лише каже стрілці, куди
-  // вести. Команда, а не поле в UI, бо це стан гри: закріплена ціль має
-  // пережити перезапуск.
-  pinQuest(world, { questId }, events) {
-    world.game = { ...world.game, pinnedQuestId: questId ?? null }
-    emit(events, EV.STATE_DIRTY)
-  },
+  // Закріплення цілі (`pinQuest`) прибрано в Стадії 9: активний квест тепер
+  // рівно один, тож обирати нічого — стрілка веде до нього завжди.
 
   // Buy the next room of the flat (П2). The garage used to be a move; the only
   // thing that changed is that the world grows instead of being replaced —

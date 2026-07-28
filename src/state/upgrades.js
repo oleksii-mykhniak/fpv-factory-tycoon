@@ -11,6 +11,8 @@ import {
   SEMIAUTO_QUALITY_MIN, SEMIAUTO_QUALITY_MAX, SEMIAUTO_POINT_DELAY_MS,
   SEMIAUTO_MISS_CHANCE,
   SOLDER_STATION_GREEN_HALF, SOLDER_STATION_OVERHEAT_CHANCE,
+  SOLDER_STATION_QUALITY_MIN, SOLDER_STATION_QUALITY_MAX,
+  SOLDER_STATION_POINT_DELAY_MS, SOLDER_STATION_MISS_CHANCE,
   SOLDERING_UPGRADE_COSTS,
   CONSUMABLES_UPGRADE_COSTS, FLUX_OVERHEAT_MULT, FLUX_QUALITY_BONUS,
   STORAGE_UPGRADE_COSTS, STORAGE_SLOTS_BY_LEVEL,
@@ -43,10 +45,15 @@ export const UPGRADE_TRACKS = Object.freeze({
         greenHalf: SEMIAUTO_GREEN_HALF, overheatChance: SEMIAUTO_OVERHEAT_CHANCE,
         qualityMin: SEMIAUTO_QUALITY_MIN, qualityMax: SEMIAUTO_QUALITY_MAX,
         pointDelayMs: SEMIAUTO_POINT_DELAY_MS, missChance: SEMIAUTO_MISS_CHANCE },
-      // No qualityMin: this level deliberately has no unattended rate. Hands-off
-      // assembly is what a technician is for; this is what YOUR hands are for.
-      { name: 'Паяльна станція', effect: 'Найширша зона, перегріву немає — але паяєте ви',
-        greenHalf: SOLDER_STATION_GREEN_HALF, overheatChance: SOLDER_STATION_OVERHEAT_CHANCE },
+      // The top of the track keeps the automation and improves it (Stage 9 / Р3).
+      // It used to drop qualityMin, which sent the whole track backwards: the
+      // most expensive iron in the game handed the mini-game back. See the
+      // comment on SOLDER_STATION_* in config.js for why that no longer
+      // competes with hiring a technician.
+      { name: 'Паяльна станція', effect: 'Верстак паяє сам 80–92%, перегріву немає',
+        greenHalf: SOLDER_STATION_GREEN_HALF, overheatChance: SOLDER_STATION_OVERHEAT_CHANCE,
+        qualityMin: SOLDER_STATION_QUALITY_MIN, qualityMax: SOLDER_STATION_QUALITY_MAX,
+        pointDelayMs: SOLDER_STATION_POINT_DELAY_MS, missChance: SOLDER_STATION_MISS_CHANCE },
     ],
   },
   consumables: {
