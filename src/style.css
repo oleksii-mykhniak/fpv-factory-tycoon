@@ -85,7 +85,68 @@ body {
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
 }
 
-.hud__rate[hidden] { display: none; }
+/* Нуль приглушений, але присутній (Стадія 10 / D1): прилад, який зникає на
+   нулі, не може бути мірою прогресу — а зникав він рівно тоді, коли гравець
+   спинявся обирати апгрейд. */
+.hud__rate--zero { color: #6a6a80; opacity: 0.6; }
+
+/* Дельта після покупки — той самий зелений, але яскравіший за сам темп:
+   це подія, а не показник. */
+.hud__rate-delta {
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: #9dffa8;
+  margin-left: 6px;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+  animation: rate-delta-in 0.25s ease-out;
+}
+
+.hud__rate-delta[hidden] { display: none; }
+
+@keyframes rate-delta-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Смужка до наступної покупки (Стадія 10 / D2). Під темпом, у тій самій
+   лівій колонці: гравець дивиться на «скільки я заробляю» і одразу під ним
+   бачить «скільки лишилось». */
+.hud__next {
+  position: absolute;
+  top: calc(38px + env(safe-area-inset-top));
+  left: calc(14px + env(safe-area-inset-left));
+  width: 132px;
+  pointer-events: none;
+}
+
+.hud__next[hidden] { display: none; }
+
+.hud__next-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+.hud__next-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #4a8ad8, #7de07d);
+  transition: width 0.3s ease-out;
+}
+
+.hud__next-label {
+  display: block;
+  margin-top: 3px;
+  font-family: monospace;
+  font-size: 0.68rem;
+  color: #9a9ab4;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* .hud__hint прибрано в Стадії 9 / Р2: смуга підказок унизу екрана
    заважала, а крок петлі переїхав рядком у картку квесту (.quest__step). */

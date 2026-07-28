@@ -167,7 +167,7 @@ export const INTERACTIONS = {
     repeat:  false,
     accepts:  'any',
     enabled: (_world, _zone, agent) => !!carriedType(agent, 'drone'),
-    run(world, _zone, agent, events) {
+    run(world, zone, agent, events) {
       const drone = drop(agent, 'drone')
       emit(events, EV.ITEM_DROPPED, { agentId: agent.id, item: 'drone' })
 
@@ -189,7 +189,13 @@ export const INTERACTIONS = {
       world.salesLog.push({ quality, price, at: world.now, hallId: stationHallOf(world, stationId) })
       world.game = sellStation(world.game, stationId)
 
-      emit(events, EV.SALE_MADE, { kitId: kit.id, quality, price, stationId, agentId: agent.id })
+      // zoneId — щоб «+$47» вилетіло над ТІЄЮ скринькою, куди донесли дрон
+      // (Стадія 10 / D3). У фабрики скриньок кілька (F4), тож без цього текст
+      // з'являвся б над першою-ліпшою — той самий клас помилки, що й одна
+      // пульсація на всі дошки найму.
+      emit(events, EV.SALE_MADE, {
+        kitId: kit.id, quality, price, stationId, agentId: agent.id, zoneId: zone?.id,
+      })
       emit(events, EV.MONEY_GAINED, { amount: price, reason: 'sale' })
       emit(events, EV.BENCH_CLEARED, { reason: 'sold' })
       emit(events, EV.STATE_DIRTY)

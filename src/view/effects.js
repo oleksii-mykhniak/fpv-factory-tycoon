@@ -11,7 +11,7 @@ import { playSfx } from '../audio/sfx.js'
 
 export function createEffects({
   getRefs, haptic, onStateDirty, onColdSolder,
-  onSaleMade, onMinigame, onPanel, onQuestDone,
+  onSaleMade, onMinigame, onPanel, onQuestDone, onPurchase,
 }) {
   // Each station draws its own progress card (C3).
   const progressOf = (stationId) =>
@@ -85,11 +85,14 @@ export function createEffects({
     [EV.ZONE_FIRED]:   () => onStateDirty(),
 
     // ── Things only the player can do (A3) ───────────────
-    [EV.WORKER_HIRED]:    () => { playSfx('hire');    haptic('medium') },
-    [EV.UPGRADE_BOUGHT]:  () => { playSfx('upgrade'); haptic('medium') },
-    [EV.WORKER_PROMOTED]: () => { playSfx('promote'); haptic('medium') },
-    [EV.HALL_UNLOCKED]:   () => { playSfx('hall');    haptic('heavy') },
-    [EV.ROOM_UNLOCKED]:   () => { playSfx('hall');    haptic('heavy') },
+    // onPurchase: усе, за що гравець заплатив і від чого чекає росту темпу.
+    // Прилад мусить показати цей ріст (План Стадії 10 / П4) — інакше ефект
+    // апгрейда лишається на слово розробника.
+    [EV.WORKER_HIRED]:    () => { playSfx('hire');    haptic('medium'); onPurchase?.() },
+    [EV.UPGRADE_BOUGHT]:  () => { playSfx('upgrade'); haptic('medium'); onPurchase?.() },
+    [EV.WORKER_PROMOTED]: () => { playSfx('promote'); haptic('medium'); onPurchase?.() },
+    [EV.HALL_UNLOCKED]:   () => { playSfx('hall');    haptic('heavy');  onPurchase?.() },
+    [EV.ROOM_UNLOCKED]:   () => { playSfx('hall');    haptic('heavy');  onPurchase?.() },
     // Ціль виконано (П1) — та сама нагорода, що й за покупку, бо квест і є
     // покупкою, яку гравець собі пообіцяв.
     [EV.QUEST_DONE]:      (e) => { playSfx('upgrade'); haptic('medium'); onQuestDone?.(e) },

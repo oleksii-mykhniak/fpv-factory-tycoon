@@ -17,8 +17,10 @@ import {
 import { levelData, UPGRADE_TRACKS } from '../state/upgrades.js'
 import {
   kitsForLocation, hiringAllowed, roleCapHere, roleCapInHall, capFor, ruleAt,
-  canMoveToLocation, LOCATION_ORDER,
+  canMoveToLocation, LOCATION_ORDER, LOCATIONS,
 } from '../state/locations.js'
+import { roomDef } from '../defs/layouts/rooms.js'
+import { hallDef } from '../defs/layouts/factory.js'
 import { ROLE_ORDER, roleLevelData } from '../defs/roles.js'
 import { questZoneKind, questIsLoop, questIndex } from './quests.js'
 
@@ -54,6 +56,66 @@ export function shopNeedsAttention(game) {
   return affordable
 }
 
+// Everything the rack can sell right now: upgrade levels, the next room or
+// hall, the move to the next location. `{ id, label, cost, blocked }` each —
+// `blocked` marks what is unlocked but has an unmet requirement other than
+// money (a move that still needs the garage), so it can be listed without
+// being counted as "affordable".
+//
+// One list instead of two loops: "does the rack want attention" and "what is
+// the next thing I can buy" are the same question asked twice, and answering
+// it in two places is how the badge and the progress bar would end up
+// disagreeing about whether anything is for sale (Стадія 10 / D2).
+export function purchaseOptions(game) {
+  const out = []
+
+  // "Would this be allowed if money were no object?" — the only honest way to
+  // separate "you cannot afford it yet" from "money is not what is stopping
+  // you". Asking `game.money >= cost` instead looks equivalent and is not: a
+  // player who is BOTH too poor and missing the requirement would read as
+  // merely poor, and the progress bar would spend the next ten minutes filling
+  // towards a move the rack refuses to sell.
+  const onlyMoneyMissing = (check) => check(Infinity).can
+
+  for (const [id, track] of Object.entries(UPGRADE_TRACKS)) {
+    const level = game.upgrades[track.stateKey] ?? 0
+    if (level >= Math.min(track.costs.length, capFor(game, id))) continue
+    out.push({ id: `upgrade:${id}`, label: track.name, cost: track.costs[level] })
+  }
+
+  // The rack is also where the floor plan is bought: a room at home (П2), a
+  // hall on the factory (F2).
+  const roomId = nextRoomId(game)
+  if (roomId) {
+    out.push({
+      id: `room:${roomId}`, label: roomDef(roomId)?.name ?? roomId,
+      cost: roomDef(roomId)?.cost ?? Infinity,
+      blocked: !onlyMoneyMissing(m => canUnlockRoom({ ...game, money: m }, roomId)),
+    })
+  }
+
+  const hallId = nextHallId(game)
+  if (hallId) {
+    out.push({
+      id: `hall:${hallId}`, label: hallDef(hallId)?.name ?? hallId,
+      cost: hallDef(hallId)?.cost ?? Infinity,
+      blocked: !onlyMoneyMissing(m => canUnlockHall({ ...game, money: m }, hallId)),
+    })
+  }
+
+  const currentIdx = LOCATION_ORDER.indexOf(game.locationId ?? 'apartment')
+  const nextLocId  = LOCATION_ORDER[currentIdx + 1]
+  if (nextLocId) {
+    out.push({
+      id: `move:${nextLocId}`, label: LOCATIONS[nextLocId]?.name ?? nextLocId,
+      cost: LOCATIONS[nextLocId]?.unlockCost ?? Infinity,
+      blocked: !onlyMoneyMissing(m => canMoveToLocation({ ...game, money: m }, nextLocId)),
+    })
+  }
+
+  return out
+}
+
 // The rack: an upgrade (or a move) is affordable.
 //
 // This used to go quiet while any bench was mid-build — a rule from the era of
@@ -61,23 +123,20 @@ export function shopNeedsAttention(game) {
 // shop is essentially never idle, so "between cycles" meant "never": buying a
 // better iron is not something that has to wait for the current drone.
 export function upgradeNeedsAttention(game) {
-  const currentIdx = LOCATION_ORDER.indexOf(game.locationId ?? 'apartment')
-  const nextLocId  = LOCATION_ORDER[currentIdx + 1]
-  if (nextLocId && canMoveToLocation(game, nextLocId).can) return true
+  return purchaseOptions(game).some(o => !o.blocked && game.money >= o.cost)
+}
 
-  // The rack is also where the floor plan is bought: a room at home (П2), a
-  // hall on the factory (F2).
-  const roomId = nextRoomId(game)
-  if (roomId && canUnlockRoom(game, roomId).can) return true
-
-  const hallId = nextHallId(game)
-  if (hallId && canUnlockHall(game, hallId).can) return true
-
-  return Object.entries(UPGRADE_TRACKS).some(([id, track]) => {
-    const level = game.upgrades[track.stateKey] ?? 0
-    if (level >= Math.min(track.costs.length, capFor(game, id))) return false
-    return game.money >= track.costs[level]
-  })
+// The cheapest thing still out of reach — what the HUD's progress bar fills
+// towards (Стадія 10 / D2). Null when everything on offer is already
+// affordable (the badge is showing instead) or there is nothing left to buy.
+//
+// Blocked options are skipped: a bar creeping towards a move the player cannot
+// make until they own the garage is a promise the rack will not keep.
+export function nextPurchase(game) {
+  const reachable = purchaseOptions(game)
+    .filter(o => !o.blocked && Number.isFinite(o.cost) && game.money < o.cost)
+    .sort((a, b) => a.cost - b.cost)
+  return reachable[0] ?? null
 }
 
 // The board: hiring is allowed here, and some role has both room and a price

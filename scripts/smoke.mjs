@@ -579,10 +579,18 @@ const kInHand = await log('picked the box off the belt')
 await goTo('zone-station-0'); await page.waitForTimeout(2000)
 const kOnBench = await log('carried it to the bench')
 
-// ── M. Income on screen (F7) ──────────────────────────────
+// ── M. Income on screen (F7, переглянуто Стадією 10 / D1) ──
+//
+// Контракт ПЕРЕВЕРНУТО: раніше тут перевірялось, що приладу немає, поки нічого
+// не продано. Тепер перевіряється протилежне — що він є завжди і читає нуль.
+// Причина в плані Стадії 10: число зникало рівно тоді, коли гравець спинявся
+// обрати апгрейд, тобто коли міра, за якою він обирає, потрібна найбільше.
 console.log('\n### M. $/сек')
 await boot(seedState({ solderingLevel: 2 }))
-const mBefore = await page.locator('#hud-rate').isVisible().catch(() => false)
+const mBefore = await page.evaluate(() => {
+  const el = document.querySelector('#hud-rate')
+  return { visible: !!el && !el.hasAttribute('hidden'), text: el?.textContent ?? '' }
+})
 await orderFirstKit()
 await page.waitForTimeout(5200)
 await goTo('slot0'); await page.waitForTimeout(700)
@@ -595,8 +603,27 @@ const mAfter = await page.evaluate(() => ({
   logged:  globalThis.__world.salesLog.length,
   stamped: globalThis.__world.salesLog.every(s => typeof s.at === 'number'),
 }))
-console.log(`  before: rate shown=${mBefore}; after a sale: "${mAfter.text}" ` +
+console.log(`  before: "${mBefore.text}" (shown=${mBefore.visible}); ` +
+            `after a sale: "${mAfter.text}" ` +
             `(${mAfter.logged} sale(s), timestamped: ${mAfter.stamped})`)
+
+// ── M2. Смужка до наступної покупки (Стадія 10 / D2) ──────
+console.log('\n### M2. Наступна покупка')
+// Свідомо бідний старт: за стандартну $1000 у квартирі доступне геть усе, і
+// смужка ХОВАЄТЬСЯ — правильно (тоді говорить бейдж на стелажі), але тоді тут
+// не було б чого перевіряти.
+await boot(seedState({}, { money: 50 }))
+const m2 = await page.evaluate(() => {
+  const bar  = document.querySelector('#hud-next')
+  const fill = document.querySelector('#hud-next-fill')
+  const lbl  = document.querySelector('#hud-next-label')
+  return {
+    shown: !!bar && !bar.hasAttribute('hidden'),
+    width: fill?.style.width ?? '',
+    label: lbl?.textContent ?? '',
+  }
+})
+console.log(`  bar shown=${m2.shown} fill=${m2.width} label="${m2.label}"`)
 
 // ── L. Promoting somebody on the shop floor (F5) ──────────
 console.log('\n### L. The promotion tag')
@@ -1121,10 +1148,14 @@ const checks = [
   ['L: it costs money',                    lAfter.money < lBefore.money],
   ['L: they actually get faster',          lAfter.speed > lBefore.speed],
   ['L: the level dots move on',            lAfter.dots !== lBefore.dots],
-  ['M: no rate before anything is sold', mBefore === false],
-  ['M: the rate appears after a sale',   mAfter.visible === true],
+  ['M: the rate gauge is there before any sale', mBefore.visible === true],
+  ['M: and it reads zero, not nothing', /\$0\.00/.test(mBefore.text)],
+  ['M: the rate survives a sale',        mAfter.visible === true],
   ['M: and it reads as $/сек',           /\$\d/.test(mAfter.text) && mAfter.text.includes('сек')],
   ['M: every sale is timestamped',       mAfter.logged > 0 && mAfter.stamped],
+  ['M2: the next-purchase bar is shown', m2.shown === true],
+  ['M2: it names what is being saved for', m2.label.includes('$')],
+  ['M2: and it is not already full',     m2.width !== '100.0%'],
   ['N: there is a cat in the flat',      nStart !== null && nStart.visible],
   ['N: it wanders on its own',           nMoved > 20],
   ['N: it has more than one thing to do', nMoods.size >= 2],

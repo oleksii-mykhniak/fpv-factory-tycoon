@@ -777,6 +777,59 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     return { hallId: hall.id, label: lbl }
   })
 
+  // ── Floating gains (Стадія 10 / D3) ────────────────────
+  // "+$47" rising off the post box the drone was actually carried to.
+  //
+  // Money landing used to be a number in the HUD quietly becoming a different
+  // number — the one moment the whole loop pays out, and the least visible
+  // thing on screen. Here it happens where the player is looking, which is the
+  // same rule the burnt-kit banner follows (Стадія 9 / П6).
+  //
+  // A fixed pool rather than actors created per sale: a factory with three
+  // sellers banks drones faster than a GC wants new Labels, and a pool that
+  // runs out simply reuses its oldest — a dropped "+$47" costs nothing.
+  const FLOAT_MS = 1100
+  const floaters = Array.from({ length: 6 }, () => {
+    const lbl = new ex.Label({
+      text: '', pos: ex.vec(-9999, -9999), z: 40,
+      color: ex.Color.fromHex('#9dffa8'),
+      font: new ex.Font({
+        family: 'monospace', size: 17, unit: ex.FontUnit.Px,
+        textAlign: ex.TextAlign.Center, baseAlign: ex.BaseAlign.Middle,
+      }),
+    })
+    lbl.graphics.visible = false
+    const st = { lbl, age: 0, live: false, x: 0, y: 0 }
+    lbl.on('preupdate', (evt) => {
+      if (!st.live) return
+      st.age += evt.delta
+      if (st.age >= FLOAT_MS) {
+        st.live = false
+        lbl.graphics.visible = false
+        return
+      }
+      const t = st.age / FLOAT_MS
+      lbl.pos = ex.vec(st.x, st.y - 46 * t)
+      lbl.graphics.opacity = t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4
+    })
+    scene.add(track(lbl))
+    return st
+  })
+
+  let floatNext = 0
+  function floatGain(x, y, text) {
+    // Prefer a free one; fall back to the oldest so a burst never goes silent.
+    const st = floaters.find(f => !f.live) ?? floaters[floatNext++ % floaters.length]
+    st.age = 0
+    st.live = true
+    st.x = x
+    st.y = y - 30
+    st.lbl.text = text
+    st.lbl.pos = ex.vec(st.x, st.y)
+    st.lbl.graphics.opacity = 1
+    st.lbl.graphics.visible = true
+  }
+
   // ── Boxes on the belt (F3) ─────────────────────────────
   // One actor per delivery slot, since that is the hard cap on how many boxes
   // can exist at once. Position comes from the sim's `t`, so what you see on
@@ -1098,6 +1151,7 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     ...propActors,
     beltBoxes,
     hallEarnings,
+    floatGain,
     stations,
     player, playerRig, workerView, workerViews,
     carrySlotActors,

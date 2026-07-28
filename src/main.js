@@ -24,6 +24,7 @@ import { dispatch, piggyAvailable } from './sim/commands.js'
 import { settleOffline } from './sim/offline.js'
 import {
   playerStation, guidanceActive, ironIsHandsOff, incomePerSec, arrowAllowed,
+  nextPurchase,
 } from './sim/derive.js'
 import { SYSTEMS } from './sim/systems/index.js'
 
@@ -222,12 +223,26 @@ const effects = createEffects({
   onStateDirty: () => { saveQueued = true },
   onColdSolder: (missMsg) => { coldWarning = missMsg ?? 'cold'; uiDirty = true },
   // Trigger zones ask; the view decides how to answer (C2).
-  onSaleMade:      () => offerSaleBonus(),
+  onSaleMade:      (e) => { floatEarning(e); offerSaleBonus() },
   onQuestDone:     ({ questId }) => questTracker.flash(questId),
+  onPurchase:      () => hud.markPurchase(incomePerSec(world.salesLog, world.now), world.now),
   onMinigame:      ({ game, agentId }) => openMinigame(game, agentId),
   // Walking up to the laptop / rack / board is what opens these now (S2).
   onPanel:         (e) => openPanel(e.panel, e),
 })
+
+// «+$47» над скринькою, у яку щойно поклали дрон (Стадія 10 / D3).
+//
+// Позиція береться з зони, а не з пропа: скриньок на фабриці кілька (F4), і
+// зона — це єдине, що подія про продаж знає напевно. Якщо зони немає (старий
+// сейв, нетипова розкладка) — просто нічого не летить: прикраса не має права
+// впасти на бойовому шляху продажу.
+function floatEarning({ price, zoneId }) {
+  if (!(price > 0)) return
+  const zone = (world.zones ?? []).find(z => z.id === zoneId)
+  if (!zone) return
+  sceneRefs?.floatGain?.(zone.cx, zone.y, `+$${price.toFixed(0)}`)
+}
 
 // Applies a player command and pushes the result through the presentation layer.
 // The single entry point for every button, tap and mini-game result.
@@ -417,6 +432,16 @@ let _lastCarrySig = ''
 let _lastStation  = ''
 
 function renderUI() {
+  // HUD оновлюється КОЖЕН тік, до dirty-перевірки нижче (Стадія 10 / D1).
+  //
+  // Темп рахується по ковзному вікну продажів, тобто спадає сам собою, коли в
+  // грі нічого не змінюється — а це саме той момент, коли dirty-перевірка
+  // вирішує нічого не малювати. Поки прилад ховався на нулі, розбіжність була
+  // непомітна; тепер він стоїть завжди, і завмерле число читалось би як
+  // поламане. Це три присвоєння тексту, не варті власного кешу.
+  hud.update(world.game, incomePerSec(world.salesLog, world.now),
+             nextPurchase(world.game), world.now)
+
   // Every state transition returns a fresh object, so identity is a reliable
   // dirty check — it keeps the DOM work off the 20 Hz tick. Carried items are
   // mutated in place though, so they need their own signature.
@@ -433,7 +458,6 @@ function renderUI() {
   uiDirty = false
 
   const player = (world.agents ?? []).find(a => a.kind === 'player')
-  hud.update(world.game, incomePerSec(world.salesLog, world.now))
 
   // Смужка пайки й картка квесту живуть на одній висоті, тож картка мовчить,
   // поки смужка на екрані. Рахується тут, бо `handStation` нижче — це вже
