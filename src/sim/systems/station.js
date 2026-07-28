@@ -19,6 +19,7 @@
 import {
   Phase, KIT_TYPES, recordSolderPoint, finishAssembly, calcPrice, stationsOf, releaseOutput,
   burnKit, applyColdSolderPenalty,
+  kitBasePrice, kitSteps, kitSolderPointCount,
 } from '../../state/gameState.js'
 import { AUTO_OVERHEAT_SHARE, COLD_SOLDER_QUALITY_PENALTY } from '../../state/config.js'
 import { levelData, salePriceMult, toolingQualityBonus } from '../../state/upgrades.js'
@@ -97,8 +98,8 @@ function idle(rt) {
 
 function startStage(world, station, rt, kit, data, events) {
   const done  = station.solderPoints.length
-  const total = kit.solderPointCount
-  const label = kit.assemblySteps?.[done]?.label ?? `Крок ${done + 1}`
+  const total = kitSolderPointCount(world.game, kit.id)
+  const label = kitSteps(world.game, kit.id)[done]?.label ?? `Крок ${done + 1}`
 
   rt.running    = true
   rt.elapsedMs  = 0
@@ -162,7 +163,7 @@ export function stationSystem(world, dt, events) {
         world.game = burnKit(world.game, stationId)
         emit(events, EV.KIT_BURNT, { stationId, kitId: station.kitId })
       } else {
-        const step = kit.assemblySteps?.[station.solderPoints.length]
+        const step = kitSteps(world.game, kit.id)[station.solderPoints.length]
         world.game = applyColdSolderPenalty(world.game, stationId, COLD_SOLDER_QUALITY_PENALTY)
         emit(events, EV.STAGE_COLD, { stationId, missMsg: step?.missMsg, auto: true })
       }
@@ -181,7 +182,7 @@ export function stationSystem(world, dt, events) {
 
     const updated = stationsOf(world.game).find(s => s.id === stationId)
     const done    = updated.solderPoints.length
-    const total   = kit.solderPointCount
+    const total   = kitSolderPointCount(world.game, kit.id)
 
     if (done < total) {
       emit(events, EV.STAGE_DONE, { stationId, total, done, quality, auto: true })
@@ -192,7 +193,7 @@ export function stationSystem(world, dt, events) {
 
     world.game = finishAssembly(world.game, stationId)
     const finished = stationsOf(world.game).find(s => s.id === stationId)
-    const price = calcPrice(kit.basePrice, finished.quality, salePriceMult(world.game))
+    const price = calcPrice(kitBasePrice(world.game, kit.id), finished.quality, salePriceMult(world.game))
 
     idle(rt)
     emit(events, EV.STAGE_DONE, { stationId, total, done, quality, auto: true })

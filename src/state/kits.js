@@ -6,7 +6,7 @@
 //
 // unlock: null = always available; { location: 'id' } = gated until that
 // location (D7); { room: 'id' } = gated until that room of the flat is bought (П2).
-import { KIT_CONFIGS } from './config.js'
+import { KIT_CONFIGS, MK_UNLOCKS } from './config.js'
 
 function makeKit(id, { name, emoji, spriteKey, unlock, isSpecial = false }) {
   const cfg = KIT_CONFIGS[id]
@@ -32,3 +32,27 @@ export const KIT_TYPES = Object.freeze({
   longrange_drone: makeKit('longrange_drone', { name: 'Далекобійний',        emoji: '📡', spriteKey: 'longrange_drone', unlock: { room: 'garage' } }),
   scrap_drone:     makeKit('scrap_drone',     { name: 'Дрон з брухту',       emoji: '♻️', spriteKey: 'mini_drone',      unlock: null, isSpecial: true }),
 })
+
+// ── Mk: чисті читачі (Стадія 10 / B) ──────────────────────
+//
+// Живуть тут, а не в gameState.js, з однієї причини: `locations.js` мусить
+// знати, чи відкритий тип, а `gameState.js` імпортує `locations.js`. Класти їх
+// у gameState означало б цикл — цей файл не імпортує нічого, крім конфігу, і
+// саме тому годиться.
+
+export function kitMark(state, kitTypeId) {
+  return state?.kitMarks?.[kitTypeId] ?? 0
+}
+
+// Який тип і який його Mk відкриває цей комплект, або null, якщо він не
+// відкривається нічим.
+export function markUnlockOf(kitTypeId) {
+  const entry = Object.entries(MK_UNLOCKS).find(([, u]) => u.unlocks === kitTypeId)
+  return entry ? { fromKit: entry[0], mk: entry[1].mk } : null
+}
+
+// Двері односторонні: `kitMarks` тільки росте, тож відкритий тип не зачиниться.
+export function markUnlocked(state, kitTypeId) {
+  const req = markUnlockOf(kitTypeId)
+  return !req || kitMark(state, req.fromKit) >= req.mk
+}

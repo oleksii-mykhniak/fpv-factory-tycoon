@@ -17,7 +17,7 @@
 
 import {
   Phase, KIT_TYPES, calcPrice, stationsOf, workersInRole, bumpStats,
-  kitCost,
+  kitCost, kitBasePrice, kitDeliveryMs, kitSolderPointCount,
 } from '../state/gameState.js'
 import { levelData, salePriceMult, deliveryMult } from '../state/upgrades.js'
 import { roleLevelData, ROLE_ORDER } from '../defs/roles.js'
@@ -67,8 +67,8 @@ function settleFullCycles(game, elapsedMs, rate) {
   if (!kit) return null
 
   const benches   = Math.max(1, stationsOf(game).length)
-  const assembly  = kit.solderPointCount * rate.ms
-  const delivery  = kit.deliveryMs * deliveryMult(game)
+  const assembly  = kitSolderPointCount(game, kit.id) * rate.ms
+  const delivery  = kitDeliveryMs(game, kit.id) * deliveryMult(game)
   const cycleMs   = Math.max(assembly, delivery) / benches
   if (!(cycleMs > 0)) return null
 
@@ -81,7 +81,7 @@ function settleFullCycles(game, elapsedMs, rate) {
     // нульовою касою і гравець не може купити нічого.
     const cost = kitCost(game, kit.id)
     if (money < cost * MANAGER_RESERVE) break
-    const price = calcPrice(kit.basePrice, rate.q, salePriceMult(game))
+    const price = calcPrice(kitBasePrice(game, kit.id), rate.q, salePriceMult(game))
     money  += price - cost
     earned += price - cost
     sold++
@@ -131,13 +131,13 @@ export function settleOffline(game, awayMs, now = Date.now()) {
     // A bench mid-assembly finishes if something could work it.
     if (station.phase === Phase.ASSEMBLY && rate) {
       const kit  = KIT_TYPES[station.kitId]
-      const left = kit.solderPointCount - station.solderPoints.length
+      const left = kitSolderPointCount(game, station.kitId) - station.solderPoints.length
       if (left * rate.ms <= elapsedMs) {
         assembled++
         const quality = Math.max(0, rate.q - station.coldPenalty)
         // Only a hired seller can bank it; otherwise it waits on the bench.
         if (hasSeller) {
-          const price = calcPrice(kit.basePrice, quality, salePriceMult(game))
+          const price = calcPrice(kitBasePrice(game, station.kitId), quality, salePriceMult(game))
           money  += price
           earned += price
           sold++

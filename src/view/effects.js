@@ -11,7 +11,7 @@ import { playSfx } from '../audio/sfx.js'
 
 export function createEffects({
   getRefs, haptic, onStateDirty, onColdSolder,
-  onSaleMade, onMinigame, onPanel, onQuestDone, onPurchase,
+  onSaleMade, onMinigame, onPanel, onQuestDone, onPurchase, onMarkUpgraded,
 }) {
   // Each station draws its own progress card (C3).
   const progressOf = (stationId) =>
@@ -93,6 +93,14 @@ export function createEffects({
     [EV.WORKER_PROMOTED]: () => { playSfx('promote'); haptic('medium'); onPurchase?.() },
     [EV.HALL_UNLOCKED]:   () => { playSfx('hall');    haptic('heavy');  onPurchase?.() },
     [EV.ROOM_UNLOCKED]:   () => { playSfx('hall');    haptic('heavy');  onPurchase?.() },
+    // Mk — теж покупка, від якої чекають росту темпу. Фінальний Mk, який
+    // відкриває новий тип, ще й святкується як кімната (Р4).
+    [EV.MARK_UPGRADED]:   (e) => {
+      playSfx(e.unlocked?.length ? 'hall' : 'upgrade')
+      haptic(e.unlocked?.length ? 'heavy' : 'medium')
+      onPurchase?.()
+      onMarkUpgraded?.(e)
+    },
     // Ціль виконано (П1) — та сама нагорода, що й за покупку, бо квест і є
     // покупкою, яку гравець собі пообіцяв.
     [EV.QUEST_DONE]:      (e) => { playSfx('upgrade'); haptic('medium'); onQuestDone?.(e) },

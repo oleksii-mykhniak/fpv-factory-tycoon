@@ -39,7 +39,7 @@
 
 import {
   KIT_TYPES, nextHireCost, workersInRole, nextRoomId, canUnlockRoom,
-  nextHallId, canUnlockHall, kitCost,
+  nextHallId, canUnlockHall, kitCost, kitMark, markUnlocked, nextMarkCost,
 } from '../state/gameState.js'
 import { UPGRADE_TRACKS, levelData, nextCost } from '../state/upgrades.js'
 import {
@@ -82,6 +82,34 @@ const buyUpgrade = (id, trackId, target, why) => ({
     const next = levelData(trackId, from + 1)
     if (!next) return null
     return { title: `Купи: ${next.name}`, need: nextCost(trackId, from) }
+  },
+})
+
+// Підняти комплект до Mk `target` (Стадія 10 / B).
+//
+// ПОРЯДОК У ЛАНЦЮГУ НЕСУЧИЙ: крок «купи Mk» мусить стояти перед кроком «продай
+// цей тип». Гоночний відкриває mini Mk II, і якби крок продажу стояв раніше,
+// він був би `moot` (типу немає в каталозі), ланцюг би його проскочив — а
+// потім, коли тип відкриється, поїхав би назад. Монотонність (П2) на цьому й
+// тримається; тест «ланцюг ніколи не їде назад» ловить порушення.
+const buyMark = (id, kitId, target, why) => ({
+  id, kind: 'buy', zoneKind: 'desk', why, kitId, target,
+  // Комплекту тут може не бути взагалі (далекобійний у квартирі) — тоді крок
+  // безглуздий. Але для типів, які САМ цей крок і відкриває, перевіряти
+  // каталог не можна: він і має бути ще зачиненим.
+  moot: (game) => !markUnlocked(game, kitId)
+    ? false
+    : !kitsForLocation(game).includes(kitId) && kitMark(game, kitId) < target,
+  done: (game) => kitMark(game, kitId) >= target,
+  resolve(game) {
+    const kit = KIT_TYPES[kitId]
+    const cost = nextMarkCost(game, kitId)
+    if (cost === null) return null
+    return {
+      title: `Прокачай ${kit.emoji} ${kit.name} до Mk ${kitMark(game, kitId) + 2}`,
+      need:  cost,
+      hint:  'Ноутбук на кухні · вкладка комплекту',
+    }
   },
 })
 
@@ -156,6 +184,12 @@ export const QUEST_ACTS = Object.freeze([
       sellCount('sell_three', 3, 'Продай 3 дрони',
         'Згорілий не рахується — стеж за перегрівом'),
       buyUpgrade('iron_1', 'soldering', 1, 'Зона пайки ширша, перегрів рідший'),
+      buyMark('mk_mini_1', 'mini_drone', 1,
+        'Той самий дрон, дорожчий — і продається дорожче'),
+      sellCount('sell_five', 5, 'Продай 5 дронів',
+        'Mk II міні-дрона відкриє гоночний'),
+      buyMark('mk_mini_2', 'mini_drone', 2,
+        'Mk II відкриває гоночний дрон'),
       sellCount('sell_racing', 1, 'Продай гоночний дрон',
         'Дорожчий комплект — більша маржа', 'racing_drone'),
       // Перший нескінченний трек (Стадія 10 / A). Вводиться тут навмисно: він
@@ -164,9 +198,11 @@ export const QUEST_ACTS = Object.freeze([
       buyUpgrade('reputation_1', 'reputation', 1,
         'Перший трек без стелі — його можна качати нескінченно'),
       buyUpgrade('flux_1', 'consumables', 1, 'Перегрів −30%'),
-      buyUpgrade('iron_2', 'soldering', 2, 'Верстак паяє сам, поки ти біля нього'),
+      buyMark('mk_racing_2', 'racing_drone', 2,
+        'Mk II гоночного відкриває кінематографічний'),
       sellCount('sell_cine', 1, 'Продай кінематографічний дрон',
         'Найдорожче, що вміє квартира', 'cinematic_drone'),
+      buyUpgrade('iron_2', 'soldering', 2, 'Верстак паяє сам, поки ти біля нього'),
       {
         id: 'room_garage', kind: 'buy', zoneKind: 'rack',
         why: '+верстак, +далекобійний дрон, +3 вакансії',

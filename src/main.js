@@ -2,7 +2,7 @@ import './style.css'
 import { saveGame, loadGame, clearSave } from './save/storage.js'
 import {
   createState, Phase, DeliveryStatus,
-  createStation, stationsOf,
+  createStation, stationsOf, KIT_TYPES,
 } from './state/gameState.js'
 import { ADS_ENABLED, SCRAP_CONSOLATION, INPUT_DEADZONE } from './state/config.js'
 import { levelData } from './state/upgrades.js'
@@ -32,7 +32,7 @@ import { createHUD, stepHint } from './ui/hud.js'
 import { createQuestTracker } from './ui/questTracker.js'
 import { createUnlockCard } from './ui/unlockCard.js'
 import { createSettingsButton } from './ui/settingsButton.js'
-import { createShopModal } from './ui/shopModal.js'
+import { createShopModal, mkLabel } from './ui/shopModal.js'
 import { createUpgradeModal } from './ui/upgradeModal.js'
 import { createHireModal } from './ui/hireModal.js'
 import { createPromoteModal } from './ui/promoteModal.js'
@@ -226,6 +226,15 @@ const effects = createEffects({
   onSaleMade:      (e) => { floatEarning(e); offerSaleBonus() },
   onQuestDone:     ({ questId }) => questTracker.flash(questId),
   onPurchase:      () => hud.markPurchase(incomePerSec(world.salesLog, world.now), world.now),
+  onMarkUpgraded:  ({ kitId, mk, unlocked }) => {
+    if (!unlocked?.length) return
+    const kit = KIT_TYPES[kitId]
+    unlockCard.open({
+      title:    `${kit.emoji} ${kit.name} — ${mkLabel(mk)}`,
+      subtitle: 'Новий комплект у каталозі',
+      unlocks:  unlocked.map(id => `${KIT_TYPES[id].emoji} ${KIT_TYPES[id].name}`),
+    })
+  },
   onMinigame:      ({ game, agentId }) => openMinigame(game, agentId),
   // Walking up to the laptop / rack / board is what opens these now (S2).
   onPanel:         (e) => openPanel(e.panel, e),
@@ -288,6 +297,10 @@ const unlockCard = createUnlockCard(uiRoot)
 
 const shopModal = createShopModal(uiRoot, {
   onOrder: (kitId) => { dismissOnboarding(); send('order', { kitId }) },
+  // Панель НЕ закривається: Mk — це покупка всередині магазину, і закрити його
+  // означало б відправити гравця йти до ноутбука знову, щоб замовити те, що він
+  // щойно прокачав.
+  onUpgradeMark: (kitId) => send('upgradeMark', { kitId }),
 })
 
 const upgradeModal = createUpgradeModal(uiRoot, {

@@ -122,10 +122,12 @@ async function orderFirstKit() {
 // version is now discarded on load, which would silently boot every scenario
 // into a fresh apartment instead of the state it meant to test.
 const seedState = (upgrades, extra = {}) => ({
-  // Версія сейву мусить бути поточною: підлога піднялась до 4 (Стадія 9), і
-  // старіший сейв тепер відкидається — тест сідав би у свіжу гру замість
-  // засіяної.
-  version: 4,
+  // Версія сейву мусить бути поточною: підлога піднялась до 5 (Стадія 10 / B —
+  // з'явився `kitMarks`), і старіший сейв відкидається. Промах тут не падає
+  // одразу: гра просто сідає у свіжу квартиру, і тест виглядає так, ніби
+  // зламалась механіка, яку він перевіряє. Саме так це й проявилось — впав
+  // сценарій про два верстаки, бо їх ніхто не купував.
+  version: 5,
   savedAt: Date.now(),
   state: {
     money: 1000, lastPiggyAt: null, locationId: 'apartment', onboarded: true,
@@ -134,8 +136,15 @@ const seedState = (upgrades, extra = {}) => ({
                  solderPoints: [], quality: null, coldPenalty: 0 }],
     upgrades: {
       priceMultiplier: 1, solderingLevel: 0, workerLevel: 0,
-      consumablesLevel: 0, storageLevel: 0, logisticsLevel: 0, benchLevel: 0, ...upgrades,
+      consumablesLevel: 0, storageLevel: 0, logisticsLevel: 0, benchLevel: 0,
+      reputationLevel: 0, bulkLevel: 0, toolingLevel: 0, courierLevel: 0, ...upgrades,
     },
+    // Каталог, який був у сценаріїв до Стадії 10: гоночний і кінематографічний
+    // тепер відкриває Mk міні-дрона (B3). Сценарії тут перевіряють НЕ це, тож
+    // сідають одразу з відкритим каталогом — інакше кожен із них довелося б
+    // починати з прокачки, і вони перевіряли б ланцюг відкриттів замість своєї
+    // теми. Ланцюг перевіряє окремий блок нижче.
+    kitMarks: { mini_drone: 2, racing_drone: 2 },
     ...extra,
   },
   salesLog: [],
@@ -625,6 +634,54 @@ const m2 = await page.evaluate(() => {
 })
 console.log(`  bar shown=${m2.shown} fill=${m2.width} label="${m2.label}"`)
 
+// ── B. Mk комплектів (Стадія 10 / B) ──────────────────────
+console.log('\n### B2. Mk і відкриття типів')
+// Свідомо БЕЗ kitMarks: цей блок і перевіряє ланцюг відкриттів із нуля.
+await boot(seedState({}, { money: 4000, kitMarks: {} }))
+await openPanelAt('desk')
+const bStart = await page.evaluate(() => ({
+  cards:  [...document.querySelectorAll('.kit-card')].length,
+  locked: [...document.querySelectorAll('.kit-card--locked')].map(
+    c => c.querySelector('.kit-card__lock')?.textContent.trim()),
+  mkBtn:  document.querySelector('[data-mk="mini_drone"]')?.textContent.trim(),
+  gain:   document.querySelector('.kit-card__mk-gain')?.textContent.replace(/\s+/g, ' ').trim(),
+  catalogue: globalThis.__world.game.kitMarks,
+}))
+console.log(`  на старті: ${bStart.cards} карток, зачинено ${bStart.locked.length}`)
+console.log(`  замок каже: ${bStart.locked[0] ?? '(нічого)'}`)
+console.log(`  кнопка Mk: "${bStart.mkBtn}"; приріст: "${bStart.gain}"`)
+
+// Два кліки по Mk міні-дрона мають відкрити гоночний.
+await page.click('[data-mk="mini_drone"]')
+await page.waitForTimeout(300)
+await page.click('[data-mk="mini_drone"]')
+await page.waitForTimeout(600)
+const bAfter = await page.evaluate(() => ({
+  mark:    globalThis.__world.game.kitMarks?.mini_drone ?? 0,
+  card:    document.querySelector('#unlock-card')?.hasAttribute('hidden') === false,
+  cardText: document.querySelector('#unlock-card')?.textContent.replace(/\s+/g, ' ').trim() ?? '',
+}))
+console.log(`  після 2 покупок: Mk=${bAfter.mark}, картка «відкрито»=${bAfter.card}`)
+console.log(`  картка: ${bAfter.cardText.slice(0, 90)}`)
+await page.click('#unlock-card').catch(() => {})
+await page.waitForTimeout(300)
+await openPanelAt('desk')
+const bCatalogue = await page.evaluate(() => ({
+  unlocked: [...document.querySelectorAll('.kit-card:not(.kit-card--locked) .kit-card__name')]
+    .map(n => n.textContent.trim().split(' Mk')[0]),
+  capNote: document.querySelector('.kit-card__mk-note')?.textContent.trim() ?? '',
+}))
+console.log(`  каталог: ${bCatalogue.unlocked.join(', ')}`)
+
+// Стеля квартири — Mk II. Третій клік не має пройти.
+const bCap = await page.evaluate(() => {
+  const btn = document.querySelector('[data-mk="mini_drone"]')
+  return { present: !!btn, disabled: btn?.disabled ?? null,
+           note: document.querySelector('.kit-card__mk-note')?.textContent.trim() ?? '' }
+})
+console.log(`  у стелі: кнопка ${bCap.present ? 'є' : 'зникла'}, підпис "${bCap.note}"`)
+await page.click('#shop-close').catch(() => {})
+
 // ── L. Promoting somebody on the shop floor (F5) ──────────
 console.log('\n### L. The promotion tag')
 await boot(seedState({}, { locationId: 'factory', money: 20000 }))
@@ -843,8 +900,13 @@ console.log(`  "${pFirst?.title}" · крок петлі: "${pFirst?.step}"`)
 // Крок-покупка: смужка в грошах, стрілка на шафу — але лише коли грошей досить.
 // $100 навмисно: менше за паяльник ($150), але більше за найдешевший комплект
 // ($72) — інакше гравець вважається застряглим і картку перебиває вставка.
+//
+// `kitMarks: {}` тут несуче (Стадія 10 / B): решта сценаріїв сідає з Mk II, а
+// на Mk II міні-дрон коштує вже $162, і вікно між «не застряг» і «не вистачає
+// на паяльник» зникає взагалі. Сценарій мовчки перевіряв би вставку про
+// смітник замість кроку-покупки — саме так це й проявилось.
 const P_STATS = { sold: 3, assembled: 3, burnt: 0, bestQuality: 0, bestRate: 0, soldByKit: {} }
-await boot(seedState({}, { money: 100, ordersPlaced: 3, stats: P_STATS }))
+await boot(seedState({}, { money: 100, ordersPlaced: 3, stats: P_STATS, kitMarks: {} }))
 await page.waitForTimeout(600)
 const pPoor  = await questCard()
 const pArrowPoor = await arrowAt('rack')
@@ -1156,6 +1218,15 @@ const checks = [
   ['M2: the next-purchase bar is shown', m2.shown === true],
   ['M2: it names what is being saved for', m2.label.includes('$')],
   ['M2: and it is not already full',     m2.width !== '100.0%'],
+  ['B2: locked kits are on screen, not missing', bStart.locked.length > 0],
+  ['B2: and the lock names what to do about it', /Mk/.test(bStart.locked[0] ?? '')],
+  ['B2: the Mk button quotes a price',   /\$\d/.test(bStart.mkBtn ?? '')],
+  ['B2: and shows now → after',          /→/.test(bStart.gain ?? '')],
+  ['B2: two buys reach Mk II',           bAfter.mark === 2],
+  ['B2: the unlock is celebrated',       bAfter.card === true],
+  ['B2: the card names the new kit',     /Гоночний/.test(bAfter.cardText)],
+  ['B2: the catalogue actually grew',    bCatalogue.unlocked.length >= 2],
+  ['B2: the flat ceiling stops Mk III',  bCap.present === false && bCap.note.length > 0],
   ['N: there is a cat in the flat',      nStart !== null && nStart.visible],
   ['N: it wanders on its own',           nMoved > 20],
   ['N: it has more than one thing to do', nMoods.size >= 2],

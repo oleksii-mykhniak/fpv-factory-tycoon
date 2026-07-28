@@ -10,7 +10,7 @@ const SAVE_KEY = 'fpv_factory_save'
 // save we can still read. What throws a save away is raising the floor below.
 // 4 (Стадія 9 / Р1): у стані з'явились лічильники `stats` — на них тримаються
 // квести-дії.
-export const SAVE_VERSION = 4
+export const SAVE_VERSION = 5
 
 // The oldest schema this build will still load. Raise it — deliberately, and
 // only alongside a comment saying why — when a change is too structural to
@@ -39,7 +39,7 @@ export const SAVE_VERSION = 4
 // `outgrown` і нормалізація `stats` лишаються: вони й далі захищають будь-який
 // стан, де гравець об'єктивно далі, ніж каже лічильник (сейв, записаний між
 // стадіями; стан, зібраний тестом).
-export const MIN_LOADABLE_VERSION = 4
+export const MIN_LOADABLE_VERSION = 5
 
 export function saveGame(state, salesLog) {
   const payload = {

@@ -12,7 +12,7 @@
 // (та сама нормалізація, що й в openHalls: сейв не може описати гараж без
 // квартири).
 
-import { ENDLESS_CAP_FLAT, ENDLESS_CAP_GARAGE } from '../../state/config.js'
+import { ENDLESS_CAP_FLAT, ENDLESS_CAP_GARAGE, MK_CAP_FLAT, MK_CAP_GARAGE } from '../../state/config.js'
 
 export const APARTMENT_ROOMS = Object.freeze([
   {
@@ -23,6 +23,8 @@ export const APARTMENT_ROOMS = Object.freeze([
     // Скільки верстаків СТОЇТЬ у кімнаті — стільки слотів дає layout.
     benches: 1,
     kitIds: ['mini_drone', 'racing_drone', 'cinematic_drone'],
+    // Доки Mk комплекту можна довести в цій кімнаті (Стадія 10 / B2).
+    mkCap: MK_CAP_FLAT,
     // Перша кімната навмисно ручна: ти і є весь штат.
     workerCaps:  { courier: 0, tech: 0, seller: 0, manager: 0 },
     upgradeCaps: {
@@ -43,6 +45,7 @@ export const APARTMENT_ROOMS = Object.freeze([
     req:   { minUpgrades: { soldering: 2 } },
     benches: 1,
     kitIds: ['longrange_drone'],
+    mkCap: MK_CAP_GARAGE,
     // Штат рахується поролево, а не однією купою: двоє кур'єрів і нікого за
     // верстаком — це не склад команди, це глухий кут. Менеджер лишається
     // фабричним, тож «працює без мене» — те, заради чого ще переїжджають.
@@ -64,6 +67,7 @@ export const APARTMENT_ROOMS = Object.freeze([
       '📡 Новий комплект: далекобійний дрон',
       "🧑‍🔧 Три вакансії: кур'єр, технік, продавець",
       '⬆️ Вищі стелі: паяльник, склад, логістика',
+      `🎚️ Дрони можна качати до Mk ${MK_CAP_GARAGE}`,
     ],
   },
 ])

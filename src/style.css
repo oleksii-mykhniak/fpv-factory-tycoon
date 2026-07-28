@@ -1484,3 +1484,58 @@ body {
   color: #9fe09f;
   font-size: 0.86rem;
 }
+
+/* === Mk комплектів (Стадія 10 / B4) === */
+
+.kit-card__mk {
+  font-family: monospace;
+  font-size: 0.72rem;
+  color: #d8b45a;
+  letter-spacing: 0.06em;
+  margin-left: 4px;
+}
+
+.kit-card__mk-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 2px;
+}
+
+.btn--mk {
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  background: #2c2450;
+  border: 1px solid #4a3f7a;
+  color: #d8c6ff;
+  border-radius: 7px;
+}
+
+.btn--mk:disabled { opacity: 0.4; }
+
+/* «Зараз → після» — те, без чого рішення «Mk III міні чи Mk I кіно»
+   нечитабельне, і вся система лишилась би невидимою. */
+.kit-card__mk-gain {
+  font-family: monospace;
+  font-size: 0.74rem;
+  color: #7de07d;
+}
+
+.kit-card__mk-cap {
+  color: #7a7a92;
+  margin-left: 6px;
+}
+
+.kit-card__mk-unlock {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  font-size: 0.72rem;
+  color: #d8b45a;
+}
+
+.kit-card__mk-note {
+  margin: 4px 0 0;
+  font-size: 0.72rem;
+  color: #7a7a92;
+}

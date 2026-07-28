@@ -1,7 +1,10 @@
-import { Phase, KIT_TYPES, calcPrice, idleStations, kitCost } from '../state/gameState.js'
+import {
+  Phase, KIT_TYPES, calcPrice, idleStations, kitCost, kitBasePrice,
+  kitMark, kitMarkMax, kitSolderPointCount, markUnlockOf, nextMarkCost, canUpgradeMark,
+} from '../state/gameState.js'
 import { ruleAt } from '../state/locations.js'
 import { rescueKitAvailable, RESCUE_KIT_ID } from '../sim/derive.js'
-import { PRICE_BASE_COEFF, PRICE_QUALITY_COEFF, STORAGE_SLOTS_BY_LEVEL } from '../state/config.js'
+import { PRICE_BASE_COEFF, PRICE_QUALITY_COEFF, STORAGE_SLOTS_BY_LEVEL, MK_UNLOCKS } from '../state/config.js'
 import { salePriceMult } from '../state/upgrades.js'
 import { kitsForLocation, LOCATIONS } from '../state/locations.js'
 import { roomDef } from '../defs/layouts/rooms.js'
@@ -10,12 +13,58 @@ function isKitLocked(kit, locationKitIds) {
   return !locationKitIds.includes(kit.id)
 }
 
-function lockReasonText(kit) {
+// Чому цей тип зачинений. Два різні замки, і плутати їх не можна: один — про
+// місце («купи гараж»), другий — про Mk («прокачай міні-дрон»). Замок, який не
+// каже, ЩО з ним робити, читається як «сюди не можна ніколи».
+function lockReasonText(state, kit) {
+  const byMark = markUnlockOf(kit.id)
+  if (byMark) {
+    const from = KIT_TYPES[byMark.fromKit]
+    return `🔒 ${from.emoji} ${from.name} → Mk ${byMark.mk + 1}`
+  }
   const { location: locId, room: roomId } = kit.unlock ?? {}
   const name = roomId ? (roomDef(roomId)?.name ?? roomId)
              : locId  ? (LOCATIONS[locId]?.name ?? locId)
              : 'іншій локації'
   return `🔒 Відкривається в ${name}`
+}
+
+// Римські Mk: «Mk 4» читається як номер версії, «Mk IV» — як покоління заліза,
+// і друге ближче до того, чим воно є.
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII']
+export const mkLabel = (mk) => `Mk ${ROMAN[mk] ?? mk + 1}`
+
+// Рядок Mk на картці: що дасть наступний рівень і скільки він коштує.
+//
+// Порівняння «зараз → після» стоїть тут навмисно (План Стадії 10 / B4). Без
+// нього рішення «Mk III міні чи Mk I кінематографічного» нечитабельне, і вся
+// система лишилась би технічно правильною й невидимою — рівно як гараж до Р4.
+function mkRowHTML(state, kit) {
+  const mk   = kitMark(state, kit.id)
+  const cap  = kitMarkMax(state)
+  const { can, cost, reasons } = canUpgradeMark(state, kit.id)
+
+  if (cost === null) {
+    return `<p class="kit-card__mk-note">${reasons[0] ?? ''}</p>`
+  }
+
+  const nowPrice  = calcPrice(kitBasePrice(state, kit.id), 1, salePriceMult(state))
+  const nextState = { ...state, kitMarks: { ...(state.kitMarks ?? {}), [kit.id]: mk + 1 } }
+  const nextPrice = calcPrice(kitBasePrice(nextState, kit.id), 1, salePriceMult(nextState))
+  const unlocks   = Object.entries(MK_UNLOCKS)
+    .find(([from, u]) => from === kit.id && u.mk === mk + 1)?.[1]?.unlocks
+
+  return `
+    <div class="kit-card__mk-row">
+      <button class="btn btn--mk" data-mk="${kit.id}" ${can ? '' : 'disabled'}>
+        ↑ ${mkLabel(mk + 1)} — $${Math.round(cost)}
+      </button>
+      <span class="kit-card__mk-gain">
+        $${nowPrice.toFixed(0)} → $${nextPrice.toFixed(0)}
+        <span class="kit-card__mk-cap">Mk ${mk + 1}/${cap}</span>
+      </span>
+      ${unlocks ? `<p class="kit-card__mk-unlock">🔓 Відкриє: ${KIT_TYPES[unlocks].emoji} ${KIT_TYPES[unlocks].name}</p>` : ''}
+    </div>`
 }
 
 function difficultyDots(count) {
@@ -24,13 +73,14 @@ function difficultyDots(count) {
   ).join('')
 }
 
-function priceRange(kit, priceMultiplier) {
-  const min = calcPrice(kit.basePrice, 0,   priceMultiplier)
-  const max = calcPrice(kit.basePrice, 1.0, priceMultiplier)
+function priceRange(state, kit, priceMultiplier) {
+  const base = kitBasePrice(state, kit.id)
+  const min = calcPrice(base, 0,   priceMultiplier)
+  const max = calcPrice(base, 1.0, priceMultiplier)
   return `$${min.toFixed(0)}–$${max.toFixed(0)}`
 }
 
-export function createShopModal(root, { onOrder }) {
+export function createShopModal(root, { onOrder, onUpgradeMark }) {
   const overlay = document.createElement('div')
   overlay.id = 'shop-modal'
   overlay.className = 'modal-overlay'
@@ -84,6 +134,8 @@ export function createShopModal(root, { onOrder }) {
 
     body.innerHTML = slotHeader + Object.entries(KIT_TYPES).filter(([, kit]) => !kit.isSpecial).map(([id, kit]) => {
       const locked   = isKitLocked(kit, locationKitIds)
+      const mk       = kitMark(state, kit.id)
+      const steps    = kitSolderPointCount(state, kit.id)
       const cost     = kitCost(state, kit.id)
       const noMoney  = state.money < cost
       const disabled = locked || !canOrderAny || noMoney
@@ -98,7 +150,7 @@ export function createShopModal(root, { onOrder }) {
                 <div class="kit-card__meta">${difficultyDots(kit.solderPointCount)} ${kit.solderPointCount} точок</div>
               </div>
             </div>
-            <div class="kit-card__lock">${lockReasonText(kit)}</div>
+            <div class="kit-card__lock">${lockReasonText(state, kit)}</div>
           </div>`
       }
 
@@ -117,20 +169,25 @@ export function createShopModal(root, { onOrder }) {
           <div class="kit-card__header">
             <span class="kit-card__emoji">${kit.emoji}</span>
             <div class="kit-card__info">
-              <div class="kit-card__name">${kit.name}</div>
-              <div class="kit-card__meta">${difficultyDots(kit.solderPointCount)} ${kit.solderPointCount} точок</div>
+              <div class="kit-card__name">${kit.name} <span class="kit-card__mk">${mkLabel(mk)}</span></div>
+              <div class="kit-card__meta">${difficultyDots(steps)} ${steps} точок</div>
             </div>
             <div class="kit-card__prices">
               <div class="kit-card__buy-price">$${Math.round(cost)}</div>
-              <div class="kit-card__sell-range">${priceRange(kit, mult)}</div>
+              <div class="kit-card__sell-range">${priceRange(state, kit, mult)}</div>
             </div>
           </div>
+          ${mkRowHTML(state, kit)}
           <button class="btn btn--primary kit-card__btn" data-order="${id}" ${disabled ? 'disabled' : ''}>
             Замовити — $${Math.round(cost)}
           </button>
           ${note}
         </div>`
     }).join('')
+
+    body.querySelectorAll('[data-mk]').forEach(btn => {
+      btn.addEventListener('click', () => onUpgradeMark?.(btn.dataset.mk))
+    })
 
     body.querySelectorAll('[data-order]').forEach(btn => {
       btn.addEventListener('click', () => { onOrder(btn.dataset.order); close() })

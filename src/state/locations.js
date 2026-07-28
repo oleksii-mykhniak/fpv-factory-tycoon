@@ -1,6 +1,7 @@
 import { UPGRADE_TRACKS } from './upgrades.js'
 import { STARTING_MONEY } from './config.js'
 import { openHalls } from '../defs/layouts/factory.js'
+import { markUnlocked } from './kits.js'
 import { APARTMENT_ROOMS, openRooms, roomUpgradeCaps, roomDef } from '../defs/layouts/rooms.js'
 import { ROLE_ORDER } from '../defs/roles.js'
 
@@ -83,10 +84,16 @@ export function roomIsOpen(state, roomId) {
 
 export function kitsForLocation(state) {
   const loc = currentLocation(state)
-  if (loc.kitIds) return loc.kitIds
+  const here = loc.kitIds
+    ?? [...new Set(openRoomsHere(state).flatMap(r => r.kitIds ?? []))]
   // Rooms bring their own catalogue with them: the long-range kit is something
   // the garage can build, not something the address unlocks.
-  return [...new Set(openRoomsHere(state).flatMap(r => r.kitIds ?? []))]
+  //
+  // Другий ключ — Mk (Стадія 10 / B3): гоночний відкриває mini Mk II, а не
+  // адреса. Двері односторонні (`kitMarks` тільки росте), і це не стилістика:
+  // тип, який може зачинитись назад, відкотив би ланцюг квестів на пройдений
+  // крок — рівно те, чого забороняє П2 Стадії 9.
+  return here.filter(id => markUnlocked(state, id))
 }
 
 // Max level allowed for a track at the current location. Infinity when no cap
@@ -114,6 +121,25 @@ export function capFor(state, trackId) {
   const hallCaps = halls.map(h => h.upgradeCaps?.[trackId]).filter(c => c !== undefined)
   if (!hallCaps.length) return caps[trackId] ?? Infinity
   return Math.max(caps[trackId] ?? -Infinity, ...hallCaps)
+}
+
+// Стеля Mk комплектів тут і зараз (Стадія 10 / B2).
+//
+// Той самий закон, що й у `capFor`: максимум по відкритому простору, не сума.
+// Це те, заради чого кімната знову щось важить — не «ще один множник», а
+// «сюди дрон можна довести далі, ніж туди».
+//
+// Свідомо ОКРЕМА функція, а не ще один ключ в `upgradeCaps`: Mk — не трек
+// поліпшень, у нього інший стан (`kitMarks`), інша ціна й інша UI. Спільний
+// словник змусив би обидві системи вдавати, що вони одне й те саме.
+export function mkCapFor(state) {
+  const loc = currentLocation(state)
+  if (loc.rooms) {
+    const rooms = openRoomsHere(state)
+    return Math.max(0, ...rooms.map(r => r.mkCap ?? 0))
+  }
+  const halls = openHalls(state.unlockedHalls)
+  return Math.max(0, ...halls.map(h => h.mkCap ?? 0))
 }
 
 // Which tracks this location stops selling, and at what level. Returns the

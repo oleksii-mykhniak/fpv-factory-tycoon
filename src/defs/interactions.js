@@ -21,7 +21,7 @@ import {
   pickupDelivery, startAssembly, startScrapAssembly, getStation,
   sell as sellStation, calcPrice, takeOutput, orderKit, abandonBurntDrone,
   workerById, beginScrapRun, idleStations,
-  kitCost,
+  kitCost, kitBasePrice,
 } from '../state/gameState.js'
 import { salePriceMult } from '../state/upgrades.js'
 import {
@@ -183,7 +183,7 @@ export const INTERACTIONS = {
 
       const kit     = KIT_TYPES[station.kitId]
       const quality = station.quality
-      const price   = calcPrice(kit.basePrice, quality, salePriceMult(world.game))
+      const price   = calcPrice(kitBasePrice(world.game, kit.id), quality, salePriceMult(world.game))
 
       // `at` and `hallId` are what make income measurable (F7): a rolling
       // window needs times, and "which hall paid for itself" needs a place.

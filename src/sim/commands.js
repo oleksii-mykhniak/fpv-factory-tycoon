@@ -19,9 +19,11 @@ import {
   calcPrice, getStation, focusStation, idleStations, syncStations,
   hireWorker as hireWorkerState, nextHireCost,
   promoteWorker as promoteWorkerState, workerById,
-  kitCost,
+  kitCost, kitBasePrice, kitSteps, kitSolderPointCount,
+  upgradeMark as upgradeMarkState, kitMark,
 } from '../state/gameState.js'
 import { levelData, UPGRADE_TRACKS, salePriceMult, toolingQualityBonus } from '../state/upgrades.js'
+import { kitsForLocation } from '../state/locations.js'
 import {
   COLD_SOLDER_THRESHOLD, COLD_SOLDER_QUALITY_PENALTY, SALVAGE_RATE,
   ARROW_REQUEST_MS,
@@ -75,7 +77,7 @@ const HANDLERS = {
         world.game = burnKit(world.game, id)
         emit(events, EV.KIT_BURNT, { stationId: id, kitId: station.kitId })
       } else {
-        const step = KIT_TYPES[station.kitId]?.assemblySteps?.[station.solderPoints.length]
+        const step = kitSteps(world.game, station.kitId)[station.solderPoints.length]
         world.game = applyColdSolderPenalty(world.game, id, COLD_SOLDER_QUALITY_PENALTY)
         emit(events, EV.STAGE_COLD, { stationId: id, missMsg: step?.missMsg })
       }
@@ -84,13 +86,13 @@ const HANDLERS = {
 
     // A technician may have landed the last point in this very tick.
     const before = getStation(world.game, id)
-    if (before.solderPoints.length >= KIT_TYPES[before.kitId].solderPointCount) return
+    if (before.solderPoints.length >= kitSolderPointCount(world.game, before.kitId)) return
 
     world.game = recordSolderPoint(world.game, id, boosted)
     const station = getStation(world.game, id)
     const kit     = KIT_TYPES[station.kitId]
     const done    = station.solderPoints.length
-    const total   = kit.solderPointCount
+    const total   = kitSolderPointCount(world.game, kit.id)
     emit(events, EV.STAGE_DONE, { stationId: id, total, done, quality: boosted })
 
     if (done >= total) {
@@ -99,7 +101,7 @@ const HANDLERS = {
       emit(events, EV.ASSEMBLY_DONE, {
         stationId: id,
         quality:   finished.quality,
-        price:     calcPrice(kit.basePrice, finished.quality, salePriceMult(world.game)),
+        price:     calcPrice(kitBasePrice(world.game, kit.id), finished.quality, salePriceMult(world.game)),
       })
     }
   },
@@ -137,6 +139,21 @@ const HANDLERS = {
       rebuildStationGeometry(world)
     }
     emit(events, EV.UPGRADE_BOUGHT, { trackId, level })
+  },
+
+  // Підняти Mk комплекту (Стадія 10 / B).
+  //
+  // `unlocked` в події — те, що робить фінальний Mk подією, а не рядком у
+  // чеку: картка «відкрито» показує, ЩО саме приїхало, тим самим механізмом,
+  // яким кімната перестала бути німим пакетом (Стадія 9 / Р4).
+  upgradeMark(world, { kitId }, events) {
+    const before = kitsForLocation(world.game)
+    world.game = upgradeMarkState(world.game, kitId)
+    const opened = kitsForLocation(world.game).filter(id => !before.includes(id))
+    emit(events, EV.MARK_UPGRADED, {
+      kitId, mk: kitMark(world.game, kitId), unlocked: opened,
+    })
+    emit(events, EV.STATE_DIRTY)
   },
 
   moveToLocation(world, { locationId }, events) {

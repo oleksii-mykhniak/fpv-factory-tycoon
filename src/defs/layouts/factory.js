@@ -10,7 +10,7 @@
 // discipline that let C7 turn a move into a rebuild instead of a special case.
 
 import { rect, SIZES, WALL_SIDE, WALL_HORIZ } from './buildLayout.js'
-import { u, ENDLESS_CAP_HALL } from '../../state/config.js'
+import { u, ENDLESS_CAP_HALL, MK_CAP_HALL } from '../../state/config.js'
 
 // A hall is a slice of floor with its own benches and its own payroll.
 //
@@ -34,6 +34,7 @@ export const FACTORY_HALLS = Object.freeze([
     cost: 0,
     // Стеля нескінченних треків росте з цехами (Стадія 10 / A3).
     upgradeCaps: endlessCaps(ENDLESS_CAP_HALL[0]),
+    mkCap: MK_CAP_HALL[0],
 
   },
   {
@@ -47,6 +48,7 @@ export const FACTORY_HALLS = Object.freeze([
     cost: 2400,
     // Стеля нескінченних треків росте з цехами (Стадія 10 / A3).
     upgradeCaps: endlessCaps(ENDLESS_CAP_HALL[1]),
+    mkCap: MK_CAP_HALL[1],
 
     // Те саме, що й у кімнат квартири (Стадія 9 / Р4): відкрита одиниця
     // простору сама розповідає, що з нею приїхало.
@@ -65,6 +67,7 @@ export const FACTORY_HALLS = Object.freeze([
     cost: 6800,
     // Стеля нескінченних треків росте з цехами (Стадія 10 / A3).
     upgradeCaps: endlessCaps(ENDLESS_CAP_HALL[2]),
+    mkCap: MK_CAP_HALL[2],
 
     unlocks: [
       '🔧 Два верстаки',

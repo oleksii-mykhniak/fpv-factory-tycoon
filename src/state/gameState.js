@@ -3,20 +3,22 @@ import {
   PRICE_BASE_COEFF, PRICE_QUALITY_COEFF,
   PIGGY_COOLDOWN_MS, PIGGY_TAP_VALUE, PIGGY_MAX_PAYOUT,
   STORAGE_SLOTS_BY_LEVEL, LOGISTICS_DELIVERY_MULT,
+  MK_MAX, MK_COST_GROWTH, MK_PRICE_GROWTH, MK_DELIVERY_GROWTH,
+  MK_UPGRADE_COST_FACTOR, MK_FINAL_COST_MULT,
 } from './config.js'
 
 import { UPGRADE_TRACKS, trackMaxLevel, nextCost, salePriceMult, kitCostMult, deliveryMult } from './upgrades.js'
-import { KIT_TYPES } from './kits.js'
+import { KIT_TYPES, kitMark, markUnlockOf, markUnlocked } from './kits.js'
 import {
   capFor, canMoveToLocation, LOCATIONS, hiringAllowed, roleCapHere, roleCapInHall,
-  startMoneyAt, freezeCapsFor, ruleAt,
+  startMoneyAt, freezeCapsFor, ruleAt, mkCapFor,
 } from './locations.js'
 import { hireCost, roleDef, ROLE_ORDER, promoteCost } from '../defs/roles.js'
 import { FACTORY_HALL_IDS, FIRST_HALL_ID, hallDef } from '../defs/layouts/factory.js'
 import { APARTMENT_ROOM_IDS, FIRST_ROOM_ID, roomDef } from '../defs/layouts/rooms.js'
 
 // Re-export so existing consumers keep importing kit data from gameState.js.
-export { KIT_TYPES }
+export { KIT_TYPES, kitMark, markUnlockOf, markUnlocked }
 
 // Phase of ONE station, not of the game. Before C3 there was a single bench and
 // the two were the same thing; with several stations the game as a whole has no
@@ -147,6 +149,10 @@ export function createState() {
     // status 'transit'  = en-route or arrived-but-not-picked-up
     // status 'carrying' = worker is carrying it to bench
     deliveries:        [],
+    // Mk кожного типу комплекту (Стадія 10 / B). Порожньо = усі на Mk I.
+    // Монотонне: Mk не відкуповується, і на цьому тримається односторонність
+    // відкриття наступних типів.
+    kitMarks:          {},
     upgrades: {
       priceMultiplier:  1,
       solderingLevel:   0,
@@ -171,9 +177,16 @@ export function calcPrice(basePrice, quality, priceMultiplier = 1) {
   return basePrice * (PRICE_BASE_COEFF + PRICE_QUALITY_COEFF * quality) * priceMultiplier
 }
 
-// Що комплект коштує ПРЯМО ЗАРАЗ (Стадія 10 / A2).
+// ── Mk комплектів (Стадія 10 / B) ─────────────────────────
 //
-// `KIT_TYPES[id].cost` — базова ціна, і після появи оптових закупок вона вже
+// Рівень Mk — ЄДИНЕ, що лежить у стані (`state.kitMarks`). Собівартість, ціна,
+// час доставки й кількість кроків збірки з нього виводяться. Записувати їх у
+// сейв означало б, що зміна балансу вимагає міграції кожного сейву — і що
+// половина гри читатиме одне число, а половина інше.
+
+// Що комплект коштує ПРЯМО ЗАРАЗ (Стадія 10 / A2, розширено B).
+//
+// `KIT_TYPES[id].cost` — базова ціна, і після оптових закупок та Mk вона вже
 // не є тим, що спишеться з рахунку. Все, що питає «чи вистачить грошей» або
 // «скільки це коштує», мусить ходити сюди: `kit.cost` напряму — це ціна, за
 // якою ніхто не купує.
@@ -181,8 +194,79 @@ export function kitCost(state, kitTypeId) {
   const kit = KIT_TYPES[kitTypeId]
   if (!kit) return Infinity
   // Безкоштовний комплект (утиль) лишається безкоштовним: множник на нулі — нуль.
-  return kit.cost * kitCostMult(state)
+  return kit.cost * kitCostMult(state) * Math.pow(MK_COST_GROWTH, kitMark(state, kitTypeId))
 }
+
+// Базова ціна продажу з урахуванням Mk. Росте швидше за собівартість — саме
+// це й робить Mk вартим покупки.
+export function kitBasePrice(state, kitTypeId) {
+  const kit = KIT_TYPES[kitTypeId]
+  if (!kit) return 0
+  return kit.basePrice * Math.pow(MK_PRICE_GROWTH, kitMark(state, kitTypeId))
+}
+
+export function kitDeliveryMs(state, kitTypeId) {
+  const kit = KIT_TYPES[kitTypeId]
+  if (!kit) return 0
+  return kit.deliveryMs * (1 + MK_DELIVERY_GROWTH * kitMark(state, kitTypeId))
+}
+
+// Скільки точок пайки має цей комплект зараз. +1 крок дає ТІЛЬКИ останній Mk:
+// якби кроки додавались на кожному, міні-гра перетворилась би на покарання за
+// прогрес. Один раз — це те, що штовхає до автоматики й найму техніка, тобто
+// зв'язує Mk з наявною системою штату замість того, щоб ставити її збоку.
+export function kitSteps(state, kitTypeId) {
+  const kit = KIT_TYPES[kitTypeId]
+  if (!kit) return []
+  if (kitMark(state, kitTypeId) < MK_MAX) return kit.assemblySteps
+  return [...kit.assemblySteps, FINAL_MK_STEP]
+}
+
+export function kitSolderPointCount(state, kitTypeId) {
+  return kitSteps(state, kitTypeId).length
+}
+
+const FINAL_MK_STEP = Object.freeze({
+  label:   'Фінальне налаштування',
+  missMsg: 'Параметри збилися — переналаштовуємо',
+})
+
+// Стеля Mk тут і зараз — те саме правило, що й у стелі апгрейдів (максимум по
+// відкритому простору), тому живе в locations.js. Реекспорт, щоб споживачі не
+// мусили знати, у якому з двох файлів шукати.
+export function kitMarkMax(state) {
+  return Math.min(MK_MAX, mkCapFor(state))
+}
+
+// Ціна підняти цей комплект на наступний Mk, або null, якщо вище нікуди.
+export function nextMarkCost(state, kitTypeId) {
+  const mk = kitMark(state, kitTypeId)
+  if (mk >= kitMarkMax(state)) return null
+  const base = KIT_TYPES[kitTypeId].cost * MK_UPGRADE_COST_FACTOR
+    * Math.pow(MK_COST_GROWTH, mk)
+  return Math.round(mk + 1 >= MK_MAX ? base * MK_FINAL_COST_MULT : base)
+}
+
+export function canUpgradeMark(state, kitTypeId) {
+  const cost = nextMarkCost(state, kitTypeId)
+  const reasons = []
+  if (cost === null) reasons.push(kitMark(state, kitTypeId) >= MK_MAX
+    ? 'Максимальний Mk'
+    : 'Потрібен більший простір')
+  else if (state.money < cost) reasons.push(`Потрібно $${Math.ceil(cost - state.money)}`)
+  return { can: reasons.length === 0, reasons, cost }
+}
+
+export function upgradeMark(state, kitTypeId) {
+  const { can, cost, reasons } = canUpgradeMark(state, kitTypeId)
+  if (!can) throw new Error(`upgradeMark: ${reasons.join(' · ')}`)
+  return {
+    ...state,
+    money:    state.money - cost,
+    kitMarks: { ...(state.kitMarks ?? {}), [kitTypeId]: kitMark(state, kitTypeId) + 1 },
+  }
+}
+
 
 export function calcQuality(solderPoints) {
   if (!solderPoints.length) return 0
@@ -227,7 +311,7 @@ export function orderKit(state, kitTypeId, now = Date.now(), makeId = null) {
   if (_usedSlots(state) >= maxSlots)
     throw new Error(`orderKit: всі слоти зайняті`)
 
-  const deliveryMs = Math.round(kit.deliveryMs * deliveryMult(state))
+  const deliveryMs = Math.round(kitDeliveryMs(state, kitTypeId) * deliveryMult(state))
   const slotIndex  = _nextFreeSlotIndex(state)
   const id         = makeId ? makeId() : `${now}-${Math.random().toString(36).slice(2, 7)}`
 
@@ -286,8 +370,9 @@ export function recordSolderPoint(state, stationId, quality) {
   if (quality < 0 || quality > 1)
     throw new Error(`recordSolderPoint: якість має бути від 0 до 1, отримано ${quality}`)
   const kit = KIT_TYPES[station.kitId]
-  if (station.solderPoints.length >= kit.solderPointCount)
-    throw new Error(`recordSolderPoint: всі ${kit.solderPointCount} точки вже запаяно`)
+  const total = kitSolderPointCount(state, station.kitId)
+  if (station.solderPoints.length >= total)
+    throw new Error(`recordSolderPoint: всі ${total} точки вже запаяно`)
   return withStation(state, stationId, s => ({
     ...s, solderPoints: [...s.solderPoints, quality],
   }))
@@ -319,9 +404,10 @@ export function finishAssembly(state, stationId) {
   if (station.phase !== Phase.ASSEMBLY)
     throw new Error(`finishAssembly: станція ${stationId} у фазі ${station.phase}`)
   const kit = KIT_TYPES[station.kitId]
-  if (station.solderPoints.length < kit.solderPointCount)
+  const need = kitSolderPointCount(state, station.kitId)
+  if (station.solderPoints.length < need)
     throw new Error(
-      `finishAssembly: потрібно ${kit.solderPointCount} точок, є ${station.solderPoints.length}`
+      `finishAssembly: потрібно ${need} точок, є ${station.solderPoints.length}`
     )
   const raw     = calcQuality(station.solderPoints)
   const quality = Math.max(0, raw - station.coldPenalty)
@@ -354,7 +440,7 @@ export function sell(state, stationId) {
   if (station.phase !== Phase.READY)
     throw new Error(`sell: станція ${stationId} у фазі ${station.phase}`)
   const kit   = KIT_TYPES[station.kitId]
-  const price = calcPrice(kit.basePrice, station.quality, salePriceMult(state))
+  const price = calcPrice(kitBasePrice(state, station.kitId), station.quality, salePriceMult(state))
   return bumpStats(
     _afterStationClear(state, stationId, state.money + price),
     (st) => ({
