@@ -9,10 +9,7 @@ const SAVE_KEY = 'fpv_factory_save'
 // been carrying old shapes forward since D6 and there is no reason to discard a
 // save we can still read. What throws a save away is raising the floor below.
 // 4 (Стадія 9 / Р1): у стані з'явились лічильники `stats` — на них тримаються
-// квести-дії. Це додавання, а не зміна форми, тому підлога НЕ піднімається:
-// сейв версії 3 читається далі, лічильники в ньому нульові, а щоб гравцеві з
-// фабрикою не пропонували «продай 3 дрони», ланцюг має умови `outgrown`
-// (див. sim/quests.js).
+// квести-дії.
 export const SAVE_VERSION = 4
 
 // The oldest schema this build will still load. Raise it — deliberately, and
@@ -29,7 +26,20 @@ export const SAVE_VERSION = 4
 // balance), different ceilings. migrateState CAN carry an old save across, and
 // it does; what it cannot do is make the result a game anybody actually played.
 // Everyone starts the new one from the beginning, deliberately.
-export const MIN_LOADABLE_VERSION = 3
+//
+// 4 (Стадія 9 / Р1–Р8): гра тепер веде по ланцюгу з 27 кроків, і вся її
+// послідовність — коли з'являється кожен інструмент, коли відкривається найм,
+// коли шафа показує що — виводиться зі стану, якого в сейві версії 3 немає.
+// Технічно такий сейв читається: `stats` заповнюються нулями, а `outgrown`
+// не дає пропонувати «продай 3 дрони» власникові фабрики. Але результат — це
+// шоп, який ніхто не проходив: гравець із середини старої гри падає в середину
+// ланцюга з нульовою історією, а половину відкриттів (картку кімнати, введення
+// треків) уже не побачить ніколи. Тому — з нуля, навмисно.
+//
+// `outgrown` і нормалізація `stats` лишаються: вони й далі захищають будь-який
+// стан, де гравець об'єктивно далі, ніж каже лічильник (сейв, записаний між
+// стадіями; стан, зібраний тестом).
+export const MIN_LOADABLE_VERSION = 4
 
 export function saveGame(state, salesLog) {
   const payload = {

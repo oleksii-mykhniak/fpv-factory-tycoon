@@ -122,7 +122,10 @@ async function orderFirstKit() {
 // version is now discarded on load, which would silently boot every scenario
 // into a fresh apartment instead of the state it meant to test.
 const seedState = (upgrades, extra = {}) => ({
-  version: 3,
+  // Версія сейву мусить бути поточною: підлога піднялась до 4 (Стадія 9), і
+  // старіший сейв тепер відкидається — тест сідав би у свіжу гру замість
+  // засіяної.
+  version: 4,
   savedAt: Date.now(),
   state: {
     money: 1000, lastPiggyAt: null, locationId: 'apartment', onboarded: true,
@@ -803,7 +806,10 @@ console.log(`  cards=${pCount.cards} more-button=${pCount.more} old-bottom-hint=
 console.log(`  "${pFirst?.title}" ${pFirst?.count} · крок петлі: "${pFirst?.step}"`)
 
 // Крок-покупка: смужка в грошах, стрілка на шафу — але лише коли грошей досить.
-await boot(seedState({}, { money: 20, ordersPlaced: 3, stats: { sold: 3, assembled: 3, burnt: 0, bestQuality: 0, bestRate: 0, soldByKit: {} } }))
+// $100 навмисно: менше за паяльник ($150), але більше за найдешевший комплект
+// ($72) — інакше гравець вважається застряглим і картку перебиває вставка.
+const P_STATS = { sold: 3, assembled: 3, burnt: 0, bestQuality: 0, bestRate: 0, soldByKit: {} }
+await boot(seedState({}, { money: 100, ordersPlaced: 3, stats: P_STATS }))
 await page.waitForTimeout(600)
 const pPoor  = await questCard()
 const pArrowPoor = await arrowAt('rack')
@@ -814,7 +820,21 @@ const pArrowRich = await arrowAt('rack')
 console.log(`  "${pPoor?.title}" ${pPoor?.meta} → стрілка на шафу: ${pArrowPoor} (грошей нема)`)
 console.log(`  з грошима: ${pRich?.meta} ready=${pRich?.ready} → стрілка на шафу: ${pArrowRich}`)
 
+// Позаланцюгові вставки (Р1): згорілий комплект і порожня каса перебивають
+// ціль, бо це те, що стоїть на місці прямо зараз.
+await boot(seedState({}, { money: 3, ordersPlaced: 9, scrapRuns: 9, stats: P_STATS }))
+await page.waitForTimeout(600)
+const pBroke = await questCard()
+await boot(seedState({}, { money: 9999, ordersPlaced: 9, stats: P_STATS,
+  stations: [{ id: 'station-0', defId: 'workbench', phase: 'BURNT', kitId: 'racing_drone',
+               solderPoints: [0.9, 0.9], quality: null, coldPenalty: 0 }] }))
+await page.waitForTimeout(600)
+const pBurnt = await questCard()
+console.log(`  без грошей: "${pBroke?.title}" · зі згорілим: "${pBurnt?.title}" (${pBurnt?.count ?? 'без номера'})`)
+
 // Виконуємо крок через шафу — картка змінюється, тост з'являється.
+await boot(seedState({}, { money: 9999, ordersPlaced: 3, stats: P_STATS }))
+await page.waitForTimeout(600)
 const pGoalTitle = (await questCard())?.title
 await openPanelAt('rack')
 await page.click('[data-upgrade="soldering"]').catch(() => {})
@@ -961,6 +981,10 @@ const checks = [
   ['P: a purchase shows a money bar',      !!pPoor?.meta && pPoor.meta.includes('$')],
   ['P: no arrow to the rack while broke',  pArrowPoor === false],
   ['P: the arrow turns to the rack once affordable', pArrowRich === true],
+  // Вставки: ціль ланцюга чекає, поки цех застряг.
+  ['P: an empty till interrupts the goal', pBroke?.title?.includes('смітник')],
+  ['P: a burnt kit interrupts the goal',   pBurnt?.title?.includes('згорілий')],
+  ['P: and an interrupt carries no step number', !pBurnt?.count],
   ['P: finishing a step announces itself', !!pToast],
   ['P: and the card moves on to the next one', !!pAfter && pAfter.title !== pGoalTitle],
   // Р5: шафа показує лише введені треки, викуплений рядок зникає.
