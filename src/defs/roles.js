@@ -6,10 +6,8 @@
 
 import {
   HIRE_COST_BASE, HIRE_COST_GROWTH,
-  WORKER_UPGRADE_BASE, WORKER_UPGRADE_GROWTH,
-  COURIER_SPEED_BY_LEVEL, TECH_POINT_MS_BY_LEVEL, TECH_QUALITY_BY_LEVEL,
-  TECH_MISS_CHANCE_BY_LEVEL,
-  SELLER_SPEED_BY_LEVEL, MANAGER_SPEED_BY_LEVEL, MANAGER_TIER_BY_LEVEL,
+  WORKER_UPGRADE_BASE, WORKER_LEVEL_GROWTH,
+  ROLE_CURVES, roleCurveValue, managerTier,
 } from '../state/config.js'
 
 export const ROLES = Object.freeze({
@@ -25,7 +23,6 @@ export const ROLES = Object.freeze({
     hint: 'Носить коробки з вулиці на верстак',
     accepts: ['haul_delivery'],
     hire: { base: HIRE_COST_BASE.courier, growth: HIRE_COST_GROWTH },
-    levels: COURIER_SPEED_BY_LEVEL.map(speed => ({ speed })),
   },
 
   tech: {
@@ -40,12 +37,6 @@ export const ROLES = Object.freeze({
     // A hired tech works the bench at their own pace and quality; the soldering
     // upgrade adds on top. Without this, hiring one at soldering level 0 would
     // do nothing at all — exactly when the player most wants the help.
-    levels: TECH_POINT_MS_BY_LEVEL.map((pointMs, i) => ({
-      speed:   COURIER_SPEED_BY_LEVEL[i] ?? COURIER_SPEED_BY_LEVEL[0],
-      pointMs,
-      quality:     TECH_QUALITY_BY_LEVEL[i],
-      missChance:  TECH_MISS_CHANCE_BY_LEVEL[i],
-    })),
   },
 
   seller: {
@@ -57,7 +48,6 @@ export const ROLES = Object.freeze({
     hint: 'Відносить готові дрони до скриньки',
     accepts: ['sell_drone'],
     hire: { base: HIRE_COST_BASE.seller, growth: HIRE_COST_GROWTH },
-    levels: SELLER_SPEED_BY_LEVEL.map(speed => ({ speed })),
   },
 
   // Procurement (S3): works the laptop, so the player stops being the one who
@@ -73,7 +63,6 @@ export const ROLES = Object.freeze({
     badge: '🧾',
     accepts: ['order_kit'],
     hire: { base: HIRE_COST_BASE.manager, growth: HIRE_COST_GROWTH },
-    levels: MANAGER_SPEED_BY_LEVEL.map((speed, i) => ({ speed, tier: MANAGER_TIER_BY_LEVEL[i] })),
   },
 })
 
@@ -85,9 +74,22 @@ export function roleDef(roleId) {
   return role
 }
 
+// Характеристики ролі на цьому рівні (Стадія 10 / C).
+//
+// Була таблиця з трьох рядків — тобто два підвищення на людину за все життя.
+// Тепер це криві з `ROLE_CURVES`, які йдуть до асимптоти: стелі немає, але
+// кур'єр не розганяється до телепорту, а технік не паяє за нуль секунд.
+//
+// `levels` як масив у ролях більше немає навмисно: доти дві речі описували ту
+// саму характеристику — таблиця тут і числа в config.js, — і розійтися вони
+// могли будь-коли.
 export function roleLevelData(roleId, level) {
-  const role = roleDef(roleId)
-  return role.levels[Math.min(level, role.levels.length - 1)]
+  const curves = ROLE_CURVES[roleDef(roleId).id] ?? {}
+  const lvl    = Math.max(0, level ?? 0)
+  const out    = {}
+  for (const [key, curve] of Object.entries(curves)) out[key] = roleCurveValue(curve, lvl)
+  if (roleId === 'manager') out.tier = managerTier(lvl)
+  return out
 }
 
 // Hiring the n-th worker of a role costs base × growth^n — the curve is what
@@ -97,17 +99,18 @@ export function hireCost(roleId, alreadyHired) {
   return Math.round(hire.base * Math.pow(hire.growth, alreadyHired))
 }
 
-// The top level a role can reach — the length of its own level table, so
-// giving a role a fourth level is a data change and nothing else.
-export function roleMaxLevel(roleId) {
-  return roleDef(roleId).levels.length - 1
+// Стелі більше немає (Стадія 10 / C). Лишається функцією, а не константою, бо
+// на неї спираються і панель, і бирка над головою: хай питання «докуди можна»
+// має одну відповідь, навіть коли відповідь — «докуди завгодно».
+export function roleMaxLevel() {
+  return Infinity
 }
 
-// Promoting somebody from `level` to the next one (F5). Null at the top.
+// Promoting somebody from `level` to the next one (F5). Ніколи не null:
+// підвищувати можна завжди, ціна і є обмежувачем.
 export function promoteCost(roleId, level) {
-  if (level >= roleMaxLevel(roleId)) return null
   const base = WORKER_UPGRADE_BASE[roleId] ?? 300
-  return Math.round(base * Math.pow(WORKER_UPGRADE_GROWTH, level))
+  return Math.round(base * Math.pow(WORKER_LEVEL_GROWTH, level))
 }
 
 // Which roles can take this task type.

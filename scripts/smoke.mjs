@@ -752,7 +752,7 @@ const lAfter = await page.evaluate(() => {
     dots:  view?.levelLabel?.text ?? '',
   }
 })
-console.log(`  tag "${lBefore.tag}" (visible ${lBefore.tagOn}); dots ${lBefore.dots} → ${lAfter.dots}; ` +
+console.log(`  tag "${lBefore.tag}" (visible ${lBefore.tagOn}); рівень ${lBefore.dots} → ${lAfter.dots}; ` +
             `level ${lBefore.level}→${lAfter.level}, speed ${lBefore.speed}→${lAfter.speed}, ` +
             `money ${lBefore.money}→${lAfter.money}`)
 
@@ -1209,7 +1209,8 @@ const checks = [
   ['L: the button in the panel promotes',  lAfter.level === lBefore.level + 1],
   ['L: it costs money',                    lAfter.money < lBefore.money],
   ['L: they actually get faster',          lAfter.speed > lBefore.speed],
-  ['L: the level dots move on',            lAfter.dots !== lBefore.dots],
+  ['L: the level readout moves on',        lAfter.dots !== lBefore.dots &&
+                                           /\d/.test(lAfter.dots)],
   ['M: the rate gauge is there before any sale', mBefore.visible === true],
   ['M: and it reads zero, not nothing', /\$0\.00/.test(mBefore.text)],
   ['M: the rate survives a sale',        mAfter.visible === true],

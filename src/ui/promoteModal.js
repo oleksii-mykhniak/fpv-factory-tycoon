@@ -11,10 +11,14 @@
 // є весь сенс покупки.
 
 import { workerById } from '../state/gameState.js'
-import { ROLES, promoteCost, roleLevelData, roleMaxLevel } from '../defs/roles.js'
+import { ROLES, promoteCost, roleLevelData } from '../defs/roles.js'
 
-// Що саме росте в цієї ролі. Беремо з таблиці рівнів, а не з тексту: додати
-// ролі четвертий рівень має лишатись зміною даних (defs/roles.js) і нічого більше.
+// Що саме росте в цієї ролі. Беремо з даних рівня, а не з тексту: змінити
+// криву ролі має лишатись правкою `ROLE_CURVES` і нічого більше.
+//
+// Крапочок «●●○» тут більше немає (Стадія 10 / C): стелі рівнів не існує, а
+// шкала без кінця не малюється. Лишилось число — воно й було єдиним, що ті
+// крапочки насправді повідомляли.
 const STATS = [
   { key: 'speed',      label: 'Швидкість',  fmt: v => Math.round(v),          better: 'up' },
   { key: 'pointMs',    label: 'Пайка точки', fmt: v => `${(v / 1000).toFixed(1)} с`, better: 'down' },
@@ -69,10 +73,9 @@ export function createPromoteModal(root, { onPromote }) {
     const role   = ROLES[worker.role]
     const level  = worker.level ?? 0
     const cost   = promoteCost(worker.role, level)
-    const max    = roleMaxLevel(worker.role)
     const now    = roleLevelData(worker.role, level)
-    const next   = cost === null ? null : roleLevelData(worker.role, level + 1)
-    const afford = cost !== null && state.money >= cost
+    const next   = roleLevelData(worker.role, level + 1)
+    const afford = state.money >= cost
 
     overlay.querySelector('#promote-title').textContent = `${role.emoji} ${role.name}`
 
@@ -90,20 +93,16 @@ export function createPromoteModal(root, { onPromote }) {
 
     overlay.querySelector('#promote-body').innerHTML = `
       <div class="promote-level">
-        ${'●'.repeat(level + 1)}${'○'.repeat(max - level)}
-        <span class="promote-level__text">рівень ${level + 1} з ${max + 1}</span>
+        <span class="promote-level__num">${level + 1}</span>
+        <span class="promote-level__text">рівень</span>
       </div>
       <p class="upgrade-effect-hint">${role.hint}</p>
-      ${cost === null
-        ? '<p class="upgrade-effect-hint">Максимальний рівень — далі рости нікуди</p>'
-        : `
-          <div class="promote-stats">${rows}</div>
-          <button class="btn btn--upgrade" id="promote-btn" ${afford ? '' : 'disabled'}>
-            Підвищити — $${cost}
-          </button>
-          ${afford ? '' : `<p class="upgrade-effect-hint">Не вистачає $${
-            Math.ceil(cost - state.money)}</p>`}
-        `}
+      <div class="promote-stats">${rows}</div>
+      <button class="btn btn--upgrade" id="promote-btn" ${afford ? '' : 'disabled'}>
+        Підвищити — $${cost}
+      </button>
+      ${afford ? '' : `<p class="upgrade-effect-hint">Не вистачає $${
+        Math.ceil(cost - state.money)}</p>`}
     `
 
     const btn = overlay.querySelector('#promote-btn')

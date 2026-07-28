@@ -507,9 +507,9 @@ export const workerById = (state, id) => workersOf(state).find(w => w.id === id)
 export function promoteWorker(state, workerId) {
   const worker = workerById(state, workerId)
   if (!worker) throw new Error(`promoteWorker: робітника "${workerId}" не знайдено`)
+  // Стелі рівнів немає (Стадія 10 / C), тож гілки «вже максимум» теж немає:
+  // єдина причина відмовити — гроші.
   const cost = promoteCost(worker.role, worker.level ?? 0)
-  if (cost === null)
-    throw new Error('promoteWorker: вже максимальний рівень')
   if (state.money < cost)
     throw new Error(`promoteWorker: недостатньо грошей (є ${Math.floor(state.money)}, потрібно ${cost})`)
   return {

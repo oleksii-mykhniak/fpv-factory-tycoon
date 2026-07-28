@@ -82,7 +82,9 @@ export const SOLDER_STATION_MISS_CHANCE    = 0.03
 // A miss here means the same thing it means for the player: a cold joint that
 // costs quality, and sometimes a kit that burns. The rate is what a worker's
 // level buys, which is what makes upgrading people worth money (F5).
-export const TECH_MISS_CHANCE_BY_LEVEL = [0.15, 0.09, 0.05]
+//
+// Самі числа переїхали в ROLE_CURVES (Стадія 10 / C): рівні перестали бути
+// таблицею з трьох рядків і стали кривими без стелі.
 export const SEMIAUTO_MISS_CHANCE      = 0.10
 // Of unattended misses, this fraction burns the kit. Deliberately far below the
 // player's own OVERHEAT_CHANCE: a bench nobody is watching should mostly cost
@@ -158,18 +160,19 @@ export const MOVE_MAX_STEP = 8
 export const HIRE_COST_BASE   = { courier: 260, tech: 420, seller: 320, manager: 640 }
 export const HIRE_COST_GROWTH = 1.85
 
-export const COURIER_SPEED_BY_LEVEL = [170, 205, 240]
-export const SELLER_SPEED_BY_LEVEL  = [170, 205, 240]
-// A tech's own pace and quality at a bench. Deliberately worse than a good
-// manual player and better than nothing — hiring buys time, not perfection.
-export const TECH_POINT_MS_BY_LEVEL = [2600, 2000, 1500]
-export const TECH_QUALITY_BY_LEVEL  = [0.55, 0.65, 0.75]
+// Характеристики рівнів — у ROLE_CURVES нижче (Стадія 10 / C). Таблиці
+// [170, 205, 240] тут більше немає: три рядки означали два підвищення на
+// людину за все життя, а криві не мають стелі. Ті самі числа крива дає на
+// рівнях 0 і 2 — це закріплено тестом, щоб C нічого не переграла заднім числом.
+// Технік навмисно гірший за уважного гравця й кращий за нікого: найм купує
+// час, а не бездоганність.
 
 // Levelling somebody up, on the shop floor (F5). Cost is base × growth^level,
 // per role — the same shape as hiring, so a shop with three trained couriers is
 // visibly a bigger investment than one with three fresh ones.
 export const WORKER_UPGRADE_BASE   = { courier: 240, tech: 400, seller: 300, manager: 560 }
-export const WORKER_UPGRADE_GROWTH = 2.1
+// Крива ціни — WORKER_LEVEL_GROWTH нижче. Була 2.1, але це показник для трьох
+// рівнів; для нескінченних він робить третє підвищення недосяжним.
 // How long the player stands next to someone to promote them.
 // Довше за решту панелей (П3): біля власного техніка можна опинитись випадково
 // на секунду, але не на півтори — а ця панель відкривається САМА, поки ти
@@ -183,15 +186,13 @@ export const PROMOTE_ZONE_SIZE = 120
 // The manager sits at the laptop and orders kits so the player does not have
 // to. Deliberately the most expensive hire: it is the one that closes the loop
 // and lets the shop run with nobody touching it.
-export const MANAGER_SPEED_BY_LEVEL = [170, 205, 240]
 // How much more than the kit's price must be in the bank before the manager
 // spends it. Without a reserve they empty the account on the first tick and the
 // player can never buy an upgrade — the shop optimises itself into a corner.
 export const MANAGER_RESERVE = 1.8
 // How far up the price list this manager is allowed to shop, as an index into
 // the location's kit list sorted by cost. Level 0 buys the cheapest thing that
-// works; a trained one buys what actually pays.
-export const MANAGER_TIER_BY_LEVEL = [0, 1, 99]
+// works; a trained one buys what actually pays. Східці — див. managerTier().
 // Pause between two orders, so a manager with money never machine-guns the
 // delivery slots the moment they free up.
 export const MANAGER_COOLDOWN_MS = 4000
@@ -561,3 +562,46 @@ export const MK_UNLOCKS = Object.freeze({
   mini_drone:   { mk: 2, unlocks: 'racing_drone' },
   racing_drone: { mk: 2, unlocks: 'cinematic_drone' },
 })
+
+// ── Рівні працівників без стелі (Стадія 10 / C) ──────────
+//
+// Підвищення в грі було й раніше — але рівнів було ТРИ, тобто два підвищення на
+// людину за все життя. Це віха, а не трек, і густоти вона не дає.
+//
+// Стеля знімається, але ефект НЕ може рости лінійно: кур'єр зі швидкістю 5000
+// телепортується, технік із pointMs 0 знищує міні-гру, якість більша за 1 не
+// має сенсу. Тому кожна характеристика йде до асимптоти:
+//
+//     value(level) = to + (from − to) / (1 + k · level)
+//
+// Формула одна на всі осі — і на ті, що ростуть (швидкість, якість), і на ті,
+// що спадають (час пайки, брак): напрямок задають `from` і `to`.
+//
+// `k` підібрані так, щоб відтворити ТІ САМІ числа, які були прописані руками:
+// на рівні 0 збіг точний, на рівні 2 — точний або майже. Це не збіг, а
+// перевірка: якщо крива не проходить через уже збалансовані точки, вона
+// описує іншу гру.
+export const ROLE_CURVES = Object.freeze({
+  courier: { speed:      { from: 170,  to: 340,  k: 0.35 } },
+  seller:  { speed:      { from: 170,  to: 340,  k: 0.35 } },
+  manager: { speed:      { from: 170,  to: 340,  k: 0.35 } },
+  tech: {
+    speed:      { from: 170,  to: 340,  k: 0.35 },
+    pointMs:    { from: 2600, to: 800,  k: 0.78 },
+    quality:    { from: 0.55, to: 0.95, k: 0.50 },
+    missChance: { from: 0.15, to: 0.01, k: 1.25 },
+  },
+})
+
+export const roleCurveValue = ({ from, to, k }, level) =>
+  to + (from - to) / (1 + k * level)
+
+// Клас комплектів, які менеджер готовий купувати, лишається СХІДЦЯМИ, а не
+// асимптотою: це не «трохи краще», а «тепер бере й дорогі». Плавна крива тут
+// означала б дробовий клас, якого не існує.
+export const managerTier = (level) => (level >= 2 ? 99 : level)
+
+// Крива ціни підвищення. М'якша за стару 2.1 (два підвищення на все життя) і
+// стрімкіша за 1.15 нескінченних треків: ефект від людини сильніший, а людей
+// під кінець гри до семи.
+export const WORKER_LEVEL_GROWTH = 1.6

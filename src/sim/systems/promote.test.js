@@ -104,26 +104,35 @@ describe('F5 — підвищення просто на підлозі', () => {
     expect(w.game.workers[0].level).toBe(0)
   })
 
-  it('на максимальному рівні зона теж мовчить', () => {
+  it('на високому рівні зона мовчить — бо ціна виросла', () => {
+    // Стелі рівнів більше немає (Стадія 10 / C), тож «нікуди рости» перестало
+    // бути причиною мовчати. Причина лишилась одна — і вона тепер єдина:
+    // підвищення не по кишені. Зона, яка відкриває панель із мертвою кнопкою,
+    // і є той шум, заради якого предикат узагалі писався.
     const w = shop()
-    const max = roleMaxLevel('courier')
+    // Рівень шукається, а не зашивається: крива ціни — предмет балансу, і
+    // конкретне число тут почервоніло б від будь-якого її підкручування,
+    // нічого не зламавши. (Так і сталося: 1.6^12 виявилось дешевшим за касу.)
+    let level = 0
+    while (promoteCost('courier', level) <= w.game.money) level++
     w.game = {
       ...w.game,
-      workers: w.game.workers.map(x => ({ ...x, level: max })),
+      workers: w.game.workers.map(x => ({ ...x, level })),
     }
-    expect(promoteCost('courier', max)).toBeNull()
+    expect(promoteCost('courier', level)).toBeGreaterThan(w.game.money)
     const events = standNextTo(w, ZONE_DWELL_PROMOTE_MS + 400)
     expect(events.map(e => e.t)).not.toContain(EV.PANEL_REQUESTED)
   })
 
-  it('кожен наступний рівень дорожчий', () => {
+  it('кожен наступний рівень дорожчий, і стелі немає', () => {
     for (const role of ['courier', 'tech', 'seller', 'manager']) {
-      const max = roleMaxLevel(role)
-      for (let i = 1; i < max; i++) {
+      expect(roleMaxLevel(role)).toBe(Infinity)
+      for (let i = 1; i < 30; i++) {
         expect(promoteCost(role, i), `${role} ${i}`)
           .toBeGreaterThan(promoteCost(role, i - 1))
       }
-      expect(promoteCost(role, max)).toBeNull()
+      // Ніколи не null: підвищувати можна завжди, обмежувач — ціна.
+      expect(promoteCost(role, 50)).toBeGreaterThan(0)
     }
   })
 

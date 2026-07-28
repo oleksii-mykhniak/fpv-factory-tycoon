@@ -984,6 +984,14 @@ body {
   margin-left: 8px;
 }
 
+/* Номер рівня замість шкали «●●○» (Стадія 10 / C): стелі немає, тож шкалу до
+   неї не намалювати — лишається число. */
+.promote-level__num {
+  font-family: 'Fredoka One', cursive;
+  font-size: 1.5rem;
+  color: #ffd76a;
+}
+
 .promote-stats {
   margin: 10px 0;
   display: flex;

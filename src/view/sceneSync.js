@@ -22,7 +22,7 @@ import {
 import { INTERACTIONS, carrySpriteKey, zoneWantsAttention } from '../defs/interactions.js'
 import { dwellProgress } from '../sim/systems/zone.js'
 import { piggyShouldShow, nextObjective, incomePerSec } from '../sim/derive.js'
-import { promoteCost, roleMaxLevel } from '../defs/roles.js'
+import { promoteCost } from '../defs/roles.js'
 import { CARRY_STACK_OFFSET_Y, VIEW_SMOOTHING, SALVAGE_RATE } from '../state/config.js'
 import * as ex from 'excalibur'
 
@@ -248,7 +248,6 @@ function syncWorkers(refs, world) {
     if (!view?.promoteLabel) continue
     const agent = (world.agents ?? []).find(a => a.id === worker.id)
     const cost  = promoteCost(worker.role, worker.level ?? 0)
-    const max   = roleMaxLevel(worker.role)
 
     if (!agent) {
       view.promoteLabel.graphics.visible = false
@@ -256,8 +255,9 @@ function syncWorkers(refs, world) {
       continue
     }
 
-    const dots = '●'.repeat((worker.level ?? 0) + 1) + '○'.repeat(max - (worker.level ?? 0))
-    view.levelLabel.text = dots
+    // Було «●●○» — шкала до стелі, якої більше немає (Стадія 10 / C). Над
+    // головою тепер стоїть номер рівня: він єдиний лишився правдою.
+    view.levelLabel.text = `lv ${(worker.level ?? 0) + 1}`
     view.levelLabel.pos.x = agent.x
     view.levelLabel.pos.y = agent.y - 66
     view.levelLabel.graphics.visible = true
