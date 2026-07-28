@@ -26,7 +26,11 @@ import { kitsForLocation } from '../state/locations.js'
 
 // Milliseconds per solder point for a station, given who could work it.
 // Returns null when nothing could have made progress unattended.
-function pointMsFor(game) {
+//
+// Експортується (Стадія 10 / B4), бо картка комплекту рахує той самий темп: два
+// уявлення про «як швидко тут паяють» неминуче розійшлися б, і одне з них
+// показувалося б гравцеві.
+export function pointMsFor(game) {
   const solder = levelData('soldering', game.upgrades.solderingLevel)
   const techs  = workersInRole(game, 'tech')
 
@@ -62,14 +66,22 @@ export function shopRunsItself(game) {
 // Вони йдуть паралельно (поки один комплект паяється, наступний їде), тому це
 // max, а не сума. Гроші витрачаються по-справжньому: кожен цикл спершу купує
 // комплект, і якщо каса не дозволяє — цикли закінчились.
+// Скільки триває один цикл цього комплекту.
+//
+// Вузьке місце — найповільніша з двох речей: доставка й пайка. Вони йдуть
+// паралельно (поки один комплект паяється, наступний їде), тому max, а не сума.
+export function kitCycleMs(game, kitId, rate) {
+  const benches  = Math.max(1, stationsOf(game).length)
+  const assembly = kitSolderPointCount(game, kitId) * rate.ms
+  const delivery = kitDeliveryMs(game, kitId) * deliveryMult(game)
+  return Math.max(assembly, delivery) / benches
+}
+
 function settleFullCycles(game, elapsedMs, rate) {
   const kit = offlineKit(game)
   if (!kit) return null
 
-  const benches   = Math.max(1, stationsOf(game).length)
-  const assembly  = kitSolderPointCount(game, kit.id) * rate.ms
-  const delivery  = kitDeliveryMs(game, kit.id) * deliveryMult(game)
-  const cycleMs   = Math.max(assembly, delivery) / benches
+  const cycleMs = kitCycleMs(game, kit.id, rate)
   if (!(cycleMs > 0)) return null
 
   const affordable = Math.floor(elapsedMs * OFFLINE_EFFICIENCY / cycleMs)

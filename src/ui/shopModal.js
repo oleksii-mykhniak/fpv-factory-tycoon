@@ -3,7 +3,7 @@ import {
   kitMark, kitMarkMax, kitSolderPointCount, markUnlockOf, nextMarkCost, canUpgradeMark,
 } from '../state/gameState.js'
 import { ruleAt } from '../state/locations.js'
-import { rescueKitAvailable, RESCUE_KIT_ID } from '../sim/derive.js'
+import { rescueKitAvailable, RESCUE_KIT_ID, kitRatePerSec } from '../sim/derive.js'
 import { PRICE_BASE_COEFF, PRICE_QUALITY_COEFF, STORAGE_SLOTS_BY_LEVEL, MK_UNLOCKS } from '../state/config.js'
 import { salePriceMult } from '../state/upgrades.js'
 import { kitsForLocation, LOCATIONS } from '../state/locations.js'
@@ -44,13 +44,24 @@ function mkRowHTML(state, kit) {
   const cap  = kitMarkMax(state)
   const { can, cost, reasons } = canUpgradeMark(state, kit.id)
 
+  // Темп показуємо і тут: комплект у стелі не перестає бути тим, з чим його
+  // порівнюють. Без цього рядка картка «Mk у стелі» була б єдиною, по якій
+  // рішення прийняти не можна.
   if (cost === null) {
-    return `<p class="kit-card__mk-note">${reasons[0] ?? ''}</p>`
+    return `
+      <div class="kit-card__mk-row">
+        <span class="kit-card__mk-gain">≈$${kitRatePerSec(state, kit.id).toFixed(2)}/сек</span>
+        <span class="kit-card__mk-note">${reasons[0] ?? ''}</span>
+      </div>`
   }
 
-  const nowPrice  = calcPrice(kitBasePrice(state, kit.id), 1, salePriceMult(state))
+  // $/сек, а не ціна (План Стадії 10 / B4). Ціна сама по собі не відповідає на
+  // питання, заради якого цей рядок існує: кінематографічний дорожчий за міні,
+  // але збирається у 8 кроків замість 4, і що з них вигідніше — видно лише в
+  // темпі. З «≈», бо це оцінка одного верстака без простоїв, а не прилад у HUD.
   const nextState = { ...state, kitMarks: { ...(state.kitMarks ?? {}), [kit.id]: mk + 1 } }
-  const nextPrice = calcPrice(kitBasePrice(nextState, kit.id), 1, salePriceMult(nextState))
+  const nowRate   = kitRatePerSec(state, kit.id)
+  const nextRate  = kitRatePerSec(nextState, kit.id)
   const unlocks   = Object.entries(MK_UNLOCKS)
     .find(([from, u]) => from === kit.id && u.mk === mk + 1)?.[1]?.unlocks
 
@@ -60,7 +71,7 @@ function mkRowHTML(state, kit) {
         ↑ ${mkLabel(mk + 1)} — $${Math.round(cost)}
       </button>
       <span class="kit-card__mk-gain">
-        $${nowPrice.toFixed(0)} → $${nextPrice.toFixed(0)}
+        ≈$${nowRate.toFixed(2)} → $${nextRate.toFixed(2)}/сек
         <span class="kit-card__mk-cap">Mk ${mk + 1}/${cap}</span>
       </span>
       ${unlocks ? `<p class="kit-card__mk-unlock">🔓 Відкриє: ${KIT_TYPES[unlocks].emoji} ${KIT_TYPES[unlocks].name}</p>` : ''}

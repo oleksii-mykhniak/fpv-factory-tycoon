@@ -1223,6 +1223,7 @@ const checks = [
   ['B2: and the lock names what to do about it', /Mk/.test(bStart.locked[0] ?? '')],
   ['B2: the Mk button quotes a price',   /\$\d/.test(bStart.mkBtn ?? '')],
   ['B2: and shows now → after',          /→/.test(bStart.gain ?? '')],
+  ['B2: the comparison is in $/сек, not price', /сек/.test(bStart.gain ?? '')],
   ['B2: two buys reach Mk II',           bAfter.mark === 2],
   ['B2: the unlock is celebrated',       bAfter.card === true],
   ['B2: the card names the new kit',     /Гоночний/.test(bAfter.cardText)],
