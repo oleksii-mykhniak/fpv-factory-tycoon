@@ -5,6 +5,8 @@ import {
   CAMERA_ELASTICITY, CAMERA_FRICTION,
   PIGGY_COOLDOWN_MS,
   PULSE_FREQ_HZ, PULSE_SCALE_AMP,
+  FLOAT_GAIN_MS, FLOAT_GAIN_RISE, FLOAT_GAIN_POOL,
+  FLOAT_GAIN_JITTER_X, FLOAT_GAIN_JITTER_Y, FLOAT_GAIN_DRIFT_X,
   CHARACTER_U as TILE_U,
   CHARACTER_ART,
 } from '../state/config.js'
@@ -293,16 +295,26 @@ function createBenchProgress(scene, benchActor) {
   const add = (a) => { scene.add(track(a)); return a }
   const BW    = benchActor.width
   const BH    = benchActor.height
+  // Без плашки (валідація Стадії 10 на залізі).
+  //
+  // Тут стояла темна картка 52px під підписом і темно-зелена — під тостом. Обидві
+  // були центровані по тій самій точці, що й Label, але Label БЕЗ `baseAlign`
+  // малюється по базовій лінії, тобто нижче своєї позиції. Плашка і текст ніколи
+  // не збігались: тост виглядав як темний прямокутник, з-під якого звисає напис.
+  // Плашки знято, текст вирівняно по центру явно, а читабельність над верстаком
+  // тримає тінь у самому шрифті — вона обводить літери, а не малює квадрат.
   const CARD_W = Math.min(BW * 0.88, 210)
-  const CARD_H = 52
-  const GAP    = 6
+  const GAP    = 10
 
-  const cx  = benchActor.pos.x
-  const cy  = benchActor.pos.y - BH / 2 - GAP - CARD_H / 2
+  // Знизу вгору від краю верстака: підпис, під ним крапки, під ними смужка.
+  const cx     = benchActor.pos.x
+  const topY   = benchActor.pos.y - BH / 2 - GAP
+  const stepY  = topY - 36
+  const dotsY  = topY - 20
+  const barY   = topY - 6
 
   const BAR_W    = CARD_W * 0.80
   const BAR_H    = 5
-  const barY     = cy + CARD_H * 0.28
   const LEFT_X   = cx - BAR_W / 2
   const MAX_DOTS = 8
   const DOT_R    = 3
@@ -312,28 +324,18 @@ function createBenchProgress(scene, benchActor) {
   let elapsed  = 0
   let duration = 2000
 
-  // Card border (1px wider on each side, rendered behind the fill)
-  const cardBorder = new ex.Actor({
-    pos: ex.vec(cx, cy), width: CARD_W + 2, height: CARD_H + 2,
-    z: 11, color: ex.Color.fromHex('#3a4a80'),
-  })
-  cardBorder.graphics.visible = false
-  add(cardBorder)
-
-  // Card background
-  const card = new ex.Actor({
-    pos: ex.vec(cx, cy), width: CARD_W, height: CARD_H,
-    z: 12, color: ex.Color.fromHex('#1c1c38'),
-  })
-  card.graphics.visible = false
-  add(card)
+  const shadow = { blur: 4, offset: ex.vec(0, 1), color: ex.Color.fromHex('#000000') }
 
   // Step label
   const stepLbl = new ex.Label({
     text: '',
-    pos:  ex.vec(cx, cy - CARD_H * 0.16),
+    pos:  ex.vec(cx, stepY),
     color: ex.Color.fromHex('#cce0ff'),
-    font: new ex.Font({ size: 11, family: 'monospace', textAlign: ex.TextAlign.Center }),
+    font: new ex.Font({
+      size: 11, family: 'monospace',
+      textAlign: ex.TextAlign.Center, baseAlign: ex.BaseAlign.Middle,
+      shadow,
+    }),
     z: 13,
   })
   stepLbl.graphics.visible = false
@@ -343,7 +345,7 @@ function createBenchProgress(scene, benchActor) {
   const DOT_SZ = DOT_R * 2
   const dotActors = Array.from({ length: MAX_DOTS }, () => {
     const d = new ex.Actor({
-      pos: ex.vec(cx, cy + CARD_H * 0.08), width: DOT_SZ, height: DOT_SZ,
+      pos: ex.vec(cx, dotsY), width: DOT_SZ, height: DOT_SZ,
       z: 13, color: ex.Color.fromHex('#6868a0'),
     })
     d.graphics.visible = false
@@ -372,47 +374,41 @@ function createBenchProgress(scene, benchActor) {
     barFill.pos.x = LEFT_X + fillW / 2
   })
 
-  // Result toast — card + label that fade out
-  const TOAST_H = 28
-  const toastCard = new ex.Actor({
-    pos: ex.vec(cx, cy), width: CARD_W, height: TOAST_H,
-    z: 12, color: ex.Color.fromHex('#0a1e0e'),
-  })
-  toastCard.graphics.visible = false
-  add(toastCard)
-
+  // Result toast — a label that fades out. No plate: see the note above.
   const toastLbl = new ex.Label({
     text:  '',
-    pos:   ex.vec(cx, cy),
+    pos:   ex.vec(cx, stepY),
     color: ex.Color.fromHex('#7de07d'),
-    font:  new ex.Font({ size: 13, family: 'monospace', textAlign: ex.TextAlign.Center }),
+    font:  new ex.Font({
+      size: 13, family: 'monospace',
+      textAlign: ex.TextAlign.Center, baseAlign: ex.BaseAlign.Middle,
+      shadow,
+    }),
     z: 13,
   })
   toastLbl.graphics.visible = false
   add(toastLbl)
 
   let toastAge = 0, toastDur = 0, toasting = false
-  toastCard.on('preupdate', (evt) => {
+  toastLbl.on('preupdate', (evt) => {
     if (!toasting) return
     toastAge += frameMs(evt)
     if (toastAge >= toastDur) {
       toasting = false
-      toastCard.graphics.visible = false
-      toastLbl.graphics.visible  = false
+      toastLbl.graphics.visible = false
       return
     }
     const fadeStart = toastDur * 0.55
     const a = toastAge > fadeStart
       ? 1 - (toastAge - fadeStart) / (toastDur - fadeStart)
       : 1
-    toastCard.graphics.opacity = a
-    toastLbl.graphics.opacity  = a
+    toastLbl.graphics.opacity = a
   })
 
   function _placeDots(total, done) {
     const dotsW  = (total - 1) * DOT_GAP
     const startX = cx - dotsW / 2
-    const dotY   = cy + CARD_H * 0.08
+    const dotY   = dotsY
     dotActors.forEach((d, i) => {
       if (i < total) {
         d.pos = ex.vec(startX + i * DOT_GAP, dotY)
@@ -436,16 +432,13 @@ function createBenchProgress(scene, benchActor) {
     duration = durationMs
     running  = true
     stepLbl.text = lbl
-    cardBorder.graphics.visible = true
-    card.graphics.visible     = true
     stepLbl.graphics.visible  = true
     barBg.graphics.visible    = true
     barFill.graphics.visible  = true
     _resetBar()
     _placeDots(total, done)
     toasting = false
-    toastCard.graphics.visible = false
-    toastLbl.graphics.visible  = false
+    toastLbl.graphics.visible = false
   }
 
   function advanceDots(total, done) {
@@ -456,8 +449,6 @@ function createBenchProgress(scene, benchActor) {
 
   function hide() {
     running = false
-    cardBorder.graphics.visible = false
-    card.graphics.visible    = false
     stepLbl.graphics.visible = false
     barBg.graphics.visible   = false
     barFill.graphics.visible = false
@@ -467,10 +458,8 @@ function createBenchProgress(scene, benchActor) {
   function showResult(text, durationMs = 2200) {
     hide()
     toastLbl.text = text
-    toastCard.graphics.opacity = 1
-    toastLbl.graphics.opacity  = 1
-    toastCard.graphics.visible = true
-    toastLbl.graphics.visible  = true
+    toastLbl.graphics.opacity = 1
+    toastLbl.graphics.visible = true
     toastAge = 0
     toastDur = durationMs
     toasting = true
@@ -757,27 +746,6 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     })
   })
 
-  // ── Per-hall earnings (F7) ─────────────────────────────
-  // A label over each hall's post box: what that hall has actually banked in
-  // the last minute. This is what makes opening a third hall legible — you can
-  // see which floor is paying for itself and which one is short a technician.
-  const hallEarnings = (layout.halls ?? []).map(hall => {
-    const box = layout.props[`mailbox_${hall.id}`]
-    const lbl = new ex.Label({
-      text: '',
-      pos:  ex.vec(box?.cx ?? hall.x0, (box?.cy ?? 1200) - 52),
-      z: 26,
-      color: ex.Color.fromHex('#7de07d'),
-      font: new ex.Font({
-        family: 'monospace', size: 14, unit: ex.FontUnit.Px,
-        textAlign: ex.TextAlign.Center, baseAlign: ex.BaseAlign.Middle,
-      }),
-    })
-    lbl.graphics.visible = false
-    scene.add(track(lbl))
-    return { hallId: hall.id, label: lbl }
-  })
-
   // ── Floating gains (Стадія 10 / D3) ────────────────────
   // "+$47" rising off the post box the drone was actually carried to.
   //
@@ -789,8 +757,14 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
   // A fixed pool rather than actors created per sale: a factory with three
   // sellers banks drones faster than a GC wants new Labels, and a pool that
   // runs out simply reuses its oldest — a dropped "+$47" costs nothing.
-  const FLOAT_MS = 1100
-  const floaters = Array.from({ length: 6 }, () => {
+  //
+  // Це ЄДИНИЙ напис над скринькою. Поруч стояв ще прилад F7 («+$47/хв» — темп
+  // цеху за хвилину), і для одного продажу він показував рівно ту саму цифру
+  // в тій самій точці, тільки висів хвилину. Гравець читав це як «текст
+  // продажу не зникає», і полагоджена анімація нічого не міняла: дивились не
+  // на неї. Прилад знято — про те, який цех жвавіший, тепер говорить те, над
+  // якою скринькою частіше блимає.
+  const floaters = Array.from({ length: FLOAT_GAIN_POOL }, () => {
     const lbl = new ex.Label({
       text: '', pos: ex.vec(-9999, -9999), z: 40,
       color: ex.Color.fromHex('#9dffa8'),
@@ -800,31 +774,37 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
       }),
     })
     lbl.graphics.visible = false
-    const st = { lbl, age: 0, live: false, x: 0, y: 0 }
+    const st = { lbl, age: 0, live: false, x: 0, y: 0, driftX: 0 }
     lbl.on('preupdate', (evt) => {
       if (!st.live) return
       st.age += frameMs(evt)
-      if (st.age >= FLOAT_MS) {
+      if (st.age >= FLOAT_GAIN_MS) {
         st.live = false
         lbl.graphics.visible = false
         return
       }
-      const t = st.age / FLOAT_MS
-      lbl.pos = ex.vec(st.x, st.y - 46 * t)
-      lbl.graphics.opacity = t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4
+      const t = st.age / FLOAT_GAIN_MS
+      // Підйом сповільнюється (1-(1-t)²), знос убік — рівномірний: гроші
+      // спурхують і зависають, а не їдуть угору з постійною швидкістю.
+      const rise = FLOAT_GAIN_RISE * (1 - (1 - t) * (1 - t))
+      lbl.pos = ex.vec(st.x + st.driftX * t, st.y - rise)
+      // Повний тон більшу частину життя, згасання — в останній третині.
+      lbl.graphics.opacity = t < 0.65 ? 1 : 1 - (t - 0.65) / 0.35
     })
     scene.add(track(lbl))
     return st
   })
 
   let floatNext = 0
+  const jitter = (amp) => (Math.random() * 2 - 1) * amp
   function floatGain(x, y, text) {
     // Prefer a free one; fall back to the oldest so a burst never goes silent.
     const st = floaters.find(f => !f.live) ?? floaters[floatNext++ % floaters.length]
     st.age = 0
     st.live = true
-    st.x = x
-    st.y = y - 30
+    st.x = x + jitter(FLOAT_GAIN_JITTER_X)
+    st.y = y - 30 + jitter(FLOAT_GAIN_JITTER_Y)
+    st.driftX = jitter(FLOAT_GAIN_DRIFT_X)
     st.lbl.text = text
     st.lbl.pos = ex.vec(st.x, st.y)
     st.lbl.graphics.opacity = 1
@@ -1151,7 +1131,6 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     cat: { actor: catActor, anim: catAnim },
     ...propActors,
     beltBoxes,
-    hallEarnings,
     floatGain,
     stations,
     player, playerRig, workerView, workerViews,

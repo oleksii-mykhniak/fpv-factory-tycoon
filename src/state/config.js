@@ -365,6 +365,17 @@ export const JOYSTICK_ZONE_H_RATIO = 1.0  // fraction of the game area that can 
 export const PULSE_FREQ_HZ   = 1.5   // oscillations per second
 export const PULSE_SCALE_AMP = 0.08  // ±amplitude of scale pulse
 
+// ── «+$47» над скринькою (Стадія 10 / D3) ─────────────────
+// Розкид позиції — не прикраса, а те, що робить чергу продажів читабельною:
+// два дрони, донесені підряд, без нього лягають літера в літеру й виглядають
+// як один напис, що смикнувся.
+export const FLOAT_GAIN_MS       = 2000  // скільки живе один напис
+export const FLOAT_GAIN_RISE     = 70    // на скільки піднімається за життя
+export const FLOAT_GAIN_JITTER_X = 26    // ±розкид точки старту по горизонталі
+export const FLOAT_GAIN_JITTER_Y = 14    // ±розкид точки старту по вертикалі
+export const FLOAT_GAIN_DRIFT_X  = 18    // ±знос убік за час польоту
+export const FLOAT_GAIN_POOL     = 10    // одночасних написів; далі — перевикористання
+
 // ── Kit configs ───────────────────────────────────────────
 // All tunable per-kit params live here: economy, structure, assembly steps.
 // Sprites / names / emoji / unlock conditions are content → kits.js.

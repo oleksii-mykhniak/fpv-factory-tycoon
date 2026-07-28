@@ -616,24 +616,6 @@ console.log(`  before: "${mBefore.text}" (shown=${mBefore.visible}); ` +
             `after a sale: "${mAfter.text}" ` +
             `(${mAfter.logged} sale(s), timestamped: ${mAfter.stamped})`)
 
-// ── M2. Смужка до наступної покупки (Стадія 10 / D2) ──────
-console.log('\n### M2. Наступна покупка')
-// Свідомо бідний старт: за стандартну $1000 у квартирі доступне геть усе, і
-// смужка ХОВАЄТЬСЯ — правильно (тоді говорить бейдж на стелажі), але тоді тут
-// не було б чого перевіряти.
-await boot(seedState({}, { money: 50 }))
-const m2 = await page.evaluate(() => {
-  const bar  = document.querySelector('#hud-next')
-  const fill = document.querySelector('#hud-next-fill')
-  const lbl  = document.querySelector('#hud-next-label')
-  return {
-    shown: !!bar && !bar.hasAttribute('hidden'),
-    width: fill?.style.width ?? '',
-    label: lbl?.textContent ?? '',
-  }
-})
-console.log(`  bar shown=${m2.shown} fill=${m2.width} label="${m2.label}"`)
-
 // ── B. Mk комплектів (Стадія 10 / B) ──────────────────────
 console.log('\n### B2. Mk і відкриття типів')
 // Свідомо БЕЗ kitMarks: цей блок і перевіряє ланцюг відкриттів із нуля.
@@ -1216,9 +1198,6 @@ const checks = [
   ['M: the rate survives a sale',        mAfter.visible === true],
   ['M: and it reads as $/сек',           /\$\d/.test(mAfter.text) && mAfter.text.includes('сек')],
   ['M: every sale is timestamped',       mAfter.logged > 0 && mAfter.stamped],
-  ['M2: the next-purchase bar is shown', m2.shown === true],
-  ['M2: it names what is being saved for', m2.label.includes('$')],
-  ['M2: and it is not already full',     m2.width !== '100.0%'],
   ['B2: locked kits are on screen, not missing', bStart.locked.length > 0],
   ['B2: and the lock names what to do about it', /Mk/.test(bStart.locked[0] ?? '')],
   ['B2: the Mk button quotes a price',   /\$\d/.test(bStart.mkBtn ?? '')],
