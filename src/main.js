@@ -22,7 +22,9 @@ import { createWorld, serializeWorld } from './sim/world.js'
 import { advance } from './sim/loop.js'
 import { dispatch, piggyAvailable } from './sim/commands.js'
 import { settleOffline } from './sim/offline.js'
-import { playerStation, guidanceActive, ironIsHandsOff, incomePerSec } from './sim/derive.js'
+import {
+  playerStation, guidanceActive, ironIsHandsOff, incomePerSec, arrowAllowed,
+} from './sim/derive.js'
 import { SYSTEMS } from './sim/systems/index.js'
 
 import { createHUD, stepHint } from './ui/hud.js'
@@ -260,8 +262,11 @@ function present() {
 const hud = createHUD(uiRoot)
 
 // Картка квесту (Стадія 9): один активний крок ланцюга і скільки до нього
-// лишилось. Тапу немає — вибирати нема з чого, стрілка веде до нього сама.
-const questTracker = createQuestTracker(uiRoot)
+// лишилось. Тап означає «покажи, куди йти» — після перших кроків ланцюга
+// стрілка з екрана зникає й повертається лише на запит.
+const questTracker = createQuestTracker(uiRoot, {
+  onShowArrow: () => { send('showArrow'); uiDirty = true; present() },
+})
 
 // Картка «відкрито» (Р4): що приїхало з новою кімнатою або цехом.
 const unlockCard = createUnlockCard(uiRoot)
@@ -430,13 +435,19 @@ function renderUI() {
 
   const player = (world.agents ?? []).find(a => a.kind === 'player')
   hud.update(world.game, incomePerSec(world.salesLog, world.now))
+
+  // Смужка пайки й картка квесту живуть на одній висоті, тож картка мовчить,
+  // поки смужка на екрані. Рахується тут, бо `handStation` нижче — це вже
+  // відповідь на те саме питання.
+  const soldering = !ironIsHandsOff(world.game) && !!playerStation(world)
+
   // Крок петлі рахує HUD (він знає фази станції), а показує картка квесту —
   // нижньої панелі більше немає (Р2).
   questTracker.update(world.game, stepHint(
     world.game,
     (player?.carrying ?? []).map(i => i.type),
     guidanceActive(world.game),
-  ) || null)
+  ) || null, soldering, !arrowAllowed(world))
   shopModal.update(world.game)
   upgradeModal.update(world.game)
   hireModal.update(world.game)

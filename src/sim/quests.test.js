@@ -14,14 +14,14 @@ import { createWorld } from './world.js'
 import { advance } from './loop.js'
 import { dispatch } from './commands.js'
 import { SYSTEMS } from './systems/index.js'
-import { nextObjective, interruptQuest } from './derive.js'
+import { nextObjective, interruptQuest, arrowAllowed } from './derive.js'
 import { INTERACTIONS } from '../defs/interactions.js'
 import { EV } from './events.js'
 import { layoutFor } from '../defs/layouts/index.js'
 import { createState, buyUpgrade } from '../state/gameState.js'
 import { UPGRADE_TRACKS } from '../state/upgrades.js'
 import { capFor } from '../state/locations.js'
-import { TICK_MS } from '../state/config.js'
+import { TICK_MS, ARROW_FREE_STEPS, ARROW_REQUEST_MS } from '../state/config.js'
 
 const T0 = 1_000_000
 
@@ -54,8 +54,16 @@ describe('форма ланцюга', () => {
   it('кожен крок умі́є сказати, що робити і куди йти', () => {
     for (const step of QUEST_CHAIN) {
       expect(step.kind === 'do' || step.kind === 'buy').toBe(true)
-      expect(typeof step.zoneKind).toBe('string')
       expect(typeof step.done).toBe('function')
+      // Або крок має своє місце, або його веде петля — але не обидва разом і
+      // не жодне: без цього з'являються кроки, куди стрілка не знає, як вести.
+      expect(!!step.zoneKind !== !!step.viaLoop).toBe(true)
+    }
+  })
+
+  it('петлею робляться лише дії — покупку петля не зробить', () => {
+    for (const step of QUEST_CHAIN) {
+      if (step.viaLoop) expect(step.kind).toBe('do')
     }
   })
 
@@ -201,6 +209,34 @@ describe('стрілка', () => {
     expect(nextObjective(w, INTERACTIONS)).toBeTruthy()
   })
 
+  // Два випадки з валідації на пристрої. Причина в обох одна: крок-дія вказував
+  // на КІНЕЦЬ петлі, а не на наступний крок.
+  it('поки квест «продай N», стрілка не стоїть на скриньці з порожніми руками', () => {
+    const s = withStats({ money: 500, ordersPlaced: 9 }, { assembled: 1, sold: 1 })
+    expect(activeQuest(s).id).toBe('sell_three')
+    expect(questZoneKind(s)).toBeNull()          // у кроку немає свого місця
+    // Робити нічого не почато — стрілка мусить вести туди, де петля починається.
+    expect(nextObjective(world(s), INTERACTIONS).kind).toBe('desk')
+  })
+
+  it('поки коробка їде, стрілка не показує на верстак', () => {
+    const s = withStats({ money: 500, ordersPlaced: 1 }, { assembled: 0, sold: 0 })
+    const inTransit = { ...s, deliveries: [
+      { id: 'd1', kitId: 'mini_drone', slotIndex: 0, readyAt: T0 + 60_000, status: 'transit' },
+    ] }
+    expect(activeQuest(inTransit).id).toBe('first_assembly')
+    // Верстак порожній і коробки в руках немає — вести туди нікуди.
+    expect(nextObjective(world(inTransit), INTERACTIONS)?.kind).not.toBe('bench')
+  })
+
+  it('а коли коробка приїхала — веде до неї', () => {
+    const s = withStats({ money: 500, ordersPlaced: 1 }, { assembled: 0, sold: 0 })
+    const arrived = { ...s, deliveries: [
+      { id: 'd1', kitId: 'mini_drone', slotIndex: 0, readyAt: T0 - 1, status: 'transit' },
+    ] }
+    expect(nextObjective(world(arrived), INTERACTIONS).kind).toBe('delivery_slot')
+  })
+
   it('фізична дія важливіша за квест: з коробкою в руках стрілка на верстак', () => {
     const w = world(withStats({ money: 9999 }, { assembled: 3, sold: 3 }))
     const player = w.agents.find(a => a.kind === 'player')
@@ -271,6 +307,116 @@ describe('прогресивне розкриття поліпшень (Р5)', (
 // Дві ситуації, які ламають будь-який ланцюг: комплект згорів і грошей нема.
 // Вони не в ланцюгу — їхні умови не монотонні, — а перебивають картку на той
 // час, поки тривають.
+// Стрілка й ланцюг — дві системи, які показують те саме, тож єдине, що тут
+// справді треба сторожити, — щоб вони не розходились.
+describe('стрілка і квест синхронні', () => {
+  // Усі зони, які може дати петля (PRIORITY у derive.js) — це «наступний
+  // фізичний крок». Усе інше стрілка має право показати лише як місце цілі.
+  const LOOP_KINDS = [
+    'mailbox', 'bench_out', 'bench', 'delivery_slot', 'belt_drop', 'trashbin',
+    'piggy', 'desk',
+  ]
+
+  const cases = () => [
+    ['старт',            home()],
+    ['замовлено',        home({ ordersPlaced: 1 })],
+    ['коробка їде',      { ...home({ ordersPlaced: 1 }), deliveries: [
+      { id: 'd1', kitId: 'mini_drone', slotIndex: 0, readyAt: T0 + 60_000, status: 'transit' }] }],
+    ['коробка приїхала', { ...home({ ordersPlaced: 1 }), deliveries: [
+      { id: 'd1', kitId: 'mini_drone', slotIndex: 0, readyAt: T0 - 1, status: 'transit' }] }],
+    ['продано 1',        withStats({ ordersPlaced: 2 }, { assembled: 1, sold: 1 })],
+    ['час купувати',     withStats({ money: 9999, ordersPlaced: 5 }, { assembled: 3, sold: 3 })],
+    ['гараж, найм',      garage({ money: 9999 }, { sold: 9 })],
+    ['згорілий',         withStats({ money: 9999, ordersPlaced: 9, stations: [{
+      id: 'station-0', defId: 'workbench', phase: 'BURNT', kitId: 'racing_drone',
+      solderPoints: [0.9], quality: null, coldPenalty: 0 }] }, { assembled: 3, sold: 3 })],
+    ['порожня каса',     withStats({ money: 1, ordersPlaced: 9 }, { assembled: 3, sold: 3 })],
+  ]
+
+  it('стрілка ніколи не показує на щось, чого квест і петля не просять', () => {
+    for (const [name, state] of cases()) {
+      const w = world(state)
+      w.arrowUntil = w.now + ARROW_REQUEST_MS      // дозволяємо стрілку скрізь
+      const target = nextObjective(w, INTERACTIONS)
+      if (!target) continue
+      const stuck = interruptQuest(state)
+      const allowed = [
+        ...LOOP_KINDS,
+        questZoneKind(state),
+        stuck?.zoneKind,
+      ].filter(Boolean)
+      expect(allowed, `${name}: стрілка на ${target.kind}`).toContain(target.kind)
+    }
+  })
+
+  it('у кроку зі своїм місцем стрілка або веде туди, або до фізичної дії', () => {
+    for (const [name, state] of cases()) {
+      const zone = questZoneKind(state)
+      if (!zone || interruptQuest(state)) continue
+      const w = world(state)
+      w.arrowUntil = w.now + ARROW_REQUEST_MS
+      const target = nextObjective(w, INTERACTIONS)
+      if (!target) continue
+      expect([zone, ...LOOP_KINDS], `${name}`).toContain(target.kind)
+    }
+  })
+
+  it('зона, на яку показує стрілка, справді щось робить', () => {
+    // Стрілка на зону, яка при підході нічого не зробить, — гірша за жодну.
+    // Виняток — місце цілі: до шафи ведуть, щоб КУПИТИ, а не щоб «спрацювало».
+    for (const [name, state] of cases()) {
+      const w = world(state)
+      w.arrowUntil = w.now + ARROW_REQUEST_MS
+      const target = nextObjective(w, INTERACTIONS)
+      if (!target) continue
+      if (target.kind === questZoneKind(state)) continue
+      if (target.kind === interruptQuest(state)?.zoneKind) continue
+      const player = w.agents.find(a => a.kind === 'player')
+      expect(INTERACTIONS[target.kind].enabled(w, target, player), `${name}: ${target.kind}`)
+        .toBe(true)
+    }
+  })
+})
+
+describe('стрілка не мозолить око після перших кроків', () => {
+  // Стан за межами перших ARROW_FREE_STEPS кроків: паяльник уже куплено, тобто
+  // ланцюг пішов далі, ніж вчить основи. Далі стрілки бути не має, поки її не
+  // попросять.
+  const late = () => buyUpgrade(
+    withStats({ money: 9999, ordersPlaced: 9 }, { assembled: 3, sold: 3 }), 'soldering')
+
+  it('перші кроки веде без запиту', () => {
+    const w = world(home())
+    expect(questIndex(w.game)).toBeLessThan(ARROW_FREE_STEPS)
+    expect(arrowAllowed(w)).toBe(true)
+    expect(nextObjective(w, INTERACTIONS)).toBeTruthy()
+  })
+
+  it('після них зникає', () => {
+    const w = world(late())
+    expect(questIndex(w.game)).toBeGreaterThanOrEqual(ARROW_FREE_STEPS)
+    expect(arrowAllowed(w)).toBe(false)
+    expect(nextObjective(w, INTERACTIONS)).toBeNull()
+  })
+
+  it('тап по картці її повертає — і вона сама гасне', () => {
+    const w = world(late())
+    dispatch(w, 'showArrow', {})
+    expect(arrowAllowed(w)).toBe(true)
+    expect(nextObjective(w, INTERACTIONS)).toBeTruthy()
+
+    w.now += ARROW_REQUEST_MS + 1
+    expect(arrowAllowed(w)).toBe(false)
+  })
+
+  it('коли цех застряг, стрілку не ховаємо — рішення там не вгадується', () => {
+    const stuck = { ...late(), money: 1 }
+    const w = world(stuck)
+    expect(interruptQuest(stuck)).toBeTruthy()
+    expect(arrowAllowed(w)).toBe(true)
+  })
+})
+
 describe('позаланцюгові вставки', () => {
   const burntStation = (kitId = 'racing_drone') => ({
     id: 'station-0', defId: 'workbench', phase: 'BURNT', kitId,

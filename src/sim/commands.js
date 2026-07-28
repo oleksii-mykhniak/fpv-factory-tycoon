@@ -23,6 +23,7 @@ import {
 import { levelData, UPGRADE_TRACKS } from '../state/upgrades.js'
 import {
   COLD_SOLDER_THRESHOLD, COLD_SOLDER_QUALITY_PENALTY, SALVAGE_RATE,
+  ARROW_REQUEST_MS,
 } from '../state/config.js'
 import { EV, emit } from './events.js'
 import { rebuildStationGeometry, stationCountFor, syncWorkerAgents, applyLayout } from './world.js'
@@ -162,7 +163,16 @@ const HANDLERS = {
   },
 
   // Закріплення цілі (`pinQuest`) прибрано в Стадії 9: активний квест тепер
-  // рівно один, тож обирати нічого — стрілка веде до нього завжди.
+  // рівно один, тож обирати нічого.
+  //
+  // Замість нього тап по картці означає «покажи, куди йти»: після перших кроків
+  // ланцюга стрілка зникає (див. arrowAllowed) і повертається лише на запит.
+  // Пишемо у world, а не в game: це не стан цеху, а те, що гравець хоче бачити
+  // протягом наступних секунд, і в сейві йому місця немає.
+  showArrow(world) {
+    world.arrowUntil = world.now + ARROW_REQUEST_MS
+  },
+
 
   // Buy the next room of the flat (П2). The garage used to be a move; the only
   // thing that changed is that the world grows instead of being replaced —

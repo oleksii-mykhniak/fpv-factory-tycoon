@@ -752,18 +752,25 @@ body {
 
 /* === Quest card (Стадія 9 / Р1) === */
 
-/* Знизу зліва. Верхня смуга екрана вже зайнята грошима, стрічкою доставок і
-   смужкою пайки; унизу тепер вільно — рядок підказок звідти пішов (Р2).
-   pointer-events: none — картка більше не клікається, тапати нема по чому:
-   активна ціль одна, вибирати нічого. */
+/* Угорі праворуч, під кнопкою налаштувань (44px + відступ). Унизу картка
+   лежала під великим пальцем і в найгіршому місці для читання кутиком ока;
+   угорі вже живе все, на що гравець дивиться — гроші й $/сек.
+   Ліва межа тримається на відстані від центру, бо по центру верхньої смуги
+   їде стрічка доставок.
+   Картка клікається (pointer-events: auto): тап означає «покажи, куди йти» —
+   стрілка після перших кроків ланцюга зникає й повертається лише на запит. */
 #quest-tracker {
   position: absolute;
-  bottom: calc(16px + env(safe-area-inset-bottom));
-  left: calc(12px + env(safe-area-inset-left));
-  width: min(70vw, 250px);
-  pointer-events: none;
+  top: calc(62px + env(safe-area-inset-top));
+  right: calc(10px + env(safe-area-inset-right));
+  width: min(58vw, 224px);
+  pointer-events: auto;
   z-index: 60;
 }
+
+/* Поки паяєш, картка мовчить: смужка пайки займає всю ширину саме на цій
+   висоті, а ціль у той момент — не те, що треба читати. */
+#quest-tracker[data-quiet] { display: none; }
 
 #quest-tracker[hidden] { display: none; }
 
@@ -784,26 +791,11 @@ body {
 
 .quest--ready .quest__fill { background: #7de07d; }
 
-.quest__head {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
 .quest__title {
   font-size: 0.82rem;
   color: #e8e8f0;
   letter-spacing: 0.01em;
   line-height: 1.25;
-  flex: 1;
-}
-
-/* «7/24» — відчуття довжини гри, якого одна картка сама по собі не дає. */
-.quest__count {
-  font-family: monospace;
-  font-size: 0.62rem;
-  color: #7a7a92;
-  white-space: nowrap;
 }
 
 .quest__bar {
@@ -842,6 +834,17 @@ body {
   color: #8a9ab0;
   line-height: 1.3;
 }
+
+/* Запит на стрілку. Показуємо лише коли тап справді щось зробить: рядок про
+   дію, якої зараз нема, — це шум, а не підказка. */
+.quest__ask {
+  margin-top: 5px;
+  font-size: 0.64rem;
+  color: #7a90a8;
+  letter-spacing: 0.02em;
+}
+
+.quest:active { transform: scale(0.985); }
 
 /* Крок петлі — те, що до Стадії 9 було нижньою панеллю (Р2). Живе тільки поки
    діють підказки, тому виглядає як тимчасова приписка, а не як частина цілі. */

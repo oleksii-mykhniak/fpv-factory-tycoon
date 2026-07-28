@@ -12,7 +12,7 @@ import {
 } from '../state/gameState.js'
 import {
   GUIDANCE_ORDERS, GUIDANCE_SCRAP_RUNS, MANAGER_RESERVE, INCOME_WINDOW_MS,
-  SALVAGE_RATE,
+  SALVAGE_RATE, ARROW_FREE_STEPS,
 } from '../state/config.js'
 import { levelData, UPGRADE_TRACKS } from '../state/upgrades.js'
 import {
@@ -20,7 +20,7 @@ import {
   canMoveToLocation, LOCATION_ORDER,
 } from '../state/locations.js'
 import { ROLE_ORDER, roleLevelData } from '../defs/roles.js'
-import { questZoneKind } from './quests.js'
+import { questZoneKind, questIsLoop, questIndex } from './quests.js'
 
 // Cheapest kit the player could actually buy. Free kits (scrap) are not
 // purchases and must not count.
@@ -261,9 +261,28 @@ export function interruptQuest(game) {
   return null
 }
 
+// Чи стрілка взагалі має право бути на екрані (фікс після валідації).
+//
+// Стрілка вчить петлю, а потім починає мозолити око: показує на місце, куди
+// гравець і сам ішов, і робить це весь час. Тому три причини її показати, і
+// поза ними — нічого:
+//
+//   перші кроки ланцюга — гравець ще вчиться, де тут що;
+//   цех застряг         — згорілий комплект або порожня каса: саме тоді рішення
+//                         не вгадується, і ховати підказку жорстоко;
+//   гравець попросив    — тап по картці цілі. `arrowUntil` живе у world, не в
+//                         сейві: це не стан цеху, а те, що гравець хоче бачити
+//                         протягом наступних секунд.
+export function arrowAllowed(world) {
+  if (questIndex(world.game) < ARROW_FREE_STEPS) return true
+  if (interruptQuest(world.game)) return true
+  return (world.arrowUntil ?? 0) > world.now
+}
+
 export function nextObjective(world, interactions) {
   const player = (world.agents ?? []).find(a => a.kind === 'player')
   if (!player) return null
+  if (!arrowAllowed(world)) return null
 
   const nearest = (kind) => {
     const zones = (world.zones ?? []).filter(z => z.kind === kind)
@@ -273,7 +292,10 @@ export function nextObjective(world, interactions) {
       Math.hypot(best.cx - player.x, best.cy - player.y) ? z : best)
   }
 
-  const general = guidanceActive(world.game)
+  // Стрілка петлі працює, поки діють підказки — АБО поки ланцюг просить саму
+  // петлю («продай 3 дрони»). Друге дописано після тесту: без нього гра казала
+  // «продай ще два» і не показувала, що для цього треба зробити далі.
+  const general = guidanceActive(world.game) || questIsLoop(world.game)
   const scrap   = scrapGuidanceActive(world.game)
 
   // Порядок у Стадії 9 перевернуто. До неї закріплений квест бив усе — і

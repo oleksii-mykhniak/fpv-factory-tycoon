@@ -24,8 +24,18 @@
 //   kind: 'do'   — прогрес по лічильнику: have/need — це штуки
 //   kind: 'buy'  — прогрес по грошах: have/need — це $
 //
-// `zoneKind` — куди вести стрілку. Саме KIND, а не координати: крок не мусить
-// знати, де в цій локації стоїть шафа.
+// Куди вести стрілку — теж властивість кроку, і тут два випадки:
+//
+//   zoneKind: '<kind>'  — крок має СВОЄ місце: шафа, дошка найму, ноутбук.
+//                         Саме kind, а не координати: крок не мусить знати, де
+//                         в цій локації стоїть шафа.
+//   viaLoop: true       — крок робиться грою петлі («продай 3 дрони»), і місця
+//                         в нього немає. Стрілку веде петля.
+//
+// Друге з'явилось після тесту: у таких кроків раніше стояв zoneKind кінцевої
+// зони ('mailbox' у «продай 3 дрони», 'bench' у «запаяй дрон»), і стрілка через
+// це показувала на скриньку, коли час замовляти комплект, або на верстак, поки
+// коробка ще їде. Кінець петлі — не наступний крок.
 
 import {
   KIT_TYPES, nextHireCost, workersInRole, nextRoomId, canUnlockRoom,
@@ -92,7 +102,7 @@ const hireRole = (roleId, why) => ({
 // собою: `stats.sold` росте в `sell()`, а згорілий комплект до продажу не
 // доходить — його списують у смітник.
 const sellCount = (id, need, title, why, kitId = null) => ({
-  id, kind: 'do', zoneKind: 'mailbox', why,
+  id, kind: 'do', viaLoop: true, why,
   moot: (game) => kitId ? !kitsForLocation(game).includes(kitId) : false,
   have: (game) => kitId ? (stats(game).soldByKit?.[kitId] ?? 0) : (stats(game).sold ?? 0),
   done(game) { return this.have(game) >= need },
@@ -130,14 +140,14 @@ export const QUEST_ACTS = Object.freeze([
         },
       },
       {
-        id: 'first_assembly', kind: 'do', zoneKind: 'bench',
+        id: 'first_assembly', kind: 'do', viaLoop: true,
         why: 'Стань біля верстака — там і паяєш',
         have: (game) => stats(game).assembled ?? 0,
         done: (game) => (stats(game).assembled ?? 0) >= 1,
         resolve: () => ({ title: 'Донеси коробку й запаяй дрон', need: 1 }),
       },
       {
-        id: 'first_sale', kind: 'do', zoneKind: 'mailbox',
+        id: 'first_sale', kind: 'do', viaLoop: true,
         why: 'Скринька на вулиці — там дрон стає грошима',
         have: (game) => stats(game).sold ?? 0,
         done: (game) => (stats(game).sold ?? 0) >= 1,
@@ -186,7 +196,7 @@ export const QUEST_ACTS = Object.freeze([
       buyUpgrade('storage_1', 'storage', 1, 'Дві доставки в дорозі одночасно'),
       buyUpgrade('logistics_1', 'logistics', 1, 'Комплекти приїжджають на 30% швидше'),
       {
-        id: 'assemble_fifteen', kind: 'do', zoneKind: 'bench',
+        id: 'assemble_fifteen', kind: 'do', viaLoop: true,
         why: 'Стеж, щоб обидва верстаки не стояли',
         have: (game) => stats(game).assembled ?? 0,
         done: (game) => (stats(game).assembled ?? 0) >= 15,
@@ -195,7 +205,7 @@ export const QUEST_ACTS = Object.freeze([
       hireRole('seller', 'Готові дрони самі йдуть до скриньки'),
       buyUpgrade('iron_3', 'soldering', 3, 'Якість 80–92% — і твої техніки теж кращі'),
       {
-        id: 'quality_85', kind: 'do', zoneKind: 'bench',
+        id: 'quality_85', kind: 'do', viaLoop: true,
         why: 'Станція дає таку якість сама — треба лише не забирати комплект зарано',
         have: (game) => Math.round((stats(game).bestQuality ?? 0) * 100),
         done: (game) => (stats(game).bestQuality ?? 0) >= 0.85,
@@ -254,7 +264,7 @@ export const QUEST_ACTS = Object.freeze([
         },
       },
       {
-        id: 'endgame_rate', kind: 'do', zoneKind: 'bench',
+        id: 'endgame_rate', kind: 'do', viaLoop: true,
         why: 'Дивись на $/сек угорі екрана',
         // Єдиний крок, чий прогрес не в стані гри, а в журналі продажів —
         // тому його `have` приходить збоку (див. activeQuest).
@@ -317,6 +327,13 @@ export function trackIntroduced(game, trackId) {
   return nextBuyTrack(game) === trackId
 }
 
+// Чи активний крок робиться грою петлі. Тоді стрілка петлі мусить працювати
+// НАВІТЬ після того, як підказки замовкли: гра просить крутити петлю, отже
+// показувати наступний фізичний крок — це рівно те, що зараз доречно.
+export function questIsLoop(game) {
+  return QUEST_CHAIN[questIndex(game)]?.viaLoop === true
+}
+
 // Трек найближчої покупки в ланцюгу — те, що гравця попросять купити наступним.
 //
 // «Наступний» тут означає «наступний, який тут узагалі можна купити»: кроки, що
@@ -377,6 +394,8 @@ export function activeQuest(game) {
 export function questZoneKind(game) {
   const step = QUEST_CHAIN[questIndex(game)]
   if (!step) return null
+  // Крок, який робиться петлею, свого місця не має — стрілку веде петля.
+  if (step.viaLoop) return null
   if (step.kind === 'buy') {
     const got = step.resolve(game)
     if (!got || game.money < (got.need ?? 0)) return null

@@ -769,7 +769,6 @@ const questCard = () => page.evaluate(() => {
   const el = document.querySelector('#quest-tracker .quest')
   return el ? {
     title: el.querySelector('.quest__title')?.textContent.trim(),
-    count: el.querySelector('.quest__count')?.textContent.trim(),
     meta:  el.querySelector('.quest__meta')?.textContent.trim() ?? null,
     hint:  el.querySelector('.quest__hint')?.textContent.trim() ?? null,
     why:   el.querySelector('.quest__why')?.textContent.trim() ?? null,
@@ -796,14 +795,22 @@ const arrowAt = (kind) => page.evaluate((k) => {
 // Рівно ОДНА картка — ні списку, ні кнопки «ще N»: це і є Р1.
 await boot(seedState({}, { money: 120 }))
 await page.waitForTimeout(600)
-const pCount = await page.evaluate(() => ({
-  cards: document.querySelectorAll('#quest-tracker .quest').length,
-  more:  !!document.querySelector('#quest-more'),
-  hint:  !!document.getElementById('hud-hint'),
-}))
+const pCount = await page.evaluate(() => {
+  const el   = document.getElementById('quest-tracker')
+  const gear = document.querySelector('.settings-btn')
+  return {
+    cards: document.querySelectorAll('#quest-tracker .quest').length,
+    more:  !!document.querySelector('#quest-more'),
+    hint:  !!document.getElementById('hud-hint'),
+    // Картка переїхала вгору під кнопку налаштувань: унизу вона лежала під
+    // великим пальцем і в найгіршому місці для читання кутиком ока.
+    underGear: el.getBoundingClientRect().top >= gear.getBoundingClientRect().bottom - 1,
+    noStepNumber: !el.querySelector('.quest__count'),
+  }
+})
 const pFirst = await questCard()
 console.log(`  cards=${pCount.cards} more-button=${pCount.more} old-bottom-hint=${pCount.hint}`)
-console.log(`  "${pFirst?.title}" ${pFirst?.count} · крок петлі: "${pFirst?.step}"`)
+console.log(`  "${pFirst?.title}" · крок петлі: "${pFirst?.step}"`)
 
 // Крок-покупка: смужка в грошах, стрілка на шафу — але лише коли грошей досить.
 // $100 навмисно: менше за паяльник ($150), але більше за найдешевший комплект
@@ -816,6 +823,9 @@ const pArrowPoor = await arrowAt('rack')
 await page.evaluate(() => { globalThis.__world.game = { ...globalThis.__world.game, money: 9999 } })
 await page.waitForTimeout(500)
 const pRich  = await questCard()
+// Стрілка після перших кроків ланцюга живе лише на запит — тап по картці.
+await page.click('#quest-tracker .quest')
+await page.waitForTimeout(400)
 const pArrowRich = await arrowAt('rack')
 console.log(`  "${pPoor?.title}" ${pPoor?.meta} → стрілка на шафу: ${pArrowPoor} (грошей нема)`)
 console.log(`  з грошима: ${pRich?.meta} ready=${pRich?.ready} → стрілка на шафу: ${pArrowRich}`)
@@ -830,7 +840,7 @@ await boot(seedState({}, { money: 9999, ordersPlaced: 9, stats: P_STATS,
                solderPoints: [0.9, 0.9], quality: null, coldPenalty: 0 }] }))
 await page.waitForTimeout(600)
 const pBurnt = await questCard()
-console.log(`  без грошей: "${pBroke?.title}" · зі згорілим: "${pBurnt?.title}" (${pBurnt?.count ?? 'без номера'})`)
+console.log(`  без грошей: "${pBroke?.title}" · зі згорілим: "${pBurnt?.title}"`)
 
 // Виконуємо крок через шафу — картка змінюється, тост з'являється.
 await boot(seedState({}, { money: 9999, ordersPlaced: 3, stats: P_STATS }))
@@ -975,16 +985,17 @@ const checks = [
   // Стадія 9 / Р1–Р2: одна картка, без списку, і нижньої панелі підказок немає.
   ['H: the room announces what it brought', (hCard ?? 0) >= 4],
   ['P: exactly one card on screen',        pCount.cards === 1 && pCount.more === false],
+  ['P: the card sits under the settings button', pCount.underGear === true],
+  ['P: no step number is promised',        pCount.noStepNumber === true],
   ['P: the old bottom hint bar is gone',   pCount.hint === false],
   ['P: the loop step rides inside the card', !!pFirst?.step],
   ['P: a one-off action shows no 0/1 bar', pFirst?.meta === null],
   ['P: a purchase shows a money bar',      !!pPoor?.meta && pPoor.meta.includes('$')],
   ['P: no arrow to the rack while broke',  pArrowPoor === false],
-  ['P: the arrow turns to the rack once affordable', pArrowRich === true],
+  ['P: a tap on the card brings the arrow back', pArrowRich === true],
   // Вставки: ціль ланцюга чекає, поки цех застряг.
   ['P: an empty till interrupts the goal', pBroke?.title?.includes('смітник')],
   ['P: a burnt kit interrupts the goal',   pBurnt?.title?.includes('згорілий')],
-  ['P: and an interrupt carries no step number', !pBurnt?.count],
   ['P: finishing a step announces itself', !!pToast],
   ['P: and the card moves on to the next one', !!pAfter && pAfter.title !== pGoalTitle],
   // Р5: шафа показує лише введені треки, викуплений рядок зникає.

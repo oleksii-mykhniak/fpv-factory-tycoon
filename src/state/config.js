@@ -288,6 +288,19 @@ export const AGENT_SEPARATION_W = 0.55
 // No progress for this long while following a path = re-plan.
 export const STUCK_TIMEOUT_MS = 700
 
+// ── Стрілка-провідник (Стадія 9, фікс після валідації) ───
+//
+// Стрілка вчить петлю, а потім починає мозолити око: вона показує на місце, куди
+// гравець і сам збирався, і робить це весь час. Тому вона безумовна лише поки
+// ланцюг квестів вчить основи — перші кроки, — а далі з'являється НА ЗАПИТ:
+// тап по картці цілі означає «покажи, куди йти».
+//
+// Скільки перших кроків ланцюга стрілка веде без запиту.
+export const ARROW_FREE_STEPS = 5
+// Скільки триває показ після тапу. Достатньо, щоб дійти через кімнату й не
+// озиратись, і замало, щоб стрілка знову стала фоном.
+export const ARROW_REQUEST_MS = 20_000
+
 // ── Onboarding (C7) ──────────────────────────────────────
 // The objective arrow and the running hint line are training wheels: they run
 // for the first few orders and then get out of the way.
