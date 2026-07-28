@@ -3,6 +3,7 @@ import { saveGame, loadGame, clearSave } from './save/storage.js'
 import {
   createState, Phase, DeliveryStatus,
   createStation, stationsOf, KIT_TYPES,
+  piggyTapValue, piggyPayoutCap,
 } from './state/gameState.js'
 import { ADS_ENABLED, SCRAP_CONSOLATION, INPUT_DEADZONE } from './state/config.js'
 import { levelData } from './state/upgrades.js'
@@ -24,7 +25,6 @@ import { dispatch, piggyAvailable } from './sim/commands.js'
 import { settleOffline } from './sim/offline.js'
 import {
   playerStation, guidanceActive, ironIsHandsOff, incomePerSec, arrowAllowed,
-  nextPurchase,
 } from './sim/derive.js'
 import { SYSTEMS } from './sim/systems/index.js'
 
@@ -452,8 +452,7 @@ function renderUI() {
   // вирішує нічого не малювати. Поки прилад ховався на нулі, розбіжність була
   // непомітна; тепер він стоїть завжди, і завмерле число читалось би як
   // поламане. Це три присвоєння тексту, не варті власного кешу.
-  hud.update(world.game, incomePerSec(world.salesLog, world.now),
-             nextPurchase(world.game), world.now)
+  hud.update(world.game, incomePerSec(world.salesLog, world.now), world.now)
 
   // Every state transition returns a fresh object, so identity is a reliable
   // dirty check — it keeps the DOM work off the 20 Hz tick. Carried items are
@@ -629,7 +628,12 @@ async function offerSaleBonus() {
 
 function openMinigame(game, agentId) {
   if (game === 'piggy') {
-    if (piggyAvailable(world)) piggyModal.open()
+    // Скільки коштує тап і скільки дасть повний сеанс — рахує стан: скарбничка
+    // мусить вистачати рівно на найдешевший комплект ТУТ, а не на стартову ціну.
+    if (piggyAvailable(world)) piggyModal.open({
+      tapValue: piggyTapValue(world.game),
+      cap:      piggyPayoutCap(world.game),
+    })
     return
   }
   if (game === 'scrap') {

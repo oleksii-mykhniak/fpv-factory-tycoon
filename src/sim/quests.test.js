@@ -248,6 +248,36 @@ describe('стрілка', () => {
     const w = world(withStats({ money: 9999, ordersPlaced: 99 }, { assembled: 3, sold: 3 }))
     expect(nextObjective(w, INTERACTIONS).kind).toBe('rack')
   })
+
+  // Три випадки з валідації на пристрої. Спільна причина: почату дію рахував
+  // лише `loopObjective`, який мовчить після підказок, — і слово брало те, куди
+  // гравець ЩОЙНО ходив.
+  it('з брухтом у руках стрілка йде на верстак, а не назад у смітник', () => {
+    // Каса порожня і підказки давно вимкнено: рівно та ситуація, де вставка
+    // «розбери брухт» перебивала все і вела назад до смітника.
+    const w = world(withStats({ money: 0, ordersPlaced: 99 }, { assembled: 9, sold: 9 }))
+    const player = w.agents.find(a => a.kind === 'player')
+    player.carrying = [{ type: 'scrap' }]
+    expect(interruptQuest(w.game)?.zoneKind).toBe('trashbin')  // вставка ще активна
+    expect(nextObjective(w, INTERACTIONS).kind).toBe('bench')
+  })
+
+  it('з дроном у руках стрілка йде на скриньку, хай що каже ланцюг', () => {
+    const w = world(withStats({ money: 9999, ordersPlaced: 99 }, { assembled: 3, sold: 3 }))
+    const player = w.agents.find(a => a.kind === 'player')
+    player.carrying = [{ type: 'drone', kitId: 'mini_drone' }]
+    expect(nextObjective(w, INTERACTIONS).kind).toBe('mailbox')
+  })
+
+  it('поки кур\'єр їде, стрілка не повертає до ноутбука', () => {
+    // Замовлення вже зроблено — вести назад до столу означає просити зробити
+    // те саме вдруге. Кілька секунд без стрілки і є правильна відповідь.
+    const s = withStats({ money: 9999, ordersPlaced: 1 }, { assembled: 0, sold: 0 })
+    const inTransit = { ...s, deliveries: [
+      { id: 'd1', kitId: 'mini_drone', slotIndex: 0, readyAt: T0 + 60_000, status: 'transit' },
+    ] }
+    expect(nextObjective(world(inTransit), INTERACTIONS)?.kind).not.toBe('desk')
+  })
 })
 
 describe('прогресивне розкриття поліпшень (Р5)', () => {

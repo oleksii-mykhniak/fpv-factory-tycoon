@@ -1,4 +1,5 @@
 import * as ex from 'excalibur'
+import { frameMs } from './frame.js'
 
 // Shared walk-cycle rig for every humanoid in the scene.
 //
@@ -37,7 +38,7 @@ export function createTileCharacter(actor, frontImage, sideImage) {
 
   actor.on('preupdate', (evt) => {
     if (moving) {
-      phase += (evt.delta ?? 16) / 90
+      phase += frameMs(evt) / 90
       // Lift by a fraction of the sprite's own height, so it scales with zoom.
       actor.graphics.offset = ex.vec(0, -Math.abs(Math.sin(phase)) * actor.height * 0.10)
     } else {

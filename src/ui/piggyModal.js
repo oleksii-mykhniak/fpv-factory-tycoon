@@ -1,4 +1,4 @@
-import { PIGGY_TAP_VALUE, PIGGY_DURATION_MS, PIGGY_MAX_PAYOUT } from '../state/config.js'
+import { PIGGY_DURATION_MS, PIGGY_MIN_PAYOUT, PIGGY_FULL_TAPS } from '../state/config.js'
 
 export function createPiggyModal(root, { onCollect, adsEnabled = false, onRewardedRequest }) {
   const overlay = document.createElement('div')
@@ -42,10 +42,18 @@ export function createPiggyModal(root, { onCollect, adsEnabled = false, onReward
   let startTs = 0
   let taps    = 0
   let doubled = false
+  // Ціна тапу і стеля приходять зі стану при відкритті (фікс після валідації):
+  // скарбничка мусить давати рівно на найдешевший комплект, а він дорожчає з
+  // Mk та оптовими множниками. Значення за замовчуванням — стартові, щоб модалка
+  // лишалась самодостатньою в тестах.
+  let tapValue = PIGGY_MIN_PAYOUT / PIGGY_FULL_TAPS
+  let capValue = PIGGY_MIN_PAYOUT
 
   function currentPayout() {
-    return Math.min(taps * PIGGY_TAP_VALUE, PIGGY_MAX_PAYOUT)
+    return Math.min(taps * tapValue, capValue)
   }
+
+  const fmt = (v) => v >= 10 ? Math.round(v) : v.toFixed(1)
 
   function spawnCoin(x, y) {
     const coin = document.createElement('span')
@@ -61,7 +69,7 @@ export function createPiggyModal(root, { onCollect, adsEnabled = false, onReward
     e.preventDefault()
     taps++
     tapsEl.textContent = taps
-    earnEl.textContent = `$${currentPayout()}`
+    earnEl.textContent = `$${fmt(currentPayout())}`
 
     emojiEl.classList.remove('piggy-emoji--shake')
     void emojiEl.offsetWidth
@@ -86,7 +94,7 @@ export function createPiggyModal(root, { onCollect, adsEnabled = false, onReward
     if (rafId) { cancelAnimationFrame(rafId); rafId = null }
 
     doubled = false
-    resultAmt.textContent = `$${currentPayout()}`
+    resultAmt.textContent = `$${fmt(currentPayout())}`
     if (adsEnabled) {
       rewardedBtn.removeAttribute('hidden')
     }
@@ -116,13 +124,15 @@ export function createPiggyModal(root, { onCollect, adsEnabled = false, onReward
     const granted = onRewardedRequest ? await onRewardedRequest() : false
     if (granted) {
       doubled = true
-      const newPayout = Math.min(currentPayout() * 2, PIGGY_MAX_PAYOUT * 2)
-      resultAmt.textContent = `$${newPayout}`
+      const newPayout = Math.min(currentPayout() * 2, capValue * 2)
+      resultAmt.textContent = `$${fmt(newPayout)}`
     }
     doCollect()
   })
 
-  function open() {
+  function open({ tapValue: tv, cap } = {}) {
+    if (tv > 0)  tapValue = tv
+    if (cap > 0) capValue = cap
     taps = 0
     doubled = false
     tapsEl.textContent = '0'

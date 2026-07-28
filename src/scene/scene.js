@@ -10,6 +10,7 @@ import {
 } from '../state/config.js'
 import { loadSprites, getSprite } from './loader.js'
 import { createCharacterSprite, createTileCharacter } from './character.js'
+import { frameMs } from './frame.js'
 import { roleColor, roleBadge } from '../defs/roles.js'
 
 // How many carried items the stack can show at once. The gameplay limit is
@@ -364,7 +365,7 @@ function createBenchProgress(scene, benchActor) {
   add(barFill)
   barFill.on('preupdate', (evt) => {
     if (!running) return
-    elapsed += evt.delta
+    elapsed += frameMs(evt)
     const p = Math.max(Math.min(elapsed / duration, 1), 0.01)
     const fillW = Math.max(BAR_W * p, 2)
     barFill.graphics.use(new ex.Rectangle({ width: fillW, height: BAR_H + 2, color: ex.Color.fromHex('#7aa0ff') }))
@@ -393,7 +394,7 @@ function createBenchProgress(scene, benchActor) {
   let toastAge = 0, toastDur = 0, toasting = false
   toastCard.on('preupdate', (evt) => {
     if (!toasting) return
-    toastAge += evt.delta
+    toastAge += frameMs(evt)
     if (toastAge >= toastDur) {
       toasting = false
       toastCard.graphics.visible = false
@@ -802,7 +803,7 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     const st = { lbl, age: 0, live: false, x: 0, y: 0 }
     lbl.on('preupdate', (evt) => {
       if (!st.live) return
-      st.age += evt.delta
+      st.age += frameMs(evt)
       if (st.age >= FLOAT_MS) {
         st.live = false
         lbl.graphics.visible = false

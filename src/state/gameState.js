@@ -1,7 +1,7 @@
 import {
   STARTING_MONEY,
   PRICE_BASE_COEFF, PRICE_QUALITY_COEFF,
-  PIGGY_COOLDOWN_MS, PIGGY_TAP_VALUE, PIGGY_MAX_PAYOUT,
+  PIGGY_COOLDOWN_MS, PIGGY_FULL_TAPS, PIGGY_MIN_PAYOUT,
   STORAGE_SLOTS_BY_LEVEL, LOGISTICS_DELIVERY_MULT,
   MK_MAX, MK_COST_GROWTH, MK_PRICE_GROWTH, MK_DELIVERY_GROWTH,
   MK_UPGRADE_COST_FACTOR, MK_FINAL_COST_MULT,
@@ -11,7 +11,7 @@ import { UPGRADE_TRACKS, trackMaxLevel, nextCost, salePriceMult, kitCostMult, de
 import { KIT_TYPES, kitMark, markUnlockOf, markUnlocked } from './kits.js'
 import {
   capFor, canMoveToLocation, LOCATIONS, hiringAllowed, roleCapHere, roleCapInHall,
-  startMoneyAt, freezeCapsFor, ruleAt, mkCapFor,
+  startMoneyAt, freezeCapsFor, ruleAt, mkCapFor, kitsForLocation,
 } from './locations.js'
 import { hireCost, roleDef, ROLE_ORDER, promoteCost } from '../defs/roles.js'
 import { FACTORY_HALL_IDS, FIRST_HALL_ID, hallDef } from '../defs/layouts/factory.js'
@@ -195,6 +195,24 @@ export function kitCost(state, kitTypeId) {
   if (!kit) return Infinity
   // Безкоштовний комплект (утиль) лишається безкоштовним: множник на нулі — нуль.
   return kit.cost * kitCostMult(state) * Math.pow(MK_COST_GROWTH, kitMark(state, kitTypeId))
+}
+
+// Найдешевший комплект, який гравець справді може купити ТУТ і ЗАРАЗ.
+//
+// Живе поруч із `kitCost`, бо це та сама арифметика: безкоштовний утиль — не
+// покупка й не рахується, оптові множники й Mk рахуються. Від цього числа
+// залежить, чи гра вважає гравця застряглим (скарбничка, смітник, безкоштовний
+// комплект), тож два різні уявлення про нього вже раз розійшлись на місяць.
+//
+// Каталог локації, а не всі типи взагалі: mini, який тут ніхто не продає, не
+// рятує з глухого кута на фабриці.
+export function cheapestKitCost(state) {
+  const here = kitsForLocation(state).filter(id => KIT_TYPES[id]?.cost > 0)
+  const pool = here.length
+    ? here
+    : Object.keys(KIT_TYPES).filter(id => KIT_TYPES[id].cost > 0)
+  const costs = pool.map(id => kitCost(state, id))
+  return costs.length ? Math.min(...costs) : Infinity
 }
 
 // Базова ціна продажу з урахуванням Mk. Росте швидше за собівартість — саме
@@ -575,9 +593,23 @@ export function canOpenPiggy(state, now = Date.now()) {
     : { can: false, remainingMs: remaining }
 }
 
+// Скільки скарбничка може дати за один сеанс: рівно на найдешевший комплект,
+// який гравець МОЖЕ тут замовити — з оптовими множниками й Mk. Нижче
+// PIGGY_MIN_PAYOUT не опускається, щоб на старті вона лишалась тією ж самою.
+export function piggyPayoutCap(state) {
+  const need = cheapestKitCost(state)
+  return Number.isFinite(need) ? Math.max(PIGGY_MIN_PAYOUT, Math.ceil(need)) : PIGGY_MIN_PAYOUT
+}
+
+// Ціна одного тапу. Зусилля на повну виплату не залежить від того, скільки
+// коштує комплект: PIGGY_FULL_TAPS тапів — це завжди стеля.
+export function piggyTapValue(state) {
+  return piggyPayoutCap(state) / PIGGY_FULL_TAPS
+}
+
 // Awards money for taps (capped), sets lastPiggyAt. Pure/immutable.
 export function collectPiggy(state, taps, now = Date.now()) {
-  const payout = Math.min(taps * PIGGY_TAP_VALUE, PIGGY_MAX_PAYOUT)
+  const payout = Math.min(taps * piggyTapValue(state), piggyPayoutCap(state))
   return { ...state, money: state.money + payout, lastPiggyAt: now }
 }
 

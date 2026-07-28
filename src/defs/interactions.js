@@ -219,7 +219,10 @@ export const INTERACTIONS = {
     // безкоштовний дрон із брухту дешевий, і стрілка, яка тягне до смітника
     // при повній касі, вчила б грати гірше. `enabled` — «тут щось станеться»,
     // `attention` — «сюди зараз варто».
-    attention: (world) => world.game.money < cheapestKitCost,
+    // `cheapestKitCost(world.game)`, а не `cheapestKitCost`: без виклику це
+    // порівняння числа з функцією, тобто завжди false — смітник не світився
+    // навіть на порожній касі.
+    attention: (world) => world.game.money < cheapestKitCost(world.game),
     run(world, _zone, agent, events) {
       world.game = beginScrapRun(world.game)
       emit(events, EV.MINIGAME_REQUESTED, { agentId: agent.id, game: 'scrap' })

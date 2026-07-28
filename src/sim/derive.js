@@ -9,7 +9,7 @@
 import {
   KIT_TYPES, busyStations, idleStations, Phase, stationsOf, nextHireCost, freeSlots, kitCost,
   workersInRole, nextHallId, canUnlockHall, nextRoomId, canUnlockRoom,
-  calcPrice, kitBasePrice,
+  calcPrice, kitBasePrice, DeliveryStatus, cheapestKitCost,
 } from '../state/gameState.js'
 import {
   GUIDANCE_ORDERS, GUIDANCE_SCRAP_RUNS, MANAGER_RESERVE, INCOME_WINDOW_MS,
@@ -26,19 +26,10 @@ import { hallDef } from '../defs/layouts/factory.js'
 import { ROLE_ORDER, roleLevelData } from '../defs/roles.js'
 import { questZoneKind, questIsLoop, questIndex, trackIntroduced } from './quests.js'
 
-// Cheapest kit the player could actually buy. Free kits (scrap) are not
-// purchases and must not count.
-//
-// Стало функцією стану (Стадія 10 / A2): оптові закупки рухають собівартість,
-// і константа, порахована з базових цін, почала б відповідати на «чи гравець
-// на мілині» вчорашніми грошима. А це питання вирішує, чи з'явиться скарбничка
-// й безкоштовний комплект, — тобто чи є в сейва вихід із глухого кута взагалі.
-export function cheapestKitCost(game) {
-  const costs = Object.keys(KIT_TYPES)
-    .filter(id => KIT_TYPES[id].cost > 0)
-    .map(id => kitCost(game, id))
-  return costs.length ? Math.min(...costs) : Infinity
-}
+// Найдешевший комплект переїхав у gameState (поруч із `kitCost`, з якого й
+// рахується) і ре-експортується звідси: споживачів у нього багато, і всі вони
+// звикли брати «чи гравець на мілині» саме тут.
+export { cheapestKitCost }
 
 // The piggy bank is a rescue: it shows only when the player is stuck — too poor
 // for any kit, with nothing already in flight.
@@ -138,19 +129,6 @@ export function purchaseOptions(game) {
 // better iron is not something that has to wait for the current drone.
 export function upgradeNeedsAttention(game) {
   return purchaseOptions(game).some(o => !o.blocked && game.money >= o.cost)
-}
-
-// The cheapest thing still out of reach — what the HUD's progress bar fills
-// towards (Стадія 10 / D2). Null when everything on offer is already
-// affordable (the badge is showing instead) or there is nothing left to buy.
-//
-// Blocked options are skipped: a bar creeping towards a move the player cannot
-// make until they own the garage is a promise the rack will not keep.
-export function nextPurchase(game) {
-  const reachable = purchaseOptions(game)
-    .filter(o => !o.blocked && Number.isFinite(o.cost) && game.money < o.cost)
-    .sort((a, b) => a.cost - b.cost)
-  return reachable[0] ?? null
 }
 
 // The board: hiring is allowed here, and some role has both room and a price
@@ -384,13 +362,40 @@ export function nextObjective(world, interactions) {
   if (!player) return null
   if (!arrowAllowed(world)) return null
 
-  const nearest = (kind) => {
-    const zones = (world.zones ?? []).filter(z => z.kind === kind)
+  const nearest = (kind, live = false) => {
+    const zones = (world.zones ?? []).filter(z =>
+      z.kind === kind && (!live || interactions[kind]?.enabled(world, z, player)))
     if (!zones.length) return null
     return zones.reduce((best, z) =>
       Math.hypot(z.cx - player.x, z.cy - player.y) <
       Math.hypot(best.cx - player.x, best.cy - player.y) ? z : best)
   }
+
+  // Те, що вже почато, — раніше за все інше і БЕЗ огляду на підказки.
+  //
+  // Фікс після валізації: стрілка залишалась на смітнику з брухтом у руках і
+  // на ноутбуці із замовленим комплектом. Обидва рази з тієї самої причини —
+  // почату дію рахував лише `loopObjective`, який мовчить, коли підказки вже
+  // вимкнено, і тоді слово брала вставка («порожня каса» → смітник) або ціль
+  // ланцюга (→ ноутбук). А місце, куди гравець щойно сходив, — це найгірше з
+  // усього, на що стрілка може показувати: воно каже «повернись», коли робота
+  // насправді вже в руках.
+  const carrying = (player.carrying ?? []).map(i => i.type)
+  if (carrying.includes('drone')) {
+    const box = nearest('mailbox')
+    if (box) return box
+  }
+  if (carrying.includes('kit_box') || carrying.includes('scrap')) {
+    const bench = nearest('bench', true)
+    if (bench) return bench
+  }
+
+  // Кур'єр у дорозі. Коробка ще не тут, вести до порожнього слота нема сенсу, а
+  // назад до ноутбука — тим паче: замовлення вже зроблено. Кілька секунд без
+  // стрілки — це і є правильна відповідь («чекаємо»), і саме її картка квесту
+  // проговорює словами.
+  const pending = (world.game.deliveries ?? []).some(d =>
+    d.status === DeliveryStatus.TRANSIT && d.readyAt > world.now)
 
   // Стрілка петлі працює, поки діють підказки — АБО поки ланцюг просить саму
   // петлю («продай 3 дрони»). Друге дописано після тесту: без нього гра казала
@@ -402,7 +407,7 @@ export function nextObjective(world, interactions) {
   // стрілка тягла до шафи, поки в руках була коробка. Тепер спершу незавершена
   // ФІЗИЧНА дія (щось у руках, готовий дрон на верстаку, згорілий верстак), і
   // лише коли петля чиста — зона активного квесту.
-  const loop = loopObjective(world, interactions, player, general, scrap)
+  const loop = loopObjective(world, interactions, player, general, scrap, false, pending)
   if (loop) return loop
 
   // Вставка (згорілий комплект, порожня каса) — раніше за ціль ланцюга: вона
@@ -415,18 +420,21 @@ export function nextObjective(world, interactions) {
 
   // Ціль ланцюга (Р1) не замовкає разом з підказками: підказки вчать петлю,
   // ланцюг веде по грі, і він потрібен якраз тоді, коли петля вже звична.
-  const quest = nearest(questZoneKind(world.game))
-  if (quest) return quest
+  const questKind = questZoneKind(world.game)
+  if (!(pending && questKind === 'desk')) {
+    const quest = nearest(questKind)
+    if (quest) return quest
+  }
 
   // Стіл — остання інстанція. Замовити ще один комплект завжди «можна», тому
   // без цього розділення стіл забирав стрілку в кожної цілі, поки діють
   // підказки: гроші на паяльник — це майже завжди й гроші на комплект.
-  return loopObjective(world, interactions, player, general, scrap, true)
+  return loopObjective(world, interactions, player, general, scrap, true, pending)
 }
 
 // Найближча корисна зона в межах одного оберту петлі — те, чим стрілка була до
 // Стадії 9. Повертає null, коли робити нічого або підказки вже вимкнено.
-function loopObjective(world, interactions, player, general, scrap, withDesk = false) {
+function loopObjective(world, interactions, player, general, scrap, withDesk = false, pending = false) {
   if (!general && !scrap) return null
 
   // Order matters: finish what is in your hands before starting something new.
@@ -444,7 +452,9 @@ function loopObjective(world, interactions, player, general, scrap, withDesk = f
     // The bin keeps its arrow after the general hints have stopped.
     if (zone.kind === 'trashbin' ? !scrap : !general) continue
     // Стіл розглядається лише в другому заході — після цілі ланцюга (Стадія 9).
-    if (zone.kind === 'desk' && !withDesk) continue
+    // І ніколи, поки їде вже замовлене: коробка в дорозі — це не привід іти
+    // назад до ноутбука.
+    if (zone.kind === 'desk' && (!withDesk || pending)) continue
     const rank = PRIORITY.indexOf(zone.kind)
     if (rank < 0 || rank > bestRank) continue
     const def = interactions[zone.kind]

@@ -11,13 +11,13 @@ import {
   abandonBurntDrone as _abandonBurntDrone,
   applyColdSolderPenalty as _applyColdSolderPenalty,
   calcPrice, calcQuality,
-  canOpenPiggy, collectPiggy,
+  canOpenPiggy, collectPiggy, piggyPayoutCap, piggyTapValue, cheapestKitCost,
   moveToLocation, hireWorker, workersInRole,
   openRoomIds, nextRoomId, canUnlockRoom, unlockRoom,
 } from './gameState.js'
 import {
   SOLDERING_UPGRADE_COSTS, CONSUMABLES_UPGRADE_COSTS,
-  PIGGY_COOLDOWN_MS, PIGGY_TAP_VALUE, PIGGY_MAX_PAYOUT,
+  PIGGY_COOLDOWN_MS, PIGGY_FULL_TAPS, PIGGY_MIN_PAYOUT, MK_COST_GROWTH,
   STORAGE_UPGRADE_COSTS, STORAGE_SLOTS_BY_LEVEL,
   LOGISTICS_UPGRADE_COSTS, LOGISTICS_DELIVERY_MULT,
 } from './config.js'
@@ -532,17 +532,41 @@ describe('Скарбничка (piggy bank)', () => {
     expect(canOpenPiggy(s, Date.now()).can).toBe(true)
   })
 
-  it('collectPiggy: нараховує taps × tap_value', () => {
+  it('collectPiggy: нараховує taps × ціну тапу', () => {
     const now = Date.now()
     const s = createState()
     const result = collectPiggy(s, 10, now)
-    expect(result.money).toBe(s.money + Math.min(10 * PIGGY_TAP_VALUE, PIGGY_MAX_PAYOUT))
+    expect(result.money).toBeCloseTo(s.money + 10 * piggyTapValue(s), 6)
     expect(result.lastPiggyAt).toBe(now)
   })
 
-  it('collectPiggy: не перевищує PIGGY_MAX_PAYOUT', () => {
+  it('collectPiggy: не перевищує стелю сеансу', () => {
     const s = createState()
-    expect(collectPiggy(s, 9999, Date.now()).money).toBe(s.money + PIGGY_MAX_PAYOUT)
+    expect(collectPiggy(s, 9999, Date.now()).money).toBe(s.money + piggyPayoutCap(s))
+  })
+
+  it('стеля — це рівно найдешевший комплект, який тут можна купити', () => {
+    // Суть фікса: зашите число $72 було ціною mini на старті, і після Mk та
+    // оптових множників скарбничка вже не витягала з глухого кута — гравець
+    // тряс її вісім секунд і все одно не міг замовити нічого.
+    const s = createState()
+    expect(piggyPayoutCap(s)).toBe(Math.max(PIGGY_MIN_PAYOUT, Math.ceil(cheapestKitCost(s))))
+
+    // Дорожчі комплекти (Mk) підіймають і стелю.
+    const marked = { ...s, kitMarks: Object.fromEntries(
+      kitsForLocation(s).map(id => [id, 2])) }
+    expect(piggyPayoutCap(marked)).toBeGreaterThan(piggyPayoutCap(s))
+    expect(piggyPayoutCap(marked)).toBe(Math.ceil(cheapestKitCost(marked)))
+    expect(MK_COST_GROWTH).toBeGreaterThan(1)
+  })
+
+  it('повний сеанс тапів завжди дає рівно стелю, хай яка вона', () => {
+    for (const marks of [0, 1, 3]) {
+      const s = { ...createState(), kitMarks: Object.fromEntries(
+        kitsForLocation(createState()).map(id => [id, marks])) }
+      const gained = collectPiggy(s, PIGGY_FULL_TAPS, Date.now()).money - s.money
+      expect(gained).toBeCloseTo(piggyPayoutCap(s), 6)
+    }
   })
 
   it('collectPiggy: 0 тапів → 0 грошей', () => {

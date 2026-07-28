@@ -16,10 +16,6 @@ export function createHUD(root) {
       <span class="hud__rate" id="hud-rate">+$0.00/сек</span>
       <span class="hud__rate-delta" id="hud-rate-delta" hidden></span>
     </div>
-    <div class="hud__next" id="hud-next" hidden>
-      <div class="hud__next-bar"><div class="hud__next-fill" id="hud-next-fill"></div></div>
-      <span class="hud__next-label" id="hud-next-label"></span>
-    </div>
   `
   root.appendChild(el)
 
@@ -37,12 +33,12 @@ export function createHUD(root) {
   // про «що робити» говорили три системи одночасно. Тепер HUD — це гроші, темп
   // і скільки лишилось до наступної покупки; крок петлі рахує `stepHint()`
   // нижче і показує картка квесту.
+  // Смужки «до наступної покупки» тут більше немає: вона стояла під темпом і
+  // читалась як частина приладу доходу, хоч міряла зовсім інше. Що вже по
+  // кишені, показує бейдж на стелажі — одного джерела досить.
   const moneyEl  = el.querySelector('#hud-money')
   const rateEl   = el.querySelector('#hud-rate')
   const deltaEl  = el.querySelector('#hud-rate-delta')
-  const nextEl   = el.querySelector('#hud-next')
-  const fillEl   = el.querySelector('#hud-next-fill')
-  const labelEl  = el.querySelector('#hud-next-label')
 
   // Кожна покупка мусить бути видно на приладі (План Стадії 10 / П4).
   //
@@ -54,7 +50,7 @@ export function createHUD(root) {
   let deltaBase  = null
   let deltaUntil = 0
 
-  function update(state, rate = 0, next = null, now = Date.now()) {
+  function update(state, rate = 0, now = Date.now()) {
     moneyEl.textContent = `$${state.money.toFixed(2)}`
 
     rateEl.textContent = `+$${rate.toFixed(2)}/сек`
@@ -67,20 +63,6 @@ export function createHUD(root) {
     } else {
       deltaEl.setAttribute('hidden', '')
       if (now >= deltaUntil) deltaBase = null
-    }
-
-    // Смужка до наступної покупки. Свідомо НЕ виключає бейдж на стелажі: вони
-    // кажуть різне. Бейдж — «щось уже доступне», смужка — «до наступної віхи
-    // стільки». При $120 флюс по кишені, а паяльник ще ні, і сховати смужку
-    // означало б збрехати про те, куди гравець іде. Зникає вона лише тоді,
-    // коли попереду справді нічого недосяжного немає.
-    if (next && next.cost > 0) {
-      const pct = Math.max(0, Math.min(1, state.money / next.cost))
-      fillEl.style.width  = `${(pct * 100).toFixed(1)}%`
-      labelEl.textContent = `${next.label} · $${Math.ceil(next.cost - state.money)}`
-      nextEl.removeAttribute('hidden')
-    } else {
-      nextEl.setAttribute('hidden', '')
     }
   }
 

@@ -425,10 +425,18 @@ export const KIT_CONFIGS = Object.freeze({
 
 // ── Piggy bank (rescue mini-game) ────────────────────────────
 // Visible only when money < cheapest kit and no active cycle.
-export const PIGGY_TAP_VALUE   = 1        // money per tap
+//
+// Виплата НЕ константа (фікс після валідації Стадії 10). Скарбничка існує рівно
+// для одного: витягнути з глухого кута, тобто дати на найдешевший комплект. Її
+// стеля була зашита числом ($72 — ціна mini на старті), і після першого ж Mk
+// та оптових множників порятунок перестав рятувати: гравець тряс свиню вісім
+// секунд і все одно не міг нічого замовити. Тепер стеля рахується зі стану —
+// `piggyPayoutCap()` — а ціна тапу підганяється так, щоб повна виплата коштувала
+// стільки ж зусиль, скільки й раніше.
 export const PIGGY_DURATION_MS = 8000     // tap window (ms)
 export const PIGGY_COOLDOWN_MS = 900000   // 15 min between sessions
-export const PIGGY_MAX_PAYOUT  = 72       // cap = cheapest kit cost → guaranteed rescue in one session
+export const PIGGY_FULL_TAPS   = 72       // тапів за сеанс на повну виплату
+export const PIGGY_MIN_PAYOUT  = 72       // нижня межа, коли комплект дешевший
 
 // ── Scrap / Tinder mini-game ──────────────────────────────
 // Player swipes good parts right, junk left, to unlock free drone assembly.
