@@ -7,14 +7,14 @@
 // mini-game never appeared).
 
 import {
-  KIT_TYPES, busyStations, idleStations, Phase, stationsOf, nextHireCost, freeSlots,
+  KIT_TYPES, busyStations, idleStations, Phase, stationsOf, nextHireCost, freeSlots, kitCost,
   workersInRole, nextHallId, canUnlockHall, nextRoomId, canUnlockRoom,
 } from '../state/gameState.js'
 import {
   GUIDANCE_ORDERS, GUIDANCE_SCRAP_RUNS, MANAGER_RESERVE, INCOME_WINDOW_MS,
   SALVAGE_RATE, ARROW_FREE_STEPS,
 } from '../state/config.js'
-import { levelData, UPGRADE_TRACKS } from '../state/upgrades.js'
+import { levelData, UPGRADE_TRACKS, trackMaxLevel, nextCost } from '../state/upgrades.js'
 import {
   kitsForLocation, hiringAllowed, roleCapHere, roleCapInHall, capFor, ruleAt,
   canMoveToLocation, LOCATION_ORDER, LOCATIONS,
@@ -22,20 +22,28 @@ import {
 import { roomDef } from '../defs/layouts/rooms.js'
 import { hallDef } from '../defs/layouts/factory.js'
 import { ROLE_ORDER, roleLevelData } from '../defs/roles.js'
-import { questZoneKind, questIsLoop, questIndex } from './quests.js'
+import { questZoneKind, questIsLoop, questIndex, trackIntroduced } from './quests.js'
 
 // Cheapest kit the player could actually buy. Free kits (scrap) are not
 // purchases and must not count.
-export const cheapestKitCost = Math.min(
-  ...Object.values(KIT_TYPES).filter(k => k.cost > 0).map(k => k.cost)
-)
+//
+// Стало функцією стану (Стадія 10 / A2): оптові закупки рухають собівартість,
+// і константа, порахована з базових цін, почала б відповідати на «чи гравець
+// на мілині» вчорашніми грошима. А це питання вирішує, чи з'явиться скарбничка
+// й безкоштовний комплект, — тобто чи є в сейва вихід із глухого кута взагалі.
+export function cheapestKitCost(game) {
+  const costs = Object.keys(KIT_TYPES)
+    .filter(id => KIT_TYPES[id].cost > 0)
+    .map(id => kitCost(game, id))
+  return costs.length ? Math.min(...costs) : Infinity
+}
 
 // The piggy bank is a rescue: it shows only when the player is stuck — too poor
 // for any kit, with nothing already in flight.
 export function piggyShouldShow(game) {
   if (!ruleAt(game, 'hasPiggy')) return false
   const busy = (game.deliveries ?? []).length > 0 || busyStations(game).length > 0
-  return game.money < cheapestKitCost && !busy
+  return game.money < cheapestKitCost(game) && !busy
 }
 
 // ── Does this object want the player's attention? (S2) ────
@@ -50,9 +58,8 @@ export function piggyShouldShow(game) {
 export function shopNeedsAttention(game) {
   if (!idleStations(game).length) return false
   const affordable = kitsForLocation(game)
-    .map(id => KIT_TYPES[id])
-    .filter(k => k && k.cost > 0)
-    .some(k => game.money >= k.cost)
+    .filter(id => KIT_TYPES[id]?.cost > 0)
+    .some(id => game.money >= kitCost(game, id))
   return affordable
 }
 
@@ -79,8 +86,13 @@ export function purchaseOptions(game) {
 
   for (const [id, track] of Object.entries(UPGRADE_TRACKS)) {
     const level = game.upgrades[track.stateKey] ?? 0
-    if (level >= Math.min(track.costs.length, capFor(game, id))) continue
-    out.push({ id: `upgrade:${id}`, label: track.name, cost: track.costs[level] })
+    if (level >= Math.min(trackMaxLevel(id), capFor(game, id))) continue
+    // Те саме правило, за яким трек видно в панелі (Стадія 9 / Р5). Без нього
+    // смужка вела б до «Репутація · $50», гравець дійшов би до стелажа — і не
+    // знайшов там такого рядка: панель ховає невведене, а ці двоє про нього не
+    // знали. Нескінченні треки зробили діру помітною, бо вони доступні завжди.
+    if (!trackIntroduced(game, id)) continue
+    out.push({ id: `upgrade:${id}`, label: track.name, cost: nextCost(id, level) })
   }
 
   // The rack is also where the floor plan is bought: a room at home (П2), a
@@ -166,7 +178,7 @@ export function rescueKitAvailable(game) {
   if (ruleAt(game, 'hasPiggy') || ruleAt(game, 'hasTrash')) return false
   if ((game.deliveries ?? []).length) return false
   if (!idleStations(game).length) return false
-  return game.money < cheapestKitCost
+  return game.money < cheapestKitCost(game)
 }
 
 export const RESCUE_KIT_ID = 'scrap_drone'
@@ -184,10 +196,10 @@ export function managerKitChoice(game, level = 0) {
 
   const tier = roleLevelData('manager', level).tier ?? 0
   const affordable = kitsForLocation(game)
+    .filter(id => KIT_TYPES[id]?.cost > 0)
+    .sort((a, b) => kitCost(game, a) - kitCost(game, b))
+    .filter((id, i) => i <= tier && game.money >= kitCost(game, id) * MANAGER_RESERVE)
     .map(id => KIT_TYPES[id])
-    .filter(k => k && k.cost > 0)
-    .sort((a, b) => a.cost - b.cost)
-    .filter((k, i) => i <= tier && game.money >= k.cost * MANAGER_RESERVE)
 
   return affordable.length ? affordable[affordable.length - 1] : null
 }
@@ -277,7 +289,7 @@ export function scrapGuidanceActive(game) {
 export function interruptQuest(game) {
   const burnt = stationsOf(game).find(s => s.phase === Phase.BURNT)
   if (burnt) {
-    const salvage = (KIT_TYPES[burnt.kitId]?.cost ?? 0) * SALVAGE_RATE
+    const salvage = kitCost(game, burnt.kitId) * SALVAGE_RATE
     return {
       id:       'fix_burnt',
       kind:     'do',
@@ -291,7 +303,7 @@ export function interruptQuest(game) {
   }
 
   // Порожня каса: спершу те, що дає деталі безкоштовно, потім скарбничка.
-  const broke = game.money < cheapestKitCost && !(game.deliveries ?? []).length
+  const broke = game.money < cheapestKitCost(game) && !(game.deliveries ?? []).length
     && !busyStations(game).length
   if (!broke) return null
 

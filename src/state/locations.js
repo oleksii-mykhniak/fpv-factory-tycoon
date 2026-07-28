@@ -100,7 +100,20 @@ export function capFor(state, trackId) {
   // The ceiling is the highest any open room allows, not the sum: the garage
   // does not add levels to the flat's, it raises the bar.
   const caps = loc.upgradeCaps ?? roomUpgradeCaps(openRoomsHere(state))
-  return caps[trackId] ?? Infinity
+
+  // Halls raise ceilings the same way rooms do (Стадія 10 / A3). The factory
+  // states its caps per LOCATION, which was enough while every track was
+  // finite and froze on arrival — but an endless track has to keep growing
+  // with the floor, or the third hall would buy space and nothing to spend on.
+  // Max, not sum, for exactly the reason the rooms use max.
+  //
+  // Gated on the location being hall-based, and that gate is load-bearing:
+  // `openHalls` normalises to at least one hall for ANY save, so reading it at
+  // home would hand the flat the factory's ceilings.
+  const halls = loc.rooms ? [] : openHalls(state.unlockedHalls)
+  const hallCaps = halls.map(h => h.upgradeCaps?.[trackId]).filter(c => c !== undefined)
+  if (!hallCaps.length) return caps[trackId] ?? Infinity
+  return Math.max(caps[trackId] ?? -Infinity, ...hallCaps)
 }
 
 // Which tracks this location stops selling, and at what level. Returns the

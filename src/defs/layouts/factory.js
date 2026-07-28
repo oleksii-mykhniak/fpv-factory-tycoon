@@ -10,7 +10,7 @@
 // discipline that let C7 turn a move into a rebuild instead of a special case.
 
 import { rect, SIZES, WALL_SIDE, WALL_HORIZ } from './buildLayout.js'
-import { u } from '../../state/config.js'
+import { u, ENDLESS_CAP_HALL } from '../../state/config.js'
 
 // A hall is a slice of floor with its own benches and its own payroll.
 //
@@ -18,6 +18,10 @@ import { u } from '../../state/config.js'
 // rather than "you got more". Cost is what makes the third one an ambition.
 // One hall is already wider than the whole garage — arriving has to feel like
 // arriving somewhere, before a single hall is bought.
+// Стелі нескінченних треків — однакові для всіх чотирьох: вони й задумані як
+// один спільний темп, а не як чотири окремі прогресії.
+const endlessCaps = (cap) => ({ reputation: cap, bulk: cap, tooling: cap, courier: cap })
+
 export const FACTORY_HALLS = Object.freeze([
   {
     id: 'hall-1',
@@ -28,6 +32,9 @@ export const FACTORY_HALLS = Object.freeze([
     // run it. Summed over open halls in roleCapHere().
     workerCaps: { courier: 1, tech: 1, seller: 1, manager: 1 },
     cost: 0,
+    // Стеля нескінченних треків росте з цехами (Стадія 10 / A3).
+    upgradeCaps: endlessCaps(ENDLESS_CAP_HALL[0]),
+
   },
   {
     id: 'hall-2',
@@ -38,6 +45,9 @@ export const FACTORY_HALLS = Object.freeze([
     // a second would only race the first to the same laptop.
     workerCaps: { courier: 1, tech: 1, seller: 1, manager: 0 },
     cost: 2400,
+    // Стеля нескінченних треків росте з цехами (Стадія 10 / A3).
+    upgradeCaps: endlessCaps(ENDLESS_CAP_HALL[1]),
+
     // Те саме, що й у кімнат квартири (Стадія 9 / Р4): відкрита одиниця
     // простору сама розповідає, що з нею приїхало.
     unlocks: [
@@ -53,6 +63,9 @@ export const FACTORY_HALLS = Object.freeze([
     benches: 2,
     workerCaps: { courier: 1, tech: 1, seller: 1, manager: 0 },
     cost: 6800,
+    // Стеля нескінченних треків росте з цехами (Стадія 10 / A3).
+    upgradeCaps: endlessCaps(ENDLESS_CAP_HALL[2]),
+
     unlocks: [
       '🔧 Два верстаки',
       "🧑‍🔧 Три вакансії: кур'єр, технік, продавець",

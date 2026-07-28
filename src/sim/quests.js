@@ -39,9 +39,9 @@
 
 import {
   KIT_TYPES, nextHireCost, workersInRole, nextRoomId, canUnlockRoom,
-  nextHallId, canUnlockHall,
+  nextHallId, canUnlockHall, kitCost,
 } from '../state/gameState.js'
-import { UPGRADE_TRACKS } from '../state/upgrades.js'
+import { UPGRADE_TRACKS, levelData, nextCost } from '../state/upgrades.js'
 import {
   kitsForLocation, capFor, roleCapHere, canMoveToLocation,
   LOCATION_ORDER, LOCATIONS, roomIsOpen,
@@ -78,11 +78,10 @@ const buyUpgrade = (id, trackId, target, why) => ({
   moot: (game) => capFor(game, trackId) < target,
   done: (game) => level(game, trackId) >= target,
   resolve(game) {
-    const track = UPGRADE_TRACKS[trackId]
-    const from  = level(game, trackId)
-    const next  = track.levels[from + 1]
+    const from = level(game, trackId)
+    const next = levelData(trackId, from + 1)
     if (!next) return null
-    return { title: `Купи: ${next.name}`, need: track.costs[from] }
+    return { title: `Купи: ${next.name}`, need: nextCost(trackId, from) }
   },
 })
 
@@ -130,12 +129,13 @@ export const QUEST_ACTS = Object.freeze([
         done: (game) => (game.ordersPlaced ?? 0) >= 1,
         resolve: (game) => {
           const costs = kitsForLocation(game)
-            .map(id => KIT_TYPES[id]?.cost ?? 0).filter(c => c > 0)
+            .filter(id => (KIT_TYPES[id]?.cost ?? 0) > 0)
+            .map(id => kitCost(game, id))
           return {
             title: 'Замов перший комплект',
             need:  1,
             // Тут смужка — не гроші, тому ціну кажемо текстом.
-            hint:  costs.length ? `Ноутбук на кухні · від $${Math.min(...costs)}` : null,
+            hint:  costs.length ? `Ноутбук на кухні · від $${Math.round(Math.min(...costs))}` : null,
           }
         },
       },
@@ -158,6 +158,11 @@ export const QUEST_ACTS = Object.freeze([
       buyUpgrade('iron_1', 'soldering', 1, 'Зона пайки ширша, перегрів рідший'),
       sellCount('sell_racing', 1, 'Продай гоночний дрон',
         'Дорожчий комплект — більша маржа', 'racing_drone'),
+      // Перший нескінченний трек (Стадія 10 / A). Вводиться тут навмисно: він
+      // найзрозуміліший із чотирьох («ціна продажу +2%») і приходить одразу
+      // після кроку, де гравець уперше побачив, що дорожчий дрон дає більше.
+      buyUpgrade('reputation_1', 'reputation', 1,
+        'Перший трек без стелі — його можна качати нескінченно'),
       buyUpgrade('flux_1', 'consumables', 1, 'Перегрів −30%'),
       buyUpgrade('iron_2', 'soldering', 2, 'Верстак паяє сам, поки ти біля нього'),
       sellCount('sell_cine', 1, 'Продай кінематографічний дрон',
@@ -193,6 +198,7 @@ export const QUEST_ACTS = Object.freeze([
       hireRole('tech', 'Верстак працює, поки тебе там немає'),
       sellCount('sell_ten', 10, 'Продай 10 дронів',
         'Двома верстаками це вдвічі швидше'),
+      buyUpgrade('bulk_1', 'bulk', 1, 'Комплекти дешевшають — маржа росте з другого боку'),
       buyUpgrade('storage_1', 'storage', 1, 'Дві доставки в дорозі одночасно'),
       buyUpgrade('logistics_1', 'logistics', 1, 'Комплекти приїжджають на 30% швидше'),
       {
@@ -211,6 +217,7 @@ export const QUEST_ACTS = Object.freeze([
         done: (game) => (stats(game).bestQuality ?? 0) >= 0.85,
         resolve: () => ({ title: 'Збери дрон якістю 85%', need: 85 }),
       },
+      buyUpgrade('tooling_1', 'tooling', 1, 'Якість росте й у твоїх руках, і в техніка'),
       buyUpgrade('flux_2', 'consumables', 2, 'Умова переїзду на фабрику'),
       {
         id: 'move_factory', kind: 'buy', zoneKind: 'rack',
@@ -263,6 +270,8 @@ export const QUEST_ACTS = Object.freeze([
           }
         },
       },
+      buyUpgrade('courier_1', 'courier', 1,
+        'Останній із чотирьох треків без стелі — далі росте тільки темп'),
       {
         id: 'endgame_rate', kind: 'do', viaLoop: true,
         why: 'Дивись на $/сек угорі екрана',

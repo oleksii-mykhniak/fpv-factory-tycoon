@@ -12,6 +12,8 @@
 // (та сама нормалізація, що й в openHalls: сейв не може описати гараж без
 // квартири).
 
+import { ENDLESS_CAP_FLAT, ENDLESS_CAP_GARAGE } from '../../state/config.js'
+
 export const APARTMENT_ROOMS = Object.freeze([
   {
     id:   'flat',
@@ -23,7 +25,14 @@ export const APARTMENT_ROOMS = Object.freeze([
     kitIds: ['mini_drone', 'racing_drone', 'cinematic_drone'],
     // Перша кімната навмисно ручна: ти і є весь штат.
     workerCaps:  { courier: 0, tech: 0, seller: 0, manager: 0 },
-    upgradeCaps: { soldering: 2, storage: 0, logistics: 0, consumables: 2, benches: 0 },
+    upgradeCaps: {
+      soldering: 2, storage: 0, logistics: 0, consumables: 2, benches: 0,
+      // Нескінченні треки теж мають стелю по простору (Стадія 10 / A3):
+      // трек без стелі, доступний одразу, з'їв би сенс усіх просторових —
+      // навіщо гараж, якщо Репутацію можна качати з кухні до нескінченності.
+      reputation: ENDLESS_CAP_FLAT, bulk: ENDLESS_CAP_FLAT,
+      tooling:    ENDLESS_CAP_FLAT, courier: ENDLESS_CAP_FLAT,
+    },
   },
   {
     id:    'garage',
@@ -38,7 +47,11 @@ export const APARTMENT_ROOMS = Object.freeze([
     // верстаком — це не склад команди, це глухий кут. Менеджер лишається
     // фабричним, тож «працює без мене» — те, заради чого ще переїжджають.
     workerCaps:  { courier: 1, tech: 1, seller: 1, manager: 0 },
-    upgradeCaps: { soldering: 3, storage: 1, logistics: 1, consumables: 2, benches: 1 },
+    upgradeCaps: {
+      soldering: 3, storage: 1, logistics: 1, consumables: 2, benches: 1,
+      reputation: ENDLESS_CAP_GARAGE, bulk: ENDLESS_CAP_GARAGE,
+      tooling:    ENDLESS_CAP_GARAGE, courier: ENDLESS_CAP_GARAGE,
+    },
     // Що саме приїхало з кімнатою (Стадія 9 / Р4).
     //
     // Гараж давав усе це й раніше — і саме тому здавалося, що він не дає

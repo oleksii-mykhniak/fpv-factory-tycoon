@@ -21,7 +21,7 @@ import {
   burnKit, applyColdSolderPenalty,
 } from '../../state/gameState.js'
 import { AUTO_OVERHEAT_SHARE, COLD_SOLDER_QUALITY_PENALTY } from '../../state/config.js'
-import { levelData } from '../../state/upgrades.js'
+import { levelData, salePriceMult, toolingQualityBonus } from '../../state/upgrades.js'
 import { roleLevelData } from '../../defs/roles.js'
 import { EV, emit } from '../events.js'
 
@@ -171,8 +171,12 @@ export function stationSystem(world, dt, events) {
       continue
     }
 
+    // Оснастка додається і тут (Стадія 10 / A2). Якби вона діяла лише на
+    // ручну пайку, трек тихо вимикався б рівно тоді, коли гравець наймає
+    // техніка — тобто саме тоді, коли в нього з'являються гроші його качати.
     const quality = Math.min(1, Math.max(0,
-      source.qualityMin + world.rng() * (source.qualityMax - source.qualityMin)))
+      source.qualityMin + world.rng() * (source.qualityMax - source.qualityMin)
+      + toolingQualityBonus(world.game)))
     world.game = recordSolderPoint(world.game, stationId, quality)
 
     const updated = stationsOf(world.game).find(s => s.id === stationId)
@@ -188,7 +192,7 @@ export function stationSystem(world, dt, events) {
 
     world.game = finishAssembly(world.game, stationId)
     const finished = stationsOf(world.game).find(s => s.id === stationId)
-    const price = calcPrice(kit.basePrice, finished.quality, world.game.upgrades.priceMultiplier)
+    const price = calcPrice(kit.basePrice, finished.quality, salePriceMult(world.game))
 
     idle(rt)
     emit(events, EV.STAGE_DONE, { stationId, total, done, quality, auto: true })

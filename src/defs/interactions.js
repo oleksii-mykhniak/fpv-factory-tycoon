@@ -21,7 +21,9 @@ import {
   pickupDelivery, startAssembly, startScrapAssembly, getStation,
   sell as sellStation, calcPrice, takeOutput, orderKit, abandonBurntDrone,
   workerById, beginScrapRun, idleStations,
+  kitCost,
 } from '../state/gameState.js'
+import { salePriceMult } from '../state/upgrades.js'
 import {
   ZONE_DWELL_INSTANT_MS, ZONE_DWELL_BENCH_MS, ZONE_DWELL_OUTPUT_MS,
   ZONE_DWELL_MAILBOX_MS, ZONE_DWELL_TRASH_MS, ZONE_DWELL_PANEL_MS,
@@ -127,7 +129,7 @@ export const INTERACTIONS = {
       }
       if (station.phase === Phase.BURNT) {
         const kit     = KIT_TYPES[station.kitId]
-        const salvage = (kit?.cost ?? 0) * SALVAGE_RATE
+        const salvage = kit ? kitCost(world.game, kit.id) * SALVAGE_RATE : 0
         world.game = abandonBurntDrone(world.game, stationId, SALVAGE_RATE)
         emit(events, EV.MONEY_GAINED, { amount: salvage, reason: 'salvage' })
         emit(events, EV.BENCH_CLEARED, { reason: 'abandoned', stationId })
@@ -181,7 +183,7 @@ export const INTERACTIONS = {
 
       const kit     = KIT_TYPES[station.kitId]
       const quality = station.quality
-      const price   = calcPrice(kit.basePrice, quality, world.game.upgrades.priceMultiplier)
+      const price   = calcPrice(kit.basePrice, quality, salePriceMult(world.game))
 
       // `at` and `hallId` are what make income measurable (F7): a rolling
       // window needs times, and "which hall paid for itself" needs a place.
@@ -271,7 +273,7 @@ export const INTERACTIONS = {
       // A short cooldown so a rich manager does not fill every slot in one walk.
       world.managerNextOrderAt = world.now + MANAGER_COOLDOWN_MS
       emit(events, EV.DELIVERY_ORDERED, { kitId: kit.id, byAgent: agent.id })
-      emit(events, EV.MONEY_SPENT, { amount: kit.cost, reason: 'order' })
+      emit(events, EV.MONEY_SPENT, { amount: kitCost(world.game, kit.id), reason: 'order' })
       emit(events, EV.STATE_DIRTY)
     },
   },

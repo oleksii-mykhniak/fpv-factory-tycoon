@@ -19,8 +19,9 @@ import {
   calcPrice, getStation, focusStation, idleStations, syncStations,
   hireWorker as hireWorkerState, nextHireCost,
   promoteWorker as promoteWorkerState, workerById,
+  kitCost,
 } from '../state/gameState.js'
-import { levelData, UPGRADE_TRACKS } from '../state/upgrades.js'
+import { levelData, UPGRADE_TRACKS, salePriceMult, toolingQualityBonus } from '../state/upgrades.js'
 import {
   COLD_SOLDER_THRESHOLD, COLD_SOLDER_QUALITY_PENALTY, SALVAGE_RATE,
   ARROW_REQUEST_MS,
@@ -42,7 +43,7 @@ const HANDLERS = {
   order(world, { kitId }, events) {
     const kit = KIT_TYPES[kitId]
     world.game = orderKit(world.game, kitId, world.now, () => `d${world.now}-${world.seq++}`)
-    emit(events, EV.MONEY_SPENT, { amount: kit.cost, reason: 'kit' })
+    emit(events, EV.MONEY_SPENT, { amount: kitCost(world.game, kit.id), reason: 'kit' })
     emit(events, EV.DELIVERY_ORDERED, { kitId })
   },
 
@@ -66,7 +67,7 @@ const HANDLERS = {
     const solder = levelData('soldering', world.game.upgrades.solderingLevel)
     const flux   = levelData('consumables', world.game.upgrades.consumablesLevel ?? 0)
     const effectiveOverheat = solder.overheatChance * flux.overheatMult
-    const boosted = Math.min(1, quality + flux.qualityBonus)
+    const boosted = Math.min(1, quality + flux.qualityBonus + toolingQualityBonus(world.game))
 
     if (boosted < COLD_SOLDER_THRESHOLD) {
       const station = getStation(world.game, id)
@@ -98,7 +99,7 @@ const HANDLERS = {
       emit(events, EV.ASSEMBLY_DONE, {
         stationId: id,
         quality:   finished.quality,
-        price:     calcPrice(kit.basePrice, finished.quality, world.game.upgrades.priceMultiplier),
+        price:     calcPrice(kit.basePrice, finished.quality, salePriceMult(world.game)),
       })
     }
   },
@@ -120,7 +121,7 @@ const HANDLERS = {
     const id = stationId ?? (world.game.stations ?? []).find(s => s.phase === Phase.BURNT)?.id
     if (!id) return
     const kit     = KIT_TYPES[getStation(world.game, id).kitId]
-    const salvage = kit.cost * SALVAGE_RATE
+    const salvage = kitCost(world.game, kit.id) * SALVAGE_RATE
     world.game = abandonBurntDrone(world.game, id, SALVAGE_RATE)
     emit(events, EV.MONEY_GAINED, { amount: salvage, reason: 'salvage' })
     emit(events, EV.BENCH_CLEARED, { reason: 'abandoned' })

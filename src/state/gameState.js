@@ -5,7 +5,7 @@ import {
   STORAGE_SLOTS_BY_LEVEL, LOGISTICS_DELIVERY_MULT,
 } from './config.js'
 
-import { UPGRADE_TRACKS } from './upgrades.js'
+import { UPGRADE_TRACKS, trackMaxLevel, nextCost, salePriceMult, kitCostMult, deliveryMult } from './upgrades.js'
 import { KIT_TYPES } from './kits.js'
 import {
   capFor, canMoveToLocation, LOCATIONS, hiringAllowed, roleCapHere, roleCapInHall,
@@ -154,6 +154,12 @@ export function createState() {
       storageLevel:     0,
       logisticsLevel:   0,
       benchLevel:       0,
+      // Нескінченні числові треки (Стадія 10 / A). Стелі в них немає, тому
+      // жодного `…MaxLevel` поруч не буде: максимум виводить реєстр.
+      reputationLevel:  0,
+      bulkLevel:        0,
+      toolingLevel:     0,
+      courierLevel:     0,
     },
   }
 }
@@ -163,6 +169,19 @@ export function createState() {
 // ціна = база × (BASE_COEFF + QUALITY_COEFF × якість) × множник
 export function calcPrice(basePrice, quality, priceMultiplier = 1) {
   return basePrice * (PRICE_BASE_COEFF + PRICE_QUALITY_COEFF * quality) * priceMultiplier
+}
+
+// Що комплект коштує ПРЯМО ЗАРАЗ (Стадія 10 / A2).
+//
+// `KIT_TYPES[id].cost` — базова ціна, і після появи оптових закупок вона вже
+// не є тим, що спишеться з рахунку. Все, що питає «чи вистачить грошей» або
+// «скільки це коштує», мусить ходити сюди: `kit.cost` напряму — це ціна, за
+// якою ніхто не купує.
+export function kitCost(state, kitTypeId) {
+  const kit = KIT_TYPES[kitTypeId]
+  if (!kit) return Infinity
+  // Безкоштовний комплект (утиль) лишається безкоштовним: множник на нулі — нуль.
+  return kit.cost * kitCostMult(state)
 }
 
 export function calcQuality(solderPoints) {
@@ -199,22 +218,22 @@ export function orderKit(state, kitTypeId, now = Date.now(), makeId = null) {
   const kit = KIT_TYPES[kitTypeId]
   if (!kit)
     throw new Error(`orderKit: невідомий тип комплекту "${kitTypeId}"`)
-  if (state.money < kit.cost)
-    throw new Error(`orderKit: недостатньо грошей (є ${state.money}, потрібно ${kit.cost})`)
+  const cost = kitCost(state, kitTypeId)
+  if (state.money < cost)
+    throw new Error(`orderKit: недостатньо грошей (є ${state.money}, потрібно ${cost})`)
 
   const storageLevel = state.upgrades.storageLevel ?? 0
   const maxSlots     = 1 + (STORAGE_SLOTS_BY_LEVEL[storageLevel] ?? 0)
   if (_usedSlots(state) >= maxSlots)
     throw new Error(`orderKit: всі слоти зайняті`)
 
-  const logMult    = LOGISTICS_DELIVERY_MULT[state.upgrades.logisticsLevel ?? 0] ?? 1.0
-  const deliveryMs = Math.round(kit.deliveryMs * logMult)
+  const deliveryMs = Math.round(kit.deliveryMs * deliveryMult(state))
   const slotIndex  = _nextFreeSlotIndex(state)
   const id         = makeId ? makeId() : `${now}-${Math.random().toString(36).slice(2, 7)}`
 
   return {
     ...state,
-    money:     state.money - kit.cost,
+    money:     state.money - cost,
     ordersPlaced: (state.ordersPlaced ?? 0) + 1,
     deliveries: [
       ...(state.deliveries ?? []),
@@ -326,7 +345,7 @@ export function abandonBurntDrone(state, stationId, salvageRate = 0) {
   const station = getStation(state, stationId)
   if (station.phase !== Phase.BURNT)
     throw new Error(`abandonBurntDrone: станція ${stationId} у фазі ${station.phase}`)
-  const salvage = KIT_TYPES[station.kitId].cost * salvageRate
+  const salvage = kitCost(state, station.kitId) * salvageRate
   return _afterStationClear(state, stationId, state.money + salvage)
 }
 
@@ -335,7 +354,7 @@ export function sell(state, stationId) {
   if (station.phase !== Phase.READY)
     throw new Error(`sell: станція ${stationId} у фазі ${station.phase}`)
   const kit   = KIT_TYPES[station.kitId]
-  const price = calcPrice(kit.basePrice, station.quality, state.upgrades.priceMultiplier)
+  const price = calcPrice(kit.basePrice, station.quality, salePriceMult(state))
   return bumpStats(
     _afterStationClear(state, stationId, state.money + price),
     (st) => ({
@@ -482,12 +501,12 @@ export function buyUpgrade(state, trackId) {
   if (!track)
     throw new Error(`buyUpgrade: невідомий апгрейд "${trackId}"`)
   const level = state.upgrades[track.stateKey] ?? 0
-  if (level >= track.costs.length)
+  if (level >= trackMaxLevel(trackId))
     throw new Error('buyUpgrade: апгрейд вже на максимальному рівні')
   const cap   = capFor(state, trackId)
   if (level >= cap)
     throw new Error(`buyUpgrade: апгрейд "${trackId}" заблоковано в поточній локації`)
-  const cost = track.costs[level]
+  const cost = nextCost(trackId, level)
   if (state.money < cost)
     throw new Error(`buyUpgrade: недостатньо грошей (є ${state.money}, потрібно ${cost})`)
   return {

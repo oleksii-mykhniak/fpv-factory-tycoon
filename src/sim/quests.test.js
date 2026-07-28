@@ -258,6 +258,13 @@ describe('прогресивне розкриття поліпшень (Р5)', (
     expect(trackIntroduced(s, 'storage')).toBe(false)
     expect(trackIntroduced(s, 'logistics')).toBe(false)
     expect(trackIntroduced(s, 'benches')).toBe(false)
+    // Нескінченні треки (Стадія 10 / A) підпорядковані тому самому правилу:
+    // трек без стелі, видимий з першої секунди, зламав би Р5 сильніше за
+    // будь-який інший — його ж не «викуповують», він лишається назавжди.
+    expect(trackIntroduced(s, 'reputation')).toBe(false)
+    expect(trackIntroduced(s, 'bulk')).toBe(false)
+    expect(trackIntroduced(s, 'tooling')).toBe(false)
+    expect(trackIntroduced(s, 'courier')).toBe(false)
   })
 
   it('шафа ніколи не порожня: наступний трек ланцюга видно завжди', () => {
@@ -266,7 +273,14 @@ describe('прогресивне розкриття поліпшень (Р5)', (
     const s = buyUpgrade(withStats({ money: 9999, ordersPlaced: 3 }, { assembled: 3, sold: 3 }), 'soldering')
     expect(activeQuest(s).kind).toBe('do')
     expect(trackIntroduced(s, 'soldering')).toBe(true)
-    expect(trackIntroduced(s, 'consumables')).toBe(true)
+    // Навмисно НЕ називаємо трек: він залежить від порядку ланцюга, а перевірка
+    // тут — про правило «наступна покупка видно завжди», а не про те, який саме
+    // трек стоїть у ланцюгу сьогодні. Раніше тут стояв 'consumables', і вставка
+    // одного кроку в Стадії 10 зробила тест червоним, нічого не зламавши.
+    const at = QUEST_CHAIN.findIndex(step => step.id === activeQuest(s).id)
+    const nextBuy = QUEST_CHAIN.slice(at).find(step => step.trackId)
+    expect(nextBuy).toBeDefined()
+    expect(trackIntroduced(s, nextBuy.trackId)).toBe(true)
   })
 
   // Найважливіший інваріант Р5: правило «показуй лише введене» не має права

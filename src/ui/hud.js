@@ -1,5 +1,5 @@
 import { Phase, DeliveryStatus, KIT_TYPES, calcPrice, focusStation, idleStations } from '../state/gameState.js'
-import { levelData } from '../state/upgrades.js'
+import { levelData, salePriceMult } from '../state/upgrades.js'
 
 // Скільки дельта темпу тримається на приладі після покупки. Вікно доходу — 60 с
 // (INCOME_WINDOW_MS), тож коротше за півхвилини не встигло б показати нічого.
@@ -132,7 +132,7 @@ function hint(state, carrying) {
     }
     case Phase.READY: {
       const kit   = KIT_TYPES[station.kitId]
-      const price = calcPrice(kit.basePrice, station.quality, state.upgrades.priceMultiplier)
+      const price = calcPrice(kit.basePrice, station.quality, salePriceMult(state))
       return `Готово! Забери з верстака → $${price.toFixed(2)}`
     }
     case Phase.BURNT: return 'Деталь перегріта!'

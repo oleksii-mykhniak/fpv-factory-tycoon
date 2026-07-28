@@ -1,7 +1,8 @@
-import { Phase, KIT_TYPES, calcPrice, idleStations } from '../state/gameState.js'
+import { Phase, KIT_TYPES, calcPrice, idleStations, kitCost } from '../state/gameState.js'
 import { ruleAt } from '../state/locations.js'
 import { rescueKitAvailable, RESCUE_KIT_ID } from '../sim/derive.js'
 import { PRICE_BASE_COEFF, PRICE_QUALITY_COEFF, STORAGE_SLOTS_BY_LEVEL } from '../state/config.js'
+import { salePriceMult } from '../state/upgrades.js'
 import { kitsForLocation, LOCATIONS } from '../state/locations.js'
 import { roomDef } from '../defs/layouts/rooms.js'
 
@@ -63,7 +64,7 @@ export function createShopModal(root, { onOrder }) {
 
   function render(state) {
     const body          = overlay.querySelector('#shop-body')
-    const mult          = state.upgrades.priceMultiplier
+    const mult          = salePriceMult(state)
     const storageLevel  = state.upgrades?.storageLevel ?? 0
     const maxSecondary  = STORAGE_SLOTS_BY_LEVEL[storageLevel] ?? 0
     const maxSlots      = 1 + maxSecondary
@@ -83,7 +84,8 @@ export function createShopModal(root, { onOrder }) {
 
     body.innerHTML = slotHeader + Object.entries(KIT_TYPES).filter(([, kit]) => !kit.isSpecial).map(([id, kit]) => {
       const locked   = isKitLocked(kit, locationKitIds)
-      const noMoney  = state.money < kit.cost
+      const cost     = kitCost(state, kit.id)
+      const noMoney  = state.money < cost
       const disabled = locked || !canOrderAny || noMoney
 
       if (locked) {
@@ -119,12 +121,12 @@ export function createShopModal(root, { onOrder }) {
               <div class="kit-card__meta">${difficultyDots(kit.solderPointCount)} ${kit.solderPointCount} точок</div>
             </div>
             <div class="kit-card__prices">
-              <div class="kit-card__buy-price">$${kit.cost}</div>
+              <div class="kit-card__buy-price">$${Math.round(cost)}</div>
               <div class="kit-card__sell-range">${priceRange(kit, mult)}</div>
             </div>
           </div>
           <button class="btn btn--primary kit-card__btn" data-order="${id}" ${disabled ? 'disabled' : ''}>
-            Замовити — $${kit.cost}
+            Замовити — $${Math.round(cost)}
           </button>
           ${note}
         </div>`

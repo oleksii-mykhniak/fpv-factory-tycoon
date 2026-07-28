@@ -1,4 +1,4 @@
-import { UPGRADE_TRACKS } from '../state/upgrades.js'
+import { UPGRADE_TRACKS, levelData, nextCost, trackMaxLevel } from '../state/upgrades.js'
 import { trackIntroduced } from '../sim/quests.js'
 import {
   openHallIds, nextHallId, canUnlockHall, openRoomIds, nextRoomId, canUnlockRoom,
@@ -62,7 +62,7 @@ export function createUpgradeModal(root, {
     // Замість нього внизу є один рядок про те, що інструменти скінчились.
     const visible = Object.entries(UPGRADE_TRACKS).filter(([id]) => {
       const level = state.upgrades[UPGRADE_TRACKS[id].stateKey] ?? 0
-      const max   = Math.min(UPGRADE_TRACKS[id].costs.length, capFor(state, id))
+      const max   = Math.min(trackMaxLevel(id), capFor(state, id))
       if (max <= 0)      return false
       if (level >= max)  return false
       return trackIntroduced(state, id)
@@ -70,20 +70,20 @@ export function createUpgradeModal(root, {
 
     const trackHTML = visible.map(([id, track]) => {
       const level    = state.upgrades[track.stateKey] ?? 0
-      const nextInfo = track.levels[level + 1]
-      const nextCost = track.costs[level]
+      const nextInfo = levelData(id, level + 1)
+      const cost     = nextCost(id, level)
       // Money is the only gate. A busy bench used to block this too, from when
       // one bench was the whole game; with staff working nonstop that read as
       // "upgrades are broken".
-      const canBuy   = state.money >= nextCost
+      const canBuy   = state.money >= cost
 
       return `
         <div class="shop-section">
           <div class="shop-section__title">${track.name}</div>
           <div class="shop-upgrade">
-            <span class="shop-upgrade__current">${track.levels[level].name}</span>
+            <span class="shop-upgrade__current">${levelData(id, level).name}</span>
             <button class="btn btn--upgrade" data-upgrade="${id}" ${canBuy ? '' : 'disabled'}>
-              → ${nextInfo.name} — $${nextCost}
+              → ${nextInfo.name} — $${Math.round(cost)}
             </button>
             <p class="upgrade-effect-hint">${nextInfo.effect}</p>
           </div>

@@ -1,4 +1,4 @@
-import { Phase, KIT_TYPES, getStation, focusStation } from '../state/gameState.js'
+import { Phase, KIT_TYPES, getStation, focusStation, kitCost } from '../state/gameState.js'
 import { levelData } from '../state/upgrades.js'
 import { SALVAGE_RATE, COLD_SOLDER_QUALITY_PENALTY } from '../state/config.js'
 import { createSolderGame } from './solderGame.js'
@@ -62,7 +62,7 @@ export function createSolderModal(root, { onSolderResult, onAbandon }) {
     }
 
     if (phase === Phase.BURNT) {
-      if (lastPhase !== Phase.BURNT) renderBurnt(station)
+      if (lastPhase !== Phase.BURNT) renderBurnt(state, station)
       lastPhase = phase
       return
     }
@@ -128,11 +128,13 @@ export function createSolderModal(root, { onSolderResult, onAbandon }) {
     }
   }
 
-  function renderBurnt(station) {
+  function renderBurnt(state, station) {
     destroyGame()
-    const kit    = KIT_TYPES[station.kitId]
-    const salvage = (kit.cost * SALVAGE_RATE).toFixed(2)
-    const loss    = (kit.cost * (1 - SALVAGE_RATE)).toFixed(2)
+    // Ціна комплекту — поточна, не базова: після оптових закупок втрата й утиль
+    // рахуються від того, що гравець реально заплатив (Стадія 10 / A2).
+    const cost    = kitCost(state, station.kitId)
+    const salvage = (cost * SALVAGE_RATE).toFixed(2)
+    const loss    = (cost * (1 - SALVAGE_RATE)).toFixed(2)
     overlay.querySelector('#solder-body').innerHTML = `
       <div class="burnt-notice">
         <p>Деталь спалено. Комплект зіпсовано.</p>

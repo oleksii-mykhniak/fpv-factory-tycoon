@@ -17,8 +17,9 @@
 
 import {
   Phase, KIT_TYPES, calcPrice, stationsOf, workersInRole, bumpStats,
+  kitCost,
 } from '../state/gameState.js'
-import { levelData } from '../state/upgrades.js'
+import { levelData, salePriceMult, deliveryMult } from '../state/upgrades.js'
 import { roleLevelData, ROLE_ORDER } from '../defs/roles.js'
 import { OFFLINE_CAP_MS, OFFLINE_EFFICIENCY, MANAGER_RESERVE } from '../state/config.js'
 import { kitsForLocation } from '../state/locations.js'
@@ -67,7 +68,7 @@ function settleFullCycles(game, elapsedMs, rate) {
 
   const benches   = Math.max(1, stationsOf(game).length)
   const assembly  = kit.solderPointCount * rate.ms
-  const delivery  = kit.deliveryMs * (levelData('logistics', game.upgrades.logisticsLevel ?? 0).deliveryMult ?? 1)
+  const delivery  = kit.deliveryMs * deliveryMult(game)
   const cycleMs   = Math.max(assembly, delivery) / benches
   if (!(cycleMs > 0)) return null
 
@@ -78,10 +79,11 @@ function settleFullCycles(game, elapsedMs, rate) {
   for (let i = 0; i < affordable; i++) {
     // Резерв той самий, що й у живого менеджера: інакше цех прокидається з
     // нульовою касою і гравець не може купити нічого.
-    if (money < kit.cost * MANAGER_RESERVE) break
-    const price = calcPrice(kit.basePrice, rate.q, game.upgrades.priceMultiplier)
-    money  += price - kit.cost
-    earned += price - kit.cost
+    const cost = kitCost(game, kit.id)
+    if (money < cost * MANAGER_RESERVE) break
+    const price = calcPrice(kit.basePrice, rate.q, salePriceMult(game))
+    money  += price - cost
+    earned += price - cost
     sold++
   }
   return sold ? { money, sold, earned } : null
@@ -97,10 +99,10 @@ function settleFullCycles(game, elapsedMs, rate) {
 function offlineKit(game) {
   const tier = roleLevelData('manager', bestLevel(game, 'manager')).tier ?? 0
   const affordable = kitsForLocation(game)
+    .filter(id => KIT_TYPES[id]?.cost > 0)
+    .sort((a, b) => kitCost(game, a) - kitCost(game, b))
+    .filter((id, i) => i <= tier && game.money >= kitCost(game, id) * MANAGER_RESERVE)
     .map(id => KIT_TYPES[id])
-    .filter(k => k && k.cost > 0)
-    .sort((a, b) => a.cost - b.cost)
-    .filter((k, i) => i <= tier && game.money >= k.cost * MANAGER_RESERVE)
   return affordable.length ? affordable[affordable.length - 1] : null
 }
 
@@ -135,7 +137,7 @@ export function settleOffline(game, awayMs, now = Date.now()) {
         const quality = Math.max(0, rate.q - station.coldPenalty)
         // Only a hired seller can bank it; otherwise it waits on the bench.
         if (hasSeller) {
-          const price = calcPrice(kit.basePrice, quality, game.upgrades.priceMultiplier)
+          const price = calcPrice(kit.basePrice, quality, salePriceMult(game))
           money  += price
           earned += price
           sold++

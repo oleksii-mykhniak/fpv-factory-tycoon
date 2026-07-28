@@ -8,19 +8,33 @@
 import { describe, it, expect } from 'vitest'
 import { createState } from '../state/gameState.js'
 import { purchaseOptions, nextPurchase, upgradeNeedsAttention } from './derive.js'
-import { UPGRADE_TRACKS } from '../state/upgrades.js'
+import { UPGRADE_TRACKS, trackMaxLevel } from '../state/upgrades.js'
 import { capFor } from '../state/locations.js'
+import { trackIntroduced } from './quests.js'
 
 const withMoney = (money) => ({ ...createState(), money })
 
+// Стан із просунутим ланцюгом: рівні апгрейдів + лічильники, від яких залежить,
+// що вже «введено» (Р5).
+const withStats = ({ money = 1e9, ...upgrades }, stats) => {
+  const base = createState()
+  return {
+    ...base, money, ordersPlaced: 9,
+    upgrades: { ...base.upgrades, ...upgrades },
+    stats:    { ...base.stats, ...stats },
+  }
+}
+
 describe('purchaseOptions', () => {
-  it('не пропонує трек, який уперся в стелю локації', () => {
+  it('трек пропонується рівно тоді, коли він і введений, і не в стелі', () => {
+    // `trackMaxLevel`, а не `costs.length`: у нескінченного треку `costs` —
+    // функція, і `.length` на ній дало б арність, тобто 1.
     const game = withMoney(10_000)
     for (const [id, track] of Object.entries(UPGRADE_TRACKS)) {
-      const cap = capFor(game, id)
+      const level   = game.upgrades[track.stateKey] ?? 0
+      const room    = level < Math.min(trackMaxLevel(id), capFor(game, id))
       const offered = purchaseOptions(game).some(o => o.id === `upgrade:${id}`)
-      const level = game.upgrades[track.stateKey] ?? 0
-      expect(offered).toBe(level < Math.min(track.costs.length, cap))
+      expect(offered).toBe(room && trackIntroduced(game, id))
     }
   })
 
@@ -70,11 +84,24 @@ describe('nextPurchase', () => {
   it('смужка і бейдж кажуть різне і можуть світитись разом', () => {
     // Спокуса була зробити їх взаємовиключними — «дві підказки про одне» —
     // але вони не про одне: бейдж каже «щось уже доступне», смужка каже «до
-    // наступної віхи стільки». При $120 флюс по кишені, а паяльник ще ні, і
-    // сховати друге означало б збрехати про те, куди гравець іде.
-    const game = withMoney(120)
-    expect(upgradeNeedsAttention(game)).toBe(true)
-    expect(nextPurchase(game)?.cost).toBeGreaterThan(game.money)
+    // наступної віхи стільки». Сховати друге означало б збрехати про те, куди
+    // гравець іде.
+    //
+    // Стан НЕ свіжий, і це суть: на старті гра навмисно продає рівно одну річ
+    // (Р5), тож два ввімкнені індикатори там неможливі за задумом. Сценарій
+    // з'являється з другим треком у ланцюгу.
+    const mid = withStats(
+      { money: 1e9, solderingLevel: 1 },
+      { sold: 3, assembled: 3, soldByKit: { racing_drone: 1 } },
+    )
+    const probe = purchaseOptions(mid)
+      .filter(o => !o.blocked && Number.isFinite(o.cost))
+      .sort((a, b) => a.cost - b.cost)
+    expect(probe.length).toBeGreaterThan(1)
+
+    const game = { ...mid, money: probe[0].cost }
+    expect(upgradeNeedsAttention(game)).toBe(true)          // найдешевше вже по кишені
+    expect(nextPurchase(game)?.cost).toBeGreaterThan(game.money)  // наступне — ще ні
   })
 
   it('смужка завжди націлена на те, чого ще НЕ вистачає', () => {
@@ -91,6 +118,21 @@ describe('nextPurchase', () => {
       if (!next) break
       expect(next.cost).toBeGreaterThanOrEqual(prev)
       prev = next.cost
+    }
+  })
+})
+
+describe('покупки і панель поліпшень не розходяться', () => {
+  it('смужка не веде до треку, якого панель ще не показує', () => {
+    // Р5 ховає невведені треки. Поки покупки рахувались окремим перебором,
+    // смужка могла вести до «Репутація · $50», а на стелажі такого рядка не
+    // було. Нескінченні треки зробили це видимим одразу: вони доступні завжди.
+    for (const money of [0, 50, 200, 1000, 5000]) {
+      const game = withMoney(money)
+      for (const o of purchaseOptions(game)) {
+        if (!o.id.startsWith('upgrade:')) continue
+        expect(trackIntroduced(game, o.id.slice('upgrade:'.length))).toBe(true)
+      }
     }
   })
 })
