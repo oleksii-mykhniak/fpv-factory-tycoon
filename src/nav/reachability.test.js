@@ -11,7 +11,7 @@ import { createWorld } from '../sim/world.js'
 import { createState } from '../state/gameState.js'
 import { layoutFor } from '../defs/layouts/index.js'
 import { findPath } from './astar.js'
-import { nearestWalkable, worldToCell, isWalkable } from './navGrid.js'
+import { nearestWalkable, worldToCell, isWalkable, cellToWorld } from './navGrid.js'
 
 // Every location, with every bench it can hold actually built.
 function worlds() {
@@ -76,6 +76,39 @@ describe('навігація — усе досяжне', () => {
       const door = world.layout.spawns.door
       const outside = { x: door.x, y: world.layout.street.y + 120 }
       expect(reaches(world, world.layout.spawns.player, outside), `${name}: двері`).toBe(true)
+    }
+  })
+
+  // «Шлях є» — замало. Меблі в передпокої одного разу замурували гирло гаражних
+  // воріт, і єдиний маршрут із гаража до квартири пішов НАДВІР: через ворота,
+  // вздовж вулиці, назад крізь вхідні двері. Усі перевірки вище лишались
+  // зеленими — шлях справді був. Тому тут питання інше: чи не доводиться заради
+  // сусідньої кімнати виходити з дому.
+  it('між кімнатами ходять усередині, а не через вулицю', () => {
+    const base = createState()
+    const state = {
+      ...base, locationId: 'apartment', money: 99999,
+      unlockedRooms: ['flat', 'garage'],
+      upgrades: { ...base.upgrades, benchLevel: 2 },
+    }
+    const world = createWorld({ state, salesLog: [] },
+      { now: 1e6, rng: () => 0.5, layout: layoutFor('apartment', state) })
+
+    const grid    = world.navGrid
+    const indoorH = world.layout.street.y   // де закінчується житло і починається вулиця
+    const [flat, garage] = world.placedStations
+
+    for (const [from, to, label] of [
+      [garage.workSpot, flat.workSpot, 'гараж → квартира'],
+      [flat.workSpot, garage.workSpot, 'квартира → гараж'],
+    ]) {
+      const a = nearestWalkable(grid, from.x, from.y)
+      const b = nearestWalkable(grid, to.x, to.y)
+      const path = findPath(grid, a, b)
+      expect(path, `${label}: шляху немає`).not.toBe(null)
+      const maxY = Math.max(...path.map(c => cellToWorld(grid, c.cx, c.cy).y))
+      expect(maxY, `${label}: маршрут виходить на вулицю (y=${Math.round(maxY)})`)
+        .toBeLessThan(indoorH)
     }
   })
 

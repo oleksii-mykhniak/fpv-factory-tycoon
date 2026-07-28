@@ -849,7 +849,18 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
   }
 
   piggy?.on('preupdate', () => {
-    if (!piggy.graphics.visible) return
+    // Підпис — окремий актор, і його треба гасити ЯВНО.
+    //
+    // Тут стояв голий `return`, і таймер лишався на екрані з останнім своїм
+    // текстом, щойно скарбничка ховалась. А ховається вона рівно тоді, коли
+    // перестала бути потрібна: гравець замовив комплект (став busy) або в нього
+    // вже є гроші. Кулдаун при цьому дотикав останні секунди — тож на екрані
+    // назавжди зависало «0:01» над порожнім місцем. Два симптоми («таймер, коли
+    // вона не потрібна» і «0:01 не зникає») — це одна ця гілка.
+    if (!piggy.graphics.visible) {
+      piggyTimerLabel.graphics.visible = false
+      return
+    }
     const { game, now } = getWorld()
     const remaining = game.lastPiggyAt != null ? PIGGY_COOLDOWN_MS - (now - game.lastPiggyAt) : 0
     if (remaining > 0) {

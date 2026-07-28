@@ -117,9 +117,16 @@ export function buildApartmentLayout(roomIds) {
       { sprite: 'f_chair',     x: 820, y: 420, w: T*0.7, h: T*0.8, z: 2 },
       { sprite: 'f_plant',     x: 950, y: 520, w: T*0.7, h: T*0.9, z: 2 },
       // Hallway
-      { sprite: 'f_bookshelf', x: 900, y: 730, w: T,     h: T*1.3, z: 2, solid: true },
-      { sprite: 'f_crate',     x: 700, y: 900, w: T*0.8, h: T*0.8, z: 2, solid: true },
-      { sprite: 'f_crate',     x: 770, y: 880, w: T*0.8, h: T*0.8, z: 2, solid: true },
+      //
+      // Правий кінець передпокою тримається ПОРОЖНІМ, і це не смак. Тут стояла
+      // шафа (900, 730) і два ящики (700/770, ~890): вони затуляли гирло
+      // гаражних воріт і залишок проходу під ним, тобто гараж узагалі не мав
+      // внутрішнього маршруту. Робітники ходили з гаража до квартири через
+      // ВУЛИЦЮ — і виглядало це як помилка навігації, хоч навігація була права.
+      // Тест на досяжність мовчав, бо шлях справді був, просто надворі.
+      { sprite: 'f_bookshelf', x: 620, y: 660, w: T,     h: T*1.3, z: 2, solid: true },
+      { sprite: 'f_crate',     x: 380, y: 900, w: T*0.8, h: T*0.8, z: 2, solid: true },
+      { sprite: 'f_crate',     x: 300, y: 880, w: T*0.8, h: T*0.8, z: 2, solid: true },
       { sprite: 'f_chair',     x: 250, y: 690, w: T*0.7, h: T*0.8, z: 2 },
       { sprite: 'f_painting',  x: 430, y: 55,  w: T*0.9, h: T*0.7, z: 1 },
       { sprite: 'f_plant',     x: 60,  y: 120, w: T*0.7, h: T*0.9, z: 2 },

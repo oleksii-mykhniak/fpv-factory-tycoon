@@ -10,11 +10,20 @@
 // which is the whole reason zones were made data in C2.
 
 import { workersOf } from '../../state/gameState.js'
+import { ruleAt } from '../../state/locations.js'
 import { PROMOTE_ZONE_SIZE } from '../../state/config.js'
 
 export function promoteZoneSystem(world) {
   const statics = world.staticZones ?? world.zones ?? []
   const agents  = world.agents ?? []
+
+  // Локація може не мати підвищень узагалі (`hasPromote`). Вимикається тут, а
+  // не в UI: без зони не буде ні мітки на підлозі, ні стрілки, ні панелі — усе
+  // це вже вміє працювати з тим, що зони просто немає.
+  if (!ruleAt(world.game, 'hasPromote')) {
+    world.zones = statics
+    return
+  }
 
   const dynamic = []
   for (const worker of workersOf(world.game)) {

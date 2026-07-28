@@ -136,6 +136,24 @@ describe('F5 — підвищення просто на підлозі', () => {
     }
   })
 
+  // Вдома підвищень немає взагалі (`hasPromote`), навіть коли є кого підвищувати
+  // і чим платити: перша локація — про власні руки, а не про платіжну відомість.
+  it('вдома зони немає, хоч робітник найнятий і гроші є', () => {
+    const base = createState()
+    const state = {
+      ...base, money: 99999, locationId: 'apartment',
+      unlockedRooms: ['flat', 'garage'],
+    }
+    const w = createWorld({ state, salesLog: [] },
+      { now: T0, rng: () => 0.5, layout: layoutFor('apartment', state) })
+    dispatch(w, 'hireWorker', { role: 'courier' })
+    run(w, 400)
+
+    expect(workerAgent(w), 'робітника не найнято — тест перевіряє не те').toBeDefined()
+    expect(promoteZone(w)).toBeUndefined()
+    expect(w.zones).toBe(w.staticZones)
+  })
+
   it('без найнятих людей динамічних зон немає взагалі', () => {
     const base = createState()
     const w = createWorld({ state: base, salesLog: [] },

@@ -22,7 +22,11 @@ export const LOCATIONS = Object.freeze({
     unlockCost: 0,
     unlockReq: null,
     startMoney: STARTING_MONEY,
-    rules: { hasTrash: true, hasPiggy: true },
+    // Підвищення робітників вимкнено вдома (валідація Стадії 10). Тут працює
+    // щонайбільше кілька людей, і рівні їм нема куди дівати: перша локація —
+    // про власні руки й перший найм, а не про платіжну відомість. Штат як
+    // предмет прокачки починається на фабриці, де його стає більше за одного.
+    rules: { hasTrash: true, hasPiggy: true, hasPromote: false },
     sceneConfig: { bgColor: '#0e0e18', floorColor: '#1a1a26' },
   },
   // The last location. Everything after this point grows inside it — rooms, not
@@ -46,7 +50,7 @@ export const LOCATIONS = Object.freeze({
     // RESCUE mechanics: no salvage bin to walk to and no piggy bank. When the
     // shop runs dry here, the way out is the free kit the manager (or you, at
     // the laptop) can order — see rescueKitAvailable in sim/derive.js.
-    rules: { hasTrash: false, hasPiggy: false },
+    rules: { hasTrash: false, hasPiggy: false, hasPromote: true },
     // Nothing further to buy for YOUR hands. The two personal tracks freeze at
     // whatever level you arrived with (see frozenCaps) rather than vanishing:
     // the iron you paid for in the garage is still yours. From here on the

@@ -23,6 +23,7 @@ import { INTERACTIONS, carrySpriteKey, zoneWantsAttention } from '../defs/intera
 import { dwellProgress } from '../sim/systems/zone.js'
 import { piggyShouldShow, nextObjective } from '../sim/derive.js'
 import { promoteCost } from '../defs/roles.js'
+import { ruleAt } from '../state/locations.js'
 import { CARRY_STACK_OFFSET_Y, VIEW_SMOOTHING, SALVAGE_RATE } from '../state/config.js'
 import * as ex from 'excalibur'
 
@@ -232,13 +233,18 @@ function syncWorkers(refs, world) {
   // Only over the player's own staff, only when the promotion is affordable and
   // exists: a tag you cannot act on is noise, and this one is the whole upgrade
   // UI on the factory.
+  //
+  // Де підвищень немає (`hasPromote` — вдома), над головами не висить нічого:
+  // ні цінника, ні номера рівня. Рівень, який нікуди не росте, — це підпис про
+  // механіку, якої в цій локації не існує.
+  const promoting = ruleAt(world.game, 'hasPromote')
   for (const worker of workersOf(world.game)) {
     const view = refs.workerViews?.get(worker.id)
     if (!view?.promoteLabel) continue
     const agent = (world.agents ?? []).find(a => a.id === worker.id)
     const cost  = promoteCost(worker.role, worker.level ?? 0)
 
-    if (!agent) {
+    if (!agent || !promoting) {
       view.promoteLabel.graphics.visible = false
       view.levelLabel.graphics.visible = false
       continue
