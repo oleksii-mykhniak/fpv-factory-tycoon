@@ -14,11 +14,13 @@ import { createWorld } from './world.js'
 import { advance } from './loop.js'
 import { dispatch } from './commands.js'
 import { SYSTEMS } from './systems/index.js'
-import { nextObjective } from './derive.js'
+import { nextObjective, interruptQuest } from './derive.js'
 import { INTERACTIONS } from '../defs/interactions.js'
 import { EV } from './events.js'
 import { layoutFor } from '../defs/layouts/index.js'
 import { createState, buyUpgrade } from '../state/gameState.js'
+import { UPGRADE_TRACKS } from '../state/upgrades.js'
+import { capFor } from '../state/locations.js'
 import { TICK_MS } from '../state/config.js'
 
 const T0 = 1_000_000
@@ -231,10 +233,89 @@ describe('прогресивне розкриття поліпшень (Р5)', (
     expect(trackIntroduced(s, 'consumables')).toBe(true)
   })
 
+  // Найважливіший інваріант Р5: правило «показуй лише введене» не має права
+  // спорожнити шафу, поки в ній є що купувати. Порожня панель читається як
+  // поламана, а гравець після неї до шафи не повертається.
+  it('поки є що купувати — видно щонайменше один трек', () => {
+    const buyable = (game) => Object.keys(UPGRADE_TRACKS).filter(id => {
+      const track = UPGRADE_TRACKS[id]
+      const level = game.upgrades[track.stateKey] ?? 0
+      return level < Math.min(track.costs.length, capFor(game, id))
+    })
+    const visible = (game) => buyable(game).filter(id => trackIntroduced(game, id))
+
+    const states = [
+      home(),
+      withStats({ ordersPlaced: 3 }, { assembled: 3, sold: 3 }),
+      // Паяльник уже в стелі квартири, а витратники — ні: саме тут «наступний
+      // трек ланцюга» вказує на викуплене, і шафа спорожніла б.
+      { ...home(), upgrades: { ...home().upgrades, solderingLevel: 2 } },
+      garage({ money: 9999 }),
+      { ...garage(), upgrades: { ...home().upgrades, solderingLevel: 3, benchLevel: 1 } },
+      { ...home(), locationId: 'factory', money: 5000 },
+    ]
+    for (const s of states) {
+      if (!buyable(s).length) continue
+      expect(visible(s).length, `шафа порожня при ${JSON.stringify(buyable(s))}`)
+        .toBeGreaterThan(0)
+    }
+  })
+
   it('введене не ховається назад', () => {
     const s = garage({ money: 9999 })
     for (const id of ['soldering', 'consumables', 'benches'])
       expect(trackIntroduced(s, id)).toBe(true)
+  })
+})
+
+// Дві ситуації, які ламають будь-який ланцюг: комплект згорів і грошей нема.
+// Вони не в ланцюгу — їхні умови не монотонні, — а перебивають картку на той
+// час, поки тривають.
+describe('позаланцюгові вставки', () => {
+  const burntStation = (kitId = 'racing_drone') => ({
+    id: 'station-0', defId: 'workbench', phase: 'BURNT', kitId,
+    solderPoints: [0.9, 0.9], quality: null, coldPenalty: 0, takenBy: null,
+  })
+
+  it('згорілий комплект перебиває ціль і веде до верстака', () => {
+    const s = withStats({ money: 9999, ordersPlaced: 3, stations: [burntStation()] },
+      { assembled: 3, sold: 3 })
+    const stuck = interruptQuest(s)
+    expect(stuck.id).toBe('fix_burnt')
+    expect(stuck.zoneKind).toBe('bench')
+    expect(stuck.why).toContain('$')                 // скільки дадуть за брухт
+    expect(activeQuest(s).id).toBe('iron_1')         // ланцюг не зрушив
+    expect(nextObjective(world(s), INTERACTIONS).kind).toBe('bench')
+  })
+
+  it('прибрали — вставка зникла сама, індекс не змінився', () => {
+    const burnt = withStats({ money: 9999, ordersPlaced: 3, stations: [burntStation()] },
+      { assembled: 3, sold: 3 })
+    const clean = { ...burnt, stations: [{ ...burntStation(), phase: 'IDLE', kitId: null }] }
+    expect(interruptQuest(clean)).toBeNull()
+    expect(questIndex(clean)).toBe(questIndex(burnt))
+  })
+
+  it('порожня каса веде до смітника, а коли брухт уже замовлено — до скарбнички', () => {
+    const broke = withStats({ money: 1, ordersPlaced: 9 }, { assembled: 3, sold: 3 })
+    expect(interruptQuest(broke).zoneKind).toBe('trashbin')
+    expect(interruptQuest({ ...broke, scrapAvailable: true }).zoneKind).toBe('piggy')
+  })
+
+  it('на фабриці порятунок інший, тож вставки немає', () => {
+    // Там ні смітника, ні скарбнички — виручає безкоштовний комплект з ноутбука.
+    const broke = { ...createState(), locationId: 'factory', money: 1 }
+    expect(interruptQuest(broke)).toBeNull()
+  })
+
+  it('з грошима або з роботою в дорозі вставки немає', () => {
+    const rich = withStats({ money: 9999, ordersPlaced: 9 }, { assembled: 3, sold: 3 })
+    expect(interruptQuest(rich)).toBeNull()
+
+    const waiting = { ...rich, money: 1, deliveries: [
+      { id: 'd1', kitId: 'mini_drone', slotIndex: 0, readyAt: T0, status: 'transit' },
+    ] }
+    expect(interruptQuest(waiting)).toBeNull()
   })
 })
 

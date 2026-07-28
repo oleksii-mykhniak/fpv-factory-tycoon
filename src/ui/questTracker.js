@@ -17,6 +17,7 @@
 //   step      — «неси коробку до верстака», поки петля ще нова
 
 import { activeQuest } from '../sim/quests.js'
+import { interruptQuest } from '../sim/derive.js'
 
 export function createQuestTracker(root) {
   const el = document.createElement('div')
@@ -39,7 +40,10 @@ export function createQuestTracker(root) {
 
   // `stepHint` — рядок петлі від HUD (Р2), або null коли підказки вже вимкнено.
   function update(state, stepHint = null) {
-    const quest = activeQuest(state)
+    // Вставка перебиває ціль (Р1): згорілий комплект або порожня каса — це те,
+    // що стоїть на місці ПРЯМО ЗАРАЗ, і поки воно стоїть, ціль ланцюга —
+    // інформація не на часі. Індексу вона не рухає, тому «7/24» у неї немає.
+    const quest = interruptQuest(state) ?? activeQuest(state)
     if (!quest) {
       el.setAttribute('hidden', '')
       lastKey = null
@@ -92,7 +96,7 @@ function card(quest, stepHint) {
     <div class="quest quest--primary ${quest.ready ? 'quest--ready' : ''}">
       <div class="quest__head">
         <span class="quest__title">${quest.ready ? '✅ ' : ''}${quest.title}</span>
-        <span class="quest__count">${quest.step}/${quest.total}</span>
+        ${quest.step ? `<span class="quest__count">${quest.step}/${quest.total}</span>` : ''}
       </div>
       ${showBar ? `
         <div class="quest__bar"><div class="quest__fill" style="width:${pct}%"></div></div>

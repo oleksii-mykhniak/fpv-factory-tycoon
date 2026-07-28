@@ -318,10 +318,20 @@ export function trackIntroduced(game, trackId) {
 }
 
 // Трек найближчої покупки в ланцюгу — те, що гравця попросять купити наступним.
+//
+// «Наступний» тут означає «наступний, який тут узагалі можна купити»: кроки, що
+// вже пройдені або безглузді в цій локації, пропускаються. Без цього правило
+// давало порожню шафу — наприклад, у квартирі з паяльником у стелі воно вказувало
+// на паяльник, того в списку вже нема, а витратники ще «не введені». Це не
+// теоретична дірка: тест «поки є що купувати — видно щонайменше один трек» ловить
+// саме її.
 function nextBuyTrack(game) {
   const from = questIndex(game)
   for (let i = from; i < QUEST_CHAIN.length; i++) {
-    if (QUEST_CHAIN[i].trackId) return QUEST_CHAIN[i].trackId
+    const step = QUEST_CHAIN[i]
+    if (!step.trackId) continue
+    if (step.moot?.(game) || step.done(game)) continue
+    return step.trackId
   }
   return null
 }

@@ -12,6 +12,7 @@ import {
 } from '../state/gameState.js'
 import {
   GUIDANCE_ORDERS, GUIDANCE_SCRAP_RUNS, MANAGER_RESERVE, INCOME_WINDOW_MS,
+  SALVAGE_RATE,
 } from '../state/config.js'
 import { levelData, UPGRADE_TRACKS } from '../state/upgrades.js'
 import {
@@ -199,6 +200,67 @@ export function scrapGuidanceActive(game) {
   return (game.scrapRuns ?? 0) <= GUIDANCE_SCRAP_RUNS
 }
 
+// ── Позаланцюгові вставки (Стадія 9 / Р1) ─────────────────
+//
+// Дві ситуації ламають будь-який ланцюг: комплект згорів і грошей нема. Обидві
+// трапляються не «на кроці N», а коли трапляються, і обидві мають рішення, про
+// яке гравець сам не здогадається — стати біля верстака, щоб списати брухт;
+// піти до смітника по безкоштовні деталі; струсити скарбничку.
+//
+// Тому вони НЕ в ланцюгу. Умови тут не монотонні (згорілий комплект прибирають,
+// гроші з'являються), а весь ланцюг тримається на тому, що виконане не
+// повертається. Вставка просто перебиває картку на той час, поки триває, і не
+// рухає індекс.
+//
+// Живе в derive, а не в quests.js, бо спирається на piggyShouldShow і
+// cheapestKitCost — а два різні уявлення про «чи є в гравця гроші» вже раз
+// розійшлись на місяць (див. коментар на початку файлу).
+export function interruptQuest(game) {
+  const burnt = stationsOf(game).find(s => s.phase === Phase.BURNT)
+  if (burnt) {
+    const salvage = (KIT_TYPES[burnt.kitId]?.cost ?? 0) * SALVAGE_RATE
+    return {
+      id:       'fix_burnt',
+      kind:     'do',
+      zoneKind: 'bench',
+      title:    'Прибери згорілий комплект',
+      why:      salvage > 0
+        ? `Стань біля того верстака — за брухт дадуть $${salvage.toFixed(0)}`
+        : 'Стань біля того верстака, щоб звільнити його',
+      need: 0, have: 0, ready: false, hint: null,
+    }
+  }
+
+  // Порожня каса: спершу те, що дає деталі безкоштовно, потім скарбничка.
+  const broke = game.money < cheapestKitCost && !(game.deliveries ?? []).length
+    && !busyStations(game).length
+  if (!broke) return null
+
+  if (ruleAt(game, 'hasTrash') && !game.scrapAvailable) {
+    return {
+      id:       'salvage_run',
+      kind:     'do',
+      zoneKind: 'trashbin',
+      title:    'Розбери брухт у смітнику',
+      why:      'Грошей на комплект нема — деталі звідти безкоштовні',
+      need: 0, have: 0, ready: false, hint: null,
+    }
+  }
+
+  if (piggyShouldShow(game)) {
+    return {
+      id:       'piggy_shake',
+      kind:     'do',
+      zoneKind: 'piggy',
+      title:    'Струсни скарбничку',
+      why:      'Вистачить рівно на найдешевший комплект',
+      need: 0, have: 0, ready: false, hint: null,
+    }
+  }
+
+  return null
+}
+
 export function nextObjective(world, interactions) {
   const player = (world.agents ?? []).find(a => a.kind === 'player')
   if (!player) return null
@@ -220,6 +282,14 @@ export function nextObjective(world, interactions) {
   // лише коли петля чиста — зона активного квесту.
   const loop = loopObjective(world, interactions, player, general, scrap)
   if (loop) return loop
+
+  // Вставка (згорілий комплект, порожня каса) — раніше за ціль ланцюга: вона
+  // про те, що прямо зараз стоїть на місці.
+  const stuck = interruptQuest(world.game)
+  if (stuck) {
+    const zone = nearest(stuck.zoneKind)
+    if (zone) return zone
+  }
 
   // Ціль ланцюга (Р1) не замовкає разом з підказками: підказки вчать петлю,
   // ланцюг веде по грі, і він потрібен якраз тоді, коли петля вже звична.
