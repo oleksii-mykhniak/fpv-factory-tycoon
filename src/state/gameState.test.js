@@ -171,6 +171,28 @@ describe('FSM: повний цикл', () => {
   })
 })
 
+describe('Лічильник збірок по типах (Стадія 11 / A1)', () => {
+  it('росте на завершеній збірці — і саме в свого типу', () => {
+    let s = inAssembly(4, {})
+    s = finishAssembly(s)
+    expect(s.stats.assembledByKit.mini_drone).toBe(1)
+    expect(s.stats.assembledByKit.racing_drone).toBeUndefined()
+  })
+
+  it('згорілий комплект не рахується — збірки не було', () => {
+    const s = burnKit(inAssembly(2))
+    expect(s.stats.assembledByKit.mini_drone ?? 0).toBe(0)
+    expect(s.stats.burnt).toBe(1)
+  })
+
+  it('продаж лічильник не рухає — рахується верстак, а не скринька', () => {
+    const before = finishAssembly(inAssembly(4))
+    const after  = sell(before)
+    expect(after.stats.assembledByKit.mini_drone)
+      .toBe(before.stats.assembledByKit.mini_drone)
+  })
+})
+
 describe('FSM: відхилення невалідних переходів', () => {
   it('orderKit з недостатньою кількістю грошей', () => {
     const broke = { ...createState(), money: 10 }

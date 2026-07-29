@@ -4,7 +4,7 @@ import {
   PIGGY_COOLDOWN_MS, PIGGY_FULL_TAPS, PIGGY_MIN_PAYOUT,
   STORAGE_SLOTS_BY_LEVEL, LOGISTICS_DELIVERY_MULT,
   MK_MAX, MK_COST_GROWTH, MK_PRICE_GROWTH, MK_DELIVERY_GROWTH,
-  MK_UPGRADE_COST_FACTOR, MK_FINAL_COST_MULT,
+  MK_UPGRADE_COST_FACTOR, MK_FINAL_COST_MULT, MK_BUILD_REQ,
 } from './config.js'
 
 import { UPGRADE_TRACKS, trackMaxLevel, nextCost, salePriceMult, kitCostMult, deliveryMult } from './upgrades.js'
@@ -144,6 +144,10 @@ export function createState() {
       bestQuality: 0,   // найкраща якість збірки, [0..1]
       bestRate:    0,   // найвищий $/сек, який цех колись показував
       soldByKit:   {},  // { racing_drone: 2, … } — для квестів на тип дрона
+      // Зібрано по типах (Стадія 11 / A1) — умова наступного Mk і кроків
+      // «збери N таких». Окремо від `soldByKit`, бо збірка й продаж — різні
+      // події: згорілий на продажу дрон усе одно був зібраний.
+      assembledByKit: {},
     },
     // All deliveries: [{id, kitId, slotIndex, readyAt, status}]
     // status 'transit'  = en-route or arrived-but-not-picked-up
@@ -265,13 +269,42 @@ export function nextMarkCost(state, kitTypeId) {
   return Math.round(mk + 1 >= MK_MAX ? base * MK_FINAL_COST_MULT : base)
 }
 
+// Скільки дронів цього типу зібрано (Стадія 11 / A1).
+//
+// Сейв, записаний до Стадії 11, лічильника не має — і гравець із Mk III читав
+// би «зібрано 0/10» як відкат. Тому беремо максимум із продажами: зібрано
+// завжди не менше, ніж продано, тож `soldByKit` — коректна нижня оцінка, і
+// вона так само монотонна.
+export function assembledOfKit(state, kitTypeId) {
+  const st = state?.stats ?? {}
+  return Math.max(st.assembledByKit?.[kitTypeId] ?? 0, st.soldByKit?.[kitTypeId] ?? 0)
+}
+
+// Прогрес до наступного Mk у збірках: { have, need }, або null, коли вище
+// нікуди (тоді вимоги теж немає).
+export function markBuildProgress(state, kitTypeId) {
+  const mk = kitMark(state, kitTypeId)
+  if (mk >= kitMarkMax(state)) return null
+  return {
+    have: assembledOfKit(state, kitTypeId),
+    need: MK_BUILD_REQ[mk] ?? MK_BUILD_REQ[MK_BUILD_REQ.length - 1],
+  }
+}
+
 export function canUpgradeMark(state, kitTypeId) {
   const cost = nextMarkCost(state, kitTypeId)
   const reasons = []
   if (cost === null) reasons.push(kitMark(state, kitTypeId) >= MK_MAX
     ? 'Максимальний Mk'
     : 'Потрібен більший простір')
-  else if (state.money < cost) reasons.push(`Потрібно $${Math.ceil(cost - state.money)}`)
+  else {
+    // Два замки, і показуємо обидва одразу: гравець, який бачить лише ціну,
+    // збере на неї — і впреться в другий, про який дізнається аж тоді.
+    const build = markBuildProgress(state, kitTypeId)
+    if (build && build.have < build.need)
+      reasons.push(`Зберіть ще ${build.need - build.have} — ${KIT_TYPES[kitTypeId].name}`)
+    if (state.money < cost) reasons.push(`Потрібно $${Math.ceil(cost - state.money)}`)
+  }
   return { can: reasons.length === 0, reasons, cost }
 }
 
@@ -410,6 +443,7 @@ export function applyColdSolderPenalty(state, stationId, amount) {
 // в одному місці означає, що жодна транзиція не мусить про це пам'ятати.
 const EMPTY_STATS = {
   sold: 0, assembled: 0, burnt: 0, bestQuality: 0, bestRate: 0, soldByKit: {},
+  assembledByKit: {},
 }
 
 export function bumpStats(state, patch) {
@@ -431,7 +465,14 @@ export function finishAssembly(state, stationId) {
   const quality = Math.max(0, raw - station.coldPenalty)
   return bumpStats(
     withStation(state, stationId, s => ({ ...s, phase: Phase.READY, quality })),
-    (st) => ({ assembled: st.assembled + 1, bestQuality: Math.max(st.bestQuality, quality) }),
+    (st) => ({
+      assembled:   st.assembled + 1,
+      bestQuality: Math.max(st.bestQuality, quality),
+      assembledByKit: {
+        ...st.assembledByKit,
+        [station.kitId]: (st.assembledByKit[station.kitId] ?? 0) + 1,
+      },
+    }),
   )
 }
 

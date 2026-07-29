@@ -40,6 +40,7 @@
 import {
   KIT_TYPES, nextHireCost, workersInRole, nextRoomId, canUnlockRoom,
   nextHallId, canUnlockHall, kitCost, kitMark, markUnlocked, nextMarkCost,
+  canUpgradeMark,
 } from '../state/gameState.js'
 import { UPGRADE_TRACKS, levelData, nextCost } from '../state/upgrades.js'
 import {
@@ -101,6 +102,9 @@ const buyMark = (id, kitId, target, why) => ({
     ? false
     : !kitsForLocation(game).includes(kitId) && kitMark(game, kitId) < target,
   done: (game) => kitMark(game, kitId) >= target,
+  // Грошей мало для стрілки (Стадія 11 / A2): вести до ноутбука, де кнопка
+  // все одно вимкнена нормою збірок, — це прогулянка, а не підказка.
+  buyable: (game) => canUpgradeMark(game, kitId).can,
   resolve(game) {
     const kit = KIT_TYPES[kitId]
     const cost = nextMarkCost(game, kitId)
@@ -108,7 +112,10 @@ const buyMark = (id, kitId, target, why) => ({
     return {
       title: `Прокачай ${kit.emoji} ${kit.name} до Mk ${kitMark(game, kitId) + 2}`,
       need:  cost,
-      hint:  'Ноутбук на кухні · вкладка комплекту',
+      // Другий замок Mk (Стадія 11 / A2) мусить бути на картці: інакше крок
+      // показує повну смужку грошей і мовчить про те, чому нічого не купується.
+      hint:  hintFrom(canUpgradeMark(game, kitId).reasons)
+        ?? 'Ноутбук на кухні · вкладка комплекту',
     }
   },
 })
@@ -444,6 +451,8 @@ export function questZoneKind(game) {
   if (step.kind === 'buy') {
     const got = step.resolve(game)
     if (!got || game.money < (got.need ?? 0)) return null
+    // Гроші — не завжди єдина умова покупки (Стадія 11 / A2).
+    if (step.buyable && !step.buyable(game)) return null
   }
   return step.zoneKind
 }

@@ -13,12 +13,22 @@ import {
   createState, KIT_TYPES, kitCost, kitBasePrice, kitDeliveryMs,
   kitMark, kitMarkMax, kitSolderPointCount, kitSteps,
   upgradeMark, canUpgradeMark, nextMarkCost, markUnlocked, markUnlockOf,
+  markBuildProgress, assembledOfKit,
 } from './gameState.js'
 import { kitsForLocation, mkCapFor } from './locations.js'
-import { MK_MAX, MK_UNLOCKS, MK_CAP_FLAT, MK_CAP_GARAGE } from './config.js'
+import { MK_MAX, MK_UNLOCKS, MK_CAP_FLAT, MK_CAP_GARAGE, MK_BUILD_REQ } from './config.js'
 import { QUEST_CHAIN } from '../sim/quests.js'
 
-const rich = (extra = {}) => ({ ...createState(), money: 1e9, ...extra })
+// Норму збірок (Стадія 11 / A2) тут вимикаємо навмисно: ці тести про
+// арифметику Mk, а не про те, чим він заробляється. Для самої норми — окремий
+// блок нижче.
+const BUILT = Object.fromEntries(Object.keys(KIT_TYPES).map(id => [id, 999]))
+
+const rich = (extra = {}) => ({
+  ...createState(), money: 1e9,
+  stats: { ...createState().stats, assembledByKit: BUILT },
+  ...extra,
+})
 const withMk = (marks, extra = {}) => rich({ kitMarks: marks, ...extra })
 
 describe('похідні від Mk', () => {
@@ -115,6 +125,60 @@ describe('відкриття типів (B3) — двері односторон
       expect(req).not.toBeNull()
       expect(KIT_TYPES[req.fromKit]).toBeDefined()
     }
+  })
+})
+
+describe('Mk заробляється збірками (Стадія 11 / A)', () => {
+  const built = (n, kitId = 'mini_drone', extra = {}) => ({
+    ...createState(), money: 1e9,
+    stats: { ...createState().stats, assembledByKit: { [kitId]: n } },
+    ...extra,
+  })
+
+  it('повна каса не відкриває Mk, поки дронів зібрано замало', () => {
+    const s = built(MK_BUILD_REQ[0] - 1)
+    const { can, cost, reasons } = canUpgradeMark(s, 'mini_drone')
+    expect(can).toBe(false)
+    // Ціна лишається відомою: другий замок не ховає перший.
+    expect(cost).toBeGreaterThan(0)
+    expect(reasons.join(' ')).toMatch(/Зберіть ще 1/)
+    expect(() => upgradeMark(s, 'mini_drone')).toThrow()
+  })
+
+  it('норма виконана — Mk купується', () => {
+    const s = built(MK_BUILD_REQ[0])
+    expect(canUpgradeMark(s, 'mini_drone').can).toBe(true)
+    expect(kitMark(upgradeMark(s, 'mini_drone'), 'mini_drone')).toBe(1)
+  })
+
+  it('норма своя в кожного типу — чужі збірки не рахуються', () => {
+    const s = built(999, 'mini_drone', { kitMarks: { mini_drone: 2 } })
+    expect(canUpgradeMark(s, 'racing_drone').can).toBe(false)
+    expect(markBuildProgress(s, 'racing_drone').have).toBe(0)
+  })
+
+  it('норма росте з кожним Mk', () => {
+    const reqs = Array.from({ length: MK_MAX }, (_, mk) =>
+      markBuildProgress({ ...built(0), kitMarks: { mini_drone: mk },
+        locationId: 'factory', unlockedHalls: ['hall-1', 'hall-2', 'hall-3'] },
+      'mini_drone')?.need)
+    for (let i = 1; i < reqs.length; i++) expect(reqs[i]).toBeGreaterThan(reqs[i - 1])
+  })
+
+  it('у стелі Mk вимоги немає — рости вже нікуди', () => {
+    expect(markBuildProgress(withMk({ mini_drone: MK_CAP_FLAT }), 'mini_drone')).toBeNull()
+  })
+
+  it('сейв без лічильника сідає з проданих — Mk не відкочується', () => {
+    // Гравець зі Стадії 10 має тільки `soldByKit`. Зібрано завжди не менше,
+    // ніж продано, тож це коректна нижня оцінка, а не вигадане число.
+    const legacy = {
+      ...createState(), money: 1e9,
+      stats: { sold: 9, assembled: 9, burnt: 0, bestQuality: 0, bestRate: 0,
+        soldByKit: { mini_drone: MK_BUILD_REQ[0] } },
+    }
+    expect(assembledOfKit(legacy, 'mini_drone')).toBe(MK_BUILD_REQ[0])
+    expect(canUpgradeMark(legacy, 'mini_drone').can).toBe(true)
   })
 })
 

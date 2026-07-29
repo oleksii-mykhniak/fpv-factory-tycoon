@@ -145,6 +145,15 @@ const seedState = (upgrades, extra = {}) => ({
     // починати з прокачки, і вони перевіряли б ланцюг відкриттів замість своєї
     // теми. Ланцюг перевіряє окремий блок нижче.
     kitMarks: { mini_drone: 2, racing_drone: 2 },
+    // Норма збірок на наступний Mk (Стадія 11 / A2) — з тієї ж причини, що й
+    // каталог вище: сценарії перевіряють не її, тож сідають із виконаною
+    // нормою. Сам замок перевіряє окремий блок B3.
+    stats: {
+      sold: 0, assembled: 0, burnt: 0, bestQuality: 0, bestRate: 0, soldByKit: {},
+      assembledByKit: {
+        mini_drone: 99, racing_drone: 99, cinematic_drone: 99, longrange_drone: 99,
+      },
+    },
     ...extra,
   },
   salesLog: [],
@@ -662,6 +671,24 @@ const bCap = await page.evaluate(() => {
            note: document.querySelector('.kit-card__mk-note')?.textContent.trim() ?? '' }
 })
 console.log(`  у стелі: кнопка ${bCap.present ? 'є' : 'зникла'}, підпис "${bCap.note}"`)
+await page.click('#shop-close').catch(() => {})
+
+// ── B3. Mk заробляється збірками (Стадія 11 / A) ──────────
+console.log('\n### B3. Норма збірок на Mk')
+// Каса повна, зібрано нуль — кнопка мусить бути вимкнена, а замість приросту
+// $/сек на картці має стояти те, що покупку зараз тримає.
+await boot(seedState({}, { money: 9000, kitMarks: {}, stats: {
+  sold: 0, assembled: 0, burnt: 0, bestQuality: 0, bestRate: 0,
+  soldByKit: {}, assembledByKit: {},
+} }))
+await openPanelAt('desk')
+const bBuild = await page.evaluate(() => ({
+  disabled: document.querySelector('[data-mk="mini_drone"]')?.disabled ?? null,
+  price:    document.querySelector('[data-mk="mini_drone"]')?.textContent.replace(/\s+/g, ' ').trim(),
+  gain:     document.querySelector('.kit-card__mk-gain')?.textContent.replace(/\s+/g, ' ').trim(),
+}))
+console.log(`  зібрано 0: кнопка disabled=${bBuild.disabled}, ціна видима: "${bBuild.price}"`)
+console.log(`  замість приросту: "${bBuild.gain}"`)
 await page.click('#shop-close').catch(() => {})
 
 // ── L. Promoting somebody on the shop floor (F5) ──────────
@@ -1208,6 +1235,9 @@ const checks = [
   ['B2: the card names the new kit',     /Гоночний/.test(bAfter.cardText)],
   ['B2: the catalogue actually grew',    bCatalogue.unlocked.length >= 2],
   ['B2: the flat ceiling stops Mk III',  bCap.present === false && bCap.note.length > 0],
+  ['B3: no drones built, no Mk',          bBuild.disabled === true],
+  ['B3: the price stays visible anyway',  /\$/.test(bBuild.price ?? '')],
+  ['B3: and the card says what holds it', /Зібрано 0\//.test(bBuild.gain ?? '')],
   ['N: there is a cat in the flat',      nStart !== null && nStart.visible],
   ['N: it wanders on its own',           nMoved > 20],
   ['N: it has more than one thing to do', nMoods.size >= 2],

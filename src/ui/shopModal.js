@@ -1,6 +1,7 @@
 import {
   Phase, KIT_TYPES, calcPrice, idleStations, kitCost, kitBasePrice,
   kitMark, kitMarkMax, kitSolderPointCount, markUnlockOf, nextMarkCost, canUpgradeMark,
+  markBuildProgress,
 } from '../state/gameState.js'
 import { ruleAt } from '../state/locations.js'
 import { rescueKitAvailable, RESCUE_KIT_ID, kitRatePerSec } from '../sim/derive.js'
@@ -65,15 +66,28 @@ function mkRowHTML(state, kit) {
   const unlocks   = Object.entries(MK_UNLOCKS)
     .find(([from, u]) => from === kit.id && u.mk === mk + 1)?.[1]?.unlocks
 
+  // Другий замок Mk (Стадія 11 / A3): поки цього дрона зібрано замало, місце
+  // «що дасть наступний рівень» займає те, що зараз справді тримає покупку.
+  // Ціна на кнопці лишається — інакше гравець дізнається про неї аж після
+  // того, як добудує норму.
+  const build   = markBuildProgress(state, kit.id)
+  const locked  = build && build.have < build.need
+  const gainHTML = locked
+    ? `<span class="kit-card__mk-gain">
+         🔧 Зібрано ${build.have}/${build.need}
+         <span class="kit-card__mk-cap">Mk ${mk + 1}/${cap}</span>
+       </span>`
+    : `<span class="kit-card__mk-gain">
+         ≈$${nowRate.toFixed(2)} → $${nextRate.toFixed(2)}/сек
+         <span class="kit-card__mk-cap">Mk ${mk + 1}/${cap}</span>
+       </span>`
+
   return `
     <div class="kit-card__mk-row">
       <button class="btn btn--mk" data-mk="${kit.id}" ${can ? '' : 'disabled'}>
         ↑ ${mkLabel(mk + 1)} — $${Math.round(cost)}
       </button>
-      <span class="kit-card__mk-gain">
-        ≈$${nowRate.toFixed(2)} → $${nextRate.toFixed(2)}/сек
-        <span class="kit-card__mk-cap">Mk ${mk + 1}/${cap}</span>
-      </span>
+      ${gainHTML}
       ${unlocks ? `<p class="kit-card__mk-unlock">🔓 Відкриє: ${KIT_TYPES[unlocks].emoji} ${KIT_TYPES[unlocks].name}</p>` : ''}
     </div>`
 }

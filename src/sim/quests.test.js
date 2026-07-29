@@ -26,8 +26,17 @@ import { TICK_MS, ARROW_FREE_STEPS, ARROW_REQUEST_MS } from '../state/config.js'
 const T0 = 1_000_000
 
 const home = (extra = {}) => ({ ...createState(), ...extra })
-const withStats = (extra = {}, stats = {}) =>
-  ({ ...home(extra), stats: { ...createState().stats, ...stats } })
+// Стадія 11 / A: норма Mk рахується по типах, тому «зібрано 3» саме по собі
+// вже нічого не відкриває. На цих кроках інших типів у гравця немає, тож
+// агрегат розкладається на міні-дрон — поки тест не скаже інакше.
+const withStats = (extra = {}, stats = {}) => ({
+  ...home(extra),
+  stats: {
+    ...createState().stats,
+    assembledByKit: { mini_drone: stats.assembled ?? 0 },
+    ...stats,
+  },
+})
 
 // Стан, у якому пройдено весь акт квартири: гараж куплено.
 const garage = (extra = {}, stats = {}) =>
