@@ -20,14 +20,14 @@ import {
   Phase, DeliveryStatus, KIT_TYPES,
   pickupDelivery, startAssembly, startScrapAssembly, getStation,
   sell as sellStation, calcPrice, takeOutput, orderKit, abandonBurntDrone,
-  workerById, beginScrapRun, idleStations,
+  beginScrapRun, idleStations,
   kitCost, kitBasePrice,
 } from '../state/gameState.js'
 import { salePriceMult } from '../state/upgrades.js'
 import {
   ZONE_DWELL_INSTANT_MS, ZONE_DWELL_BENCH_MS, ZONE_DWELL_OUTPUT_MS,
   ZONE_DWELL_MAILBOX_MS, ZONE_DWELL_TRASH_MS, ZONE_DWELL_PANEL_MS,
-  CARRY_CAPACITY, MANAGER_COOLDOWN_MS, SALVAGE_RATE, ZONE_DWELL_PROMOTE_MS,
+  CARRY_CAPACITY, MANAGER_COOLDOWN_MS, SALVAGE_RATE,
 } from '../state/config.js'
 import { EV, emit } from '../sim/events.js'
 import {
@@ -36,7 +36,6 @@ import {
   managerOrderChoice,
 } from '../sim/derive.js'
 import { hiringAllowed } from '../state/locations.js'
-import { promoteCost } from './roles.js'
 
 // ── Carry helpers ─────────────────────────────────────────
 
@@ -303,33 +302,6 @@ export const INTERACTIONS = {
     run: (_world, zone, agent, events) =>
       emit(events, EV.PANEL_REQUESTED, {
         agentId: agent.id, panel: 'hire', hallId: zone.meta?.hallId ?? null,
-      }),
-  },
-
-  // Standing next to one of your own people offers to promote them (F5). The
-  // zone moves with them, so there is nowhere to walk "to" — you catch them
-  // where they work, which is what makes the factory feel staffed rather than
-  // managed.
-  //
-  // П3: this used to SPEND THE MONEY on the spot. Every other panel in the shop
-  // — the desk, the rack, the board — opens a modal on dwell; this one alone
-  // charged you, so walking past your own technician silently cost $240 with no
-  // explanation of what had happened. Now it asks, like everything else. The
-  // dwell is longer than the others for the same reason: you can stand next to
-  // someone for a second by accident, but not for a second and a half.
-  promote: {
-    dwellMs: ZONE_DWELL_PROMOTE_MS,
-    repeat:  false,
-    accepts: 'player',
-    enabled(world, zone) {
-      const worker = workerById(world.game, zone.meta?.workerId)
-      if (!worker) return false
-      const cost = promoteCost(worker.role, worker.level ?? 0)
-      return cost !== null && world.game.money >= cost
-    },
-    run: (_world, zone, agent, events) =>
-      emit(events, EV.PANEL_REQUESTED, {
-        agentId: agent.id, panel: 'promote', workerId: zone.meta?.workerId,
       }),
   },
 

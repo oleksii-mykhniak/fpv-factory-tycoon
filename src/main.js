@@ -422,6 +422,11 @@ const trashModal = createTrashModal(uiRoot, {
 
 const hireModal = createHireModal(uiRoot, {
   onHire: (role, hallId) => send('hireWorker', { role, hallId }),
+  // Підвищення живе в тій самій панелі (Стадія 11 / D3), але питає окремим
+  // вікном: у ньому видно, ЩО саме зміниться, а це і є весь сенс покупки.
+  // Дошка при цьому закривається — два вікна одне на одному означають, що
+  // тап потрапляє в те, яке гравець не бачить.
+  onPromote: (workerId) => { hireModal.close(); promoteModal.open(world.game, workerId) },
 })
 
 // The bar is gone entirely: everything that used to sit there is a place in the
@@ -436,8 +441,6 @@ function openPanel(panel, e = {}) {
   if (panel === 'shop')    shopModal.open(world.game)
   if (panel === 'upgrade') upgradeModal.open(world.game)
   if (panel === 'hire')    hireModal.open(world.game, e.hallId ?? null)
-  // П3: підвищення теж лише ПИТАЄ — гроші списує кнопка в панелі.
-  if (panel === 'promote') promoteModal.open(world.game, e.workerId)
 }
 
 let _lastRendered = null

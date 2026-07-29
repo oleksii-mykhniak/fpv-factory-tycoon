@@ -7,9 +7,10 @@
 
 import { describe, it, expect } from 'vitest'
 import {
-  activeQuest, questIndex, questReached, questZoneKind, trackIntroduced,
+  activeQuest, questIndex, questReached, questZoneKind,
   QUEST_CHAIN, QUEST_ACTS,
 } from './quests.js'
+import { trackIntroduced, featureIntroduced } from './unlocks.js'
 import { createWorld } from './world.js'
 import { advance } from './loop.js'
 import { dispatch } from './commands.js'

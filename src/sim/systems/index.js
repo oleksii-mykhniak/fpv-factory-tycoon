@@ -9,7 +9,6 @@
 //              decided on this tick is routed on this tick (V5)
 //   path     → plans routes for agents that asked for one
 //   move     → follows the route, separates agents, resolves collisions
-//   promote  → rebuilds the zones that follow workers around (F5)
 //   zone     → occupancy and dwell progress (detection only)
 //   interact → applies whatever a zone decided should fire
 //   station  → advances assembly on the bench
@@ -27,7 +26,6 @@ import { agentSystem }    from './agent.js'
 import { pathSystem }        from './path.js'
 import { moveSystem }        from './move.js'
 import { catSystem }         from './cat.js'
-import { promoteZoneSystem } from './promote.js'
 import { zoneSystem }        from './zone.js'
 import { interactionSystem } from './interaction.js'
 import { stationSystem }     from './station.js'
@@ -42,7 +40,6 @@ export const SYSTEMS = Object.freeze([
   catSystem,
   pathSystem,
   moveSystem,
-  promoteZoneSystem,
   zoneSystem,
   interactionSystem,
   stationSystem,

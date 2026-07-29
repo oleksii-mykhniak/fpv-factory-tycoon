@@ -7,6 +7,7 @@ import { ruleAt } from '../state/locations.js'
 import { rescueKitAvailable, RESCUE_KIT_ID, kitRatePerSec } from '../sim/derive.js'
 import { PRICE_BASE_COEFF, PRICE_QUALITY_COEFF, STORAGE_SLOTS_BY_LEVEL, MK_UNLOCKS } from '../state/config.js'
 import { salePriceMult } from '../state/upgrades.js'
+import { featureIntroduced } from '../sim/unlocks.js'
 import { kitsForLocation, LOCATIONS } from '../state/locations.js'
 import { roomDef } from '../defs/layouts/rooms.js'
 
@@ -45,9 +46,10 @@ function mkRowHTML(state, kit) {
   const cap  = kitMarkMax(state)
   const { can, cost, reasons } = canUpgradeMark(state, kit.id)
 
-  // Темп показуємо і тут: комплект у стелі не перестає бути тим, з чим його
-  // порівнюють. Без цього рядка картка «Mk у стелі» була б єдиною, по якій
-  // рішення прийняти не можна.
+  // У стелі рядок лишається, але без кнопки: темп комплекту — це те, з чим
+  // його порівнюють, і картка без нього була б єдиною, по якій рішення
+  // прийняти не можна. Зникає натомість ЦІНА: пропонувати покупку, якої не
+  // існує, — і є той «максимум» рядком-товаром, який Стадія 11 прибирає (П2).
   if (cost === null) {
     return `
       <div class="kit-card__mk-row">
@@ -202,7 +204,7 @@ export function createShopModal(root, { onOrder, onUpgradeMark }) {
               <div class="kit-card__sell-range">${priceRange(state, kit, mult)}</div>
             </div>
           </div>
-          ${mkRowHTML(state, kit)}
+          ${featureIntroduced(state, `mk:${kit.id}`) ? mkRowHTML(state, kit) : ''}
           <button class="btn btn--primary kit-card__btn" data-order="${id}" ${disabled ? 'disabled' : ''}>
             Замовити — $${Math.round(cost)}
           </button>

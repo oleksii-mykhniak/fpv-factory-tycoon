@@ -692,15 +692,27 @@ console.log(`  замість приросту: "${bBuild.gain}"`)
 await page.click('#shop-close').catch(() => {})
 
 // ── L. Promoting somebody on the shop floor (F5) ──────────
-console.log('\n### L. The promotion tag')
+console.log('\n### L. Підвищення в панелі')
+// Стадія 11 / D3: підвищення більше не робиться на підлозі. Штат — і найм, і
+// рівні — живе на дошці оголошень, тож і сценарій ходить туди.
 await boot(seedState({}, { locationId: 'factory', money: 20000 }))
 await openPanelAt('jobboard_hall-1')
 const lHireBtn = page.locator('.shop-upgrade', { hasText: 'Кур' }).locator('button').first()
 if (await lHireBtn.isEnabled().catch(() => false)) await lHireBtn.click()
-await page.waitForTimeout(300)
-await page.click('#hire-close').catch(() => {})
 await page.waitForTimeout(500)
 
+// Найнята людина одразу з'являється в секції «Ваші люди» тієї самої панелі.
+const lBoard = await page.evaluate(() => {
+  const titles = [...document.querySelectorAll('#hire-body .shop-section__title')]
+    .map(el => el.textContent.replace(/\s+/g, ' ').trim())
+  return {
+    sections: titles,
+    rows: [...document.querySelectorAll('#hire-body [data-promote]')]
+      .map(b => b.textContent.replace(/\s+/g, ' ').trim()),
+    // Ролі показуються по одній: рядків найму рівно стільки, скільки ланцюг увів.
+    hireRows: document.querySelectorAll('#hire-body [data-hire]').length,
+  }
+})
 const lBefore = await page.evaluate(() => {
   const w = globalThis.__world
   const worker = w.game.workers[0]
@@ -710,16 +722,17 @@ const lBefore = await page.evaluate(() => {
     level: worker.level,
     speed: agent.speed,
     money: Math.round(w.game.money),
-    tag:   view?.promoteLabel?.text ?? '',
-    tagOn: view?.promoteLabel?.graphics?.visible ?? false,
-    dots:  view?.levelLabel?.text ?? '',
+    lvl:   view?.levelLabel?.text ?? '',
+    // Рухомої зони підвищення в грі більше немає взагалі.
     zone:  (w.zones ?? []).some(z => z.kind === 'promote'),
+    tag:   view?.promoteLabel?.text ?? null,
   }
 })
+console.log(`  секції: ${JSON.stringify(lBoard.sections)}`)
+console.log(`  «Ваші люди»: ${JSON.stringify(lBoard.rows)}; вакансій на дошці: ${lBoard.hireRows}`)
 
-// Stand on top of them for a moment. П3: this no longer BUYS anything — it
-// opens a panel, exactly like every other object in the shop.
-for (let i = 0; i < 45; i++) {
+// Стояння поруч більше нічого не робить — перевіряємо саме це.
+for (let i = 0; i < 30; i++) {
   await page.evaluate(() => {
     const w = globalThis.__world
     const worker = w.agents.find(a => a.kind === 'worker')
@@ -728,8 +741,15 @@ for (let i = 0; i < 45; i++) {
   })
   await page.waitForTimeout(60)
 }
-await page.waitForTimeout(400)
+const lStanding = await page.evaluate(() => ({
+  panel: !document.querySelector('#promote-modal')?.hasAttribute('hidden'),
+  level: globalThis.__world.game.workers[0].level,
+}))
 
+// Рядок у панелі відкриває вікно з тим, що саме зміниться.
+await openPanelAt('jobboard_hall-1')
+await page.click('#hire-body [data-promote]')
+await page.waitForTimeout(400)
 const lPanel = await page.evaluate(() => {
   const el = document.querySelector('#promote-modal')
   if (!el || el.hasAttribute('hidden')) return null
@@ -739,7 +759,6 @@ const lPanel = await page.evaluate(() => {
     btn:   el.querySelector('#promote-btn')?.textContent.trim(),
   }
 })
-// Нічого ще не сталось: панель лише питає.
 const lAsked = await page.evaluate(() => {
   const w = globalThis.__world
   return { level: w.game.workers[0].level, money: Math.round(w.game.money) }
@@ -758,12 +777,13 @@ const lAfter = await page.evaluate(() => {
     level: worker.level,
     speed: agent.speed,
     money: Math.round(w.game.money),
-    dots:  view?.levelLabel?.text ?? '',
+    lvl:   view?.levelLabel?.text ?? '',
   }
 })
-console.log(`  tag "${lBefore.tag}" (visible ${lBefore.tagOn}); рівень ${lBefore.dots} → ${lAfter.dots}; ` +
+console.log(`  рівень над головою ${lBefore.lvl} → ${lAfter.lvl}; ` +
             `level ${lBefore.level}→${lAfter.level}, speed ${lBefore.speed}→${lAfter.speed}, ` +
             `money ${lBefore.money}→${lAfter.money}`)
+await page.click('#hire-close').catch(() => {})
 
 // ── N. The cat (V5) ───────────────────────────────────────
 console.log('\n### N. The cat')
@@ -1217,16 +1237,21 @@ const checks = [
   ['K: the box is drawn on the belt',         kDropped.boxVisible === 1],
   ['K: a character takes it off the belt',    kInHand.carrying.includes('kit_box')],
   ['K: and carries it into a bench',          kOnBench.phase === 'ASSEMBLY'],
-  ['L: a zone follows the worker around',  lBefore.zone === true],
-  ['L: the price tag is drawn over them',  lBefore.tagOn && lBefore.tag.includes('$')],
-  ['L: standing next to them only ASKS',   !!lPanel && lAsked.level === lBefore.level &&
-                                           lAsked.money === lBefore.money],
+  ['L: no promote zone on the floor any more', lBefore.zone === false],
+  ['L: and no price tag over their head',      lBefore.tag === null],
+  ['L: standing next to them does nothing',    lStanding.panel === false &&
+                                               lStanding.level === lBefore.level],
+  ['L: the board lists your people',           lBoard.rows.length === 1 &&
+                                               lBoard.rows[0].includes('$')],
+  ['L: and still offers vacancies',            lBoard.hireRows >= 1],
+  ['L: the row only ASKS',                     !!lPanel && lAsked.level === lBefore.level &&
+                                               lAsked.money === lBefore.money],
   ['L: the panel says what will change',   (lPanel?.stats.length ?? 0) > 0],
   ['L: the button in the panel promotes',  lAfter.level === lBefore.level + 1],
   ['L: it costs money',                    lAfter.money < lBefore.money],
   ['L: they actually get faster',          lAfter.speed > lBefore.speed],
-  ['L: the level readout moves on',        lAfter.dots !== lBefore.dots &&
-                                           /\d/.test(lAfter.dots)],
+  ['L: the level readout moves on',        lAfter.lvl !== lBefore.lvl &&
+                                           /\d/.test(lAfter.lvl)],
   ['M: the rate gauge is there before any sale', mBefore.visible === true],
   ['M: and it reads zero, not nothing', /\$0\.00/.test(mBefore.text)],
   ['M: the rate survives a sale',        mAfter.visible === true],

@@ -22,7 +22,6 @@ import {
 import { INTERACTIONS, carrySpriteKey, zoneWantsAttention } from '../defs/interactions.js'
 import { dwellProgress } from '../sim/systems/zone.js'
 import { piggyShouldShow, nextObjective } from '../sim/derive.js'
-import { promoteCost } from '../defs/roles.js'
 import { ruleAt } from '../state/locations.js'
 import { CARRY_STACK_OFFSET_Y, VIEW_SMOOTHING, SALVAGE_RATE } from '../state/config.js'
 import * as ex from 'excalibur'
@@ -229,23 +228,22 @@ function syncWorkers(refs, world) {
     syncCarryStack(view.carrySlots, view.actor, agent)
   }
 
-  // ── Promotion price tags (F5) ──────────────────────────
-  // Only over the player's own staff, only when the promotion is affordable and
-  // exists: a tag you cannot act on is noise, and this one is the whole upgrade
-  // UI on the factory.
+  // ── Номер рівня над головою ────────────────────────────
   //
-  // Де підвищень немає (`hasPromote` — вдома), над головами не висить нічого:
-  // ні цінника, ні номера рівня. Рівень, який нікуди не росте, — це підпис про
-  // механіку, якої в цій локації не існує.
+  // Цінник «⬆️ $240» звідси прибрано (Стадія 11 / D3): підвищення більше не
+  // робиться на підлозі, а підпис із ціною над людиною, до якої можна підійти
+  // й нічого не станеться, — це обіцянка, якої світ не виконує. Номер рівня
+  // лишився: він не дія, а те, ким ця людина є.
+  //
+  // Де підвищень немає (`hasPromote` — вдома), не висить і він: рівень, який
+  // нікуди не росте, — це підпис про механіку, якої в цій локації не існує.
   const promoting = ruleAt(world.game, 'hasPromote')
   for (const worker of workersOf(world.game)) {
     const view = refs.workerViews?.get(worker.id)
-    if (!view?.promoteLabel) continue
+    if (!view?.levelLabel) continue
     const agent = (world.agents ?? []).find(a => a.id === worker.id)
-    const cost  = promoteCost(worker.role, worker.level ?? 0)
 
     if (!agent || !promoting) {
-      view.promoteLabel.graphics.visible = false
       view.levelLabel.graphics.visible = false
       continue
     }
@@ -256,14 +254,6 @@ function syncWorkers(refs, world) {
     view.levelLabel.pos.x = agent.x
     view.levelLabel.pos.y = agent.y - 66
     view.levelLabel.graphics.visible = true
-
-    const show = cost !== null && world.game.money >= cost
-    view.promoteLabel.graphics.visible = show
-    if (show) {
-      view.promoteLabel.text = `⬆️ $${cost}`
-      view.promoteLabel.pos.x = agent.x
-      view.promoteLabel.pos.y = agent.y - 86
-    }
   }
 
   // A worker that no longer exists (a future firing / a reload) must not leave

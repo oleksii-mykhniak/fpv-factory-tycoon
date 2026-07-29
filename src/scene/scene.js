@@ -1037,22 +1037,9 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
         badge: roleBadge(role), tint: true, tiles: role,
       })
 
-      // Price tag over the head (F5): the promotion IS the upgrade menu on the
-      // factory, so it has to be visible on the floor rather than behind a
-      // panel. Level dots ride just under it, so progress reads without a tap.
-      view.promoteLabel = new ex.Label({
-        text: '',
-        pos:  ex.vec(-9999, -9999),
-        z: 26,
-        color: ex.Color.fromHex('#ffd76a'),
-        font: new ex.Font({
-          family: 'monospace', size: 15, unit: ex.FontUnit.Px,
-          textAlign: ex.TextAlign.Center, baseAlign: ex.BaseAlign.Middle,
-        }),
-      })
-      view.promoteLabel.graphics.visible = false
-      scene.add(track(view.promoteLabel))
-
+      // Номер рівня над головою (F5, звужено Стадією 11 / D3). Цінника поруч
+      // більше немає: підвищення живе в панелі, а не на підлозі, і підпис із
+      // ціною над людиною обіцяв би дію, якої там уже не буде.
       view.levelLabel = new ex.Label({
         text: '',
         pos:  ex.vec(-9999, -9999),

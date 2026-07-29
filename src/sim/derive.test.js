@@ -9,7 +9,7 @@ import { createState } from '../state/gameState.js'
 import { purchaseOptions, upgradeNeedsAttention } from './derive.js'
 import { UPGRADE_TRACKS, trackMaxLevel } from '../state/upgrades.js'
 import { capFor } from '../state/locations.js'
-import { trackIntroduced } from './quests.js'
+import { trackIntroduced } from './unlocks.js'
 
 const withMoney = (money) => ({ ...createState(), money })
 

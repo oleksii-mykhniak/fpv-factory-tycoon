@@ -93,9 +93,10 @@ export function rebuildStationGeometry(world) {
 
   world.placedStations = placed
   world.obstacles = [...layout.obstacles, ...placed.map(p => p.body)]
-  // Fixed zones: the layout's own plus one per built station. Kept separately
-  // because the promote zones (F5) follow people around and are rebuilt every
-  // tick on top of these.
+  // Fixed zones: the layout's own plus one per built station. `staticZones`
+  // лишається окремим полем, хоч рухомих зон у грі більше немає (Стадія 11 / D3
+  // прибрала зону підвищення): це той самий список, який системи мають право
+  // перебудовувати, і повертати його в `zones` означало б знову їх змішати.
   world.staticZones = [
     ...layout.zones,
     ...placed.map(p => p.zone),

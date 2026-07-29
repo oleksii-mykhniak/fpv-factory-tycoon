@@ -173,14 +173,10 @@ export const HIRE_COST_GROWTH = 1.85
 export const WORKER_UPGRADE_BASE   = { courier: 240, tech: 400, seller: 300, manager: 560 }
 // Крива ціни — WORKER_LEVEL_GROWTH нижче. Була 2.1, але це показник для трьох
 // рівнів; для нескінченних він робить третє підвищення недосяжним.
-// How long the player stands next to someone to promote them.
-// Довше за решту панелей (П3): біля власного техніка можна опинитись випадково
-// на секунду, але не на півтори — а ця панель відкривається САМА, поки ти
-// просто стоїш поруч.
-export const ZONE_DWELL_PROMOTE_MS = 1600
-// How close counts as "next to". Deliberately tight: a wide one would fire on
-// anybody walking past a colleague, and promotions cost money.
-export const PROMOTE_ZONE_SIZE = 120
+// Зони підвищення більше немає (Стадія 11 / D3): щоб підняти комусь рівень,
+// треба було наздогнати людину й постояти поруч, а штат через це жив у двох
+// різних місцях гри. Тепер він увесь на дошці оголошень, тож ні витримки, ні
+// розміру тієї зони не існує.
 
 // ── Procurement manager (S3) ─────────────────────────────
 // The manager sits at the laptop and orders kits so the player does not have

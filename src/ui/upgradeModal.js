@@ -1,5 +1,5 @@
 import { UPGRADE_TRACKS, levelData, nextCost, trackMaxLevel } from '../state/upgrades.js'
-import { trackIntroduced } from '../sim/quests.js'
+import { trackIntroduced } from '../sim/unlocks.js'
 import {
   openHallIds, nextHallId, canUnlockHall, openRoomIds, nextRoomId, canUnlockRoom,
 } from '../state/gameState.js'

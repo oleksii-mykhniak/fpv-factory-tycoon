@@ -24,7 +24,8 @@ import {
 import { roomDef } from '../defs/layouts/rooms.js'
 import { hallDef } from '../defs/layouts/factory.js'
 import { ROLE_ORDER, roleLevelData } from '../defs/roles.js'
-import { questZoneKind, questIsLoop, questIndex, trackIntroduced } from './quests.js'
+import { questZoneKind, questIsLoop, questIndex } from './quests.js'
+import { trackIntroduced } from './unlocks.js'
 
 // Найдешевший комплект переїхав у gameState (поруч із `kitCost`, з якого й
 // рахується) і ре-експортується звідси: споживачів у нього багато, і всі вони
