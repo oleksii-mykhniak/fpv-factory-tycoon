@@ -6,7 +6,7 @@ cycles, the cat, and (since V4) the four objects the player walks up to: the
 desk, the upgrade rack, the job board and the bin. Those four had no PNG at all
 until then; the loader was drawing its missing-sprite fallback rectangle.
 
-The plan (`docs/plan_stage6_visual.md`, V4) is that FURNITURE and DECOR come
+The plan (`docs/plans/stage6_visual.md`, V4) is that FURNITURE and DECOR come
 from CC0 packs while CHARACTERS stay on the generator — it does role palettes
 and animation, which no ready-made pack will match. Nothing has been downloaded
 yet: picking a pack means picking it whole, since two pieces of furniture from

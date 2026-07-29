@@ -1,0 +1,295 @@
+# Стадії 1, 2 і 2-bis — MVP, розворот 3D→2D
+
+> Архів фактів. Живий документ — [../progress.md](../progress.md); план цієї стадії — [../plans/done/full_game.md](../plans/done/full_game.md).
+
+---
+
+## Стадія 2-bis — Top-down 2D кімната + робітник (Excalibur)
+
+> **Розворот 2026-06-20:** складність 3D + виробництво Blender-моделей надто дорогі для соло. Ядро гри (FSM, кіти, апгрейди, save, тести) не чіпалось — міняється лише шар `src/scene/`.
+> **Уточнення напряму 2026-06-20 (друге):** псевдо-ізо 3⁄4 → **top-down (PA-style) + персонаж-робітник** + interaction-driven UI (мінімальний HUD, тапи по об'єктах, кнопка-магазин). M1/M2 лишаються валідними; M3/M4-діорама (3⁄4) **переосмислюється** в T1–T4 (top-down + робітник + UI). Деталі — `../plans/done/full_game.md` §5a, §6.
+
+| Під-етап | Назва | Статус | Дата коміту |
+|----------|-------|--------|-------------|
+| M1 | Excalibur in, Babylon out — порожня сцена | `scene.js`, `loader.js`, `package.json` | ✅ 2026-06-20 |
+| M2 | Лоадер + spriteCache з graceful fallback | `loader.js`, `spriteCache.js`, `manifest.js` | ✅ 2026-06-20 |
+| T1 | Top-down перекомпонування кімнати (без персонажа) | `scene.js` (top-down діорама) | ✅ 2026-06-20 |
+| T2 | Робітник-аватар + його FSM (тап = команда, manual) | `scene/worker.js`, `scene.js`, `main.js` | ✅ 2026-06-20 |
+| T3 | Interaction-driven UI: мінімальний HUD, міні-гра по тапу, заглушка магазину | `ui/`, `main.js` | ✅ 2026-06-20 |
+| T4 | Авто-режим робітника через upgrade-трек | `upgrades.js`, `worker.js` | ✅ 2026-06-20 |
+| M4 | Swap прямокутник↔спрайт + кадри ходьби робітника | `scene.js`, `public/sprites/` | ✅ 2026-06-20 |
+| M5 | Прибирання 3D-коду + перейменування | `kits.js`, `manifest.test.js`, відаляємо modelCache/blender | ✅ 2026-06-20 |
+
+---
+
+## Стадія 2 — Asset pipeline 3D (СКАСОВАНО — замінено Стадією 2-bis)
+
+*Під-етапи 2.1–2.4 виконано, але стратегія змінилась до першої реальної моделі. Весь 3D-шар (Babylon, manifest MODELS, modelCache, public/models) видалено в M5.*
+
+---
+
+---
+
+## Стадія 1 — MVP «Квартира»
+
+| Під-етап | Назва | Статус | Дата коміту |
+|----------|-------|--------|-------------|
+| 1.0 | Каркас і тулчейн | ✅ Готово | 2026-06-20 |
+| 1.1 | Чистий стан (ядро) | ✅ Готово | 2026-06-20 |
+| 1.2 | DOM-луп (текстовий прототип) | ✅ Готово | 2026-06-20 |
+| 1.3 | Міні-гра паяння | ✅ Готово | 2026-06-20 |
+| 1.4 | Поломка | ✅ Готово | 2026-06-20 |
+| 1.5 | Дерево апгрейдів | ✅ Готово | 2026-06-20 |
+| 1.6 | Збереження | ✅ Готово | 2026-06-20 |
+| 1.7 | Babylon 3D + доставка коробки | ✅ Готово | 2026-06-20 |
+| 1.8 | Capacitor + тест на залізі | ✅ Готово | 2026-06-20 |
+
+---
+
+## Нотатки по під-етапах
+
+### M5 — 3D cleanup ✅
+
+**Що зроблено:**
+- Підтверджено: `package.json`/`package-lock.json` — нуль Babylon; `kits.js` вже має `spriteKey`; `modelCache.js`, `public/models/`, `src/assets/models/` — вже видалено раніше (M1/M2)
+- `src/assets/CREDITS.md` — прибрано посилання на Blender/models, оновлено під 2D-спрайти
+- Нуль файлів `.glb`/`.blend` у репо (підтверджено `find`)
+- 78 тестів зелені, `npm run build` проходить
+
+**Відхилення від плану / рішення:**
+- Більшість прибирання було зроблено поступово в M1–M2; M5 зафіксував фінальний стан і очистив CREDITS
+- Android-білд (`npm run android`) потребує підключеного пристрою — гейт для валідації на залізі
+
+---
+
+### M4 — Shaped sprites + walk animation ✅
+
+**Що зроблено:**
+- `scripts/gen-placeholder-sprites.js` — повністю переписано: RGBA PNG із прозорим фоном + реальні форми: дрон (хрест+мотори+LED), коробка (brown+tape-X), верстак (плашки+текстура), паяльник (ручка+наконечник)
+- `worker_walk.png` (192×48) — 4-frame walk cycle: top-down персонаж (голова, куртка, ноги що чергуються кадр-через-кадр)
+- `manifest.js` — додано запис `worker_walk`
+- `worker.js` — `setupSprite(src)`: будує `SpriteSheet` → `walkAnim`/`idleAnim`, `setMoving(bool, toRight)` перемикає анімацію + `flipHorizontal` для напрямку руху
+- `scene.js` — `worker.setupSprite(getSprite('worker_walk'))` одразу після `createWorker`
+- Fallback незламний: відсутній файл → `null` → no-op → оранжевий прямокутник як і раніше
+
+**Відхилення від плану / рішення:**
+- Art залишається процедурним (план говорив «тимчасово — будь-який PNG») — реальні CC0-спрайти (Kenney) — наступний крок
+- `flipHorizontal` при русі ліворуч/праворуч — через `actor.graphics.flipHorizontal`; для top-down без строгих 4-направлень цього достатньо
+- `Animation.width/height` — read-only в Excalibur; масштаб через `anim.scale = ex.vec(sx, sy)`
+
+---
+
+### T4 — Авто-режим робітника ✅
+
+**Що зроблено:**
+- `WORKER_UPGRADE_COSTS = [250, 500]` у `config.js`
+- `WORKER_MODE` (manual/semi/auto) + трек `worker` у `upgrades.js` — дзеркалить soldering-трек
+- `workerLevel: 0` у `createState().upgrades` (`gameState.js`) — зберігається в save автоматично
+- `main.js`: у `draw()` два авто-тригери: `DELIVERY` + semi/auto → `commandDeliver()`; `ASSEMBLY` + auto → `commandSolder()`. Обидва виклики ідемпотентні (FSM-гарди в worker.js)
+- Shop modal підхоплює новий трек автоматично (ітерує `UPGRADE_TRACKS`)
+- 8 нових тестів для worker-треку; 78 тестів зелені
+
+**Відхилення від плану / рішення:**
+- Нова FSM не потрібна — auto-режим реалізовано через виклик тих самих `commandDeliver`/`commandSolder` з `draw()`, гілкуванням за `workerMode`
+- Жоден новий таймер не додано — авто-тригер вбудований у вже існуючий `draw()` цикл
+
+---
+
+### T3 — Interaction-driven UI ✅
+
+**Що зроблено:**
+- Прибрано постійну DOM-панель (`domUI.render` більше не викликається)
+- `ROOM_H` 0.67 → 0.88 — кімната займає весь canvas (DOM-панель видалено)
+- `ui/hud.js` — мінімальний HUD: гроші (зелений, top-right) + кнопка «Магазин» (top-left); підказки фаз внизу
+- `ui/shopModal.js` — bottom-sheet модалка: список кітів з кнопками «Замовити», секція апгрейдів; закривається після замовлення
+- `ui/solderModal.js` — bottom-sheet модалка паяння: прогрес-крапки, step-label, mini-game per point, показує burn-результат + abandon-кнопку; auto-close на READY/IDLE
+- `scene.js`: `onSellRequested` — тап по столу в READY → продаж (diegetic); `initScene` отримує новий callback
+- `main.js`: перейшов на нові UI-модулі; `onSolderRequested` — гілкує manual/semi/auto; `handleSolderResult` auto-finish коли всі точки зроблено; `onSellRequested` продає через тап столу
+- Cold solder fix: mini-game перестворюється при `warning === 'cold'` (попередній екземпляр `running=false`)
+- 70 тестів зелені
+
+**Відхилення від плану / рішення:**
+- `solderModal.open(state)` одразу рендерить вміст через `update(state, null)` — щоб вміст з'явився без `draw()` з main
+- Cold solder: умова `done !== lastGameIdx || warning === 'cold'` — гарантує перестворення mini-game після провалу без просуву індексу
+- READY-продаж diegetic (тап столу), а не кнопка HUD — відповідає Spirit DoD «повний цикл через тапи по світу + HUD»
+
+---
+
+### T2 — Робітник-аватар + FSM ✅
+
+**Що зроблено:**
+- `workerFSM.js` — pure FSM (6 станів: idle→walkDoor→pick→carry→atBench→solder), нуль Excalibur
+- `workerFSM.test.js` — 8 тестів: повний цикл доставки, solder-цикл, reset з будь-якого стану, invalid no-op, predicates, immutability
+- `worker.js` — Actor (оранжевий W*0.09 квадрат) + рух: `commandDeliver()` іде до дверей → пауза 250ms → несе коробку на стіл (worker+box разом); `commandSolder()` → `onSolderRequested`; `reset()` повертає на `idlePos`
+- `scene.js`: workbench повертає ref; `currentPhase` на рівні модуля для gate-перевірки; box-tap → `commandDeliver`, bench-tap → `commandSolder`; `boxOpen` Actor (відкрита коробка видна в ASSEMBLY/READY); `updateScene` скидає worker на IDLE; `BENCH_POS`/`TABLE` дериваються від `workbench.pos` (object-relative)
+- `main.js`: `onSolderRequested: () => {}` (no-op, T3 підключить)
+- `ROOM_H`: 0.65 → 0.67 (трохи більше простору)
+- 70 тестів зелені
+
+**Відхилення від плану / рішення:**
+- `workerFSM.js` + `worker.js` — два файли (аналог spriteCache+loader), щоб FSM тестувався в Node без Excalibur
+- `boxOpen` — окремий Actor для "відкритої" коробки на столі; не зникає в ASSEMBLY, а перетворюється на плаский світлий прямокутник під дроном
+- `BENCH_POS` = `workbench.pos.y + workbench.height/2 + WORKER_SIZE/2` — перший крок до POI-системи (object-derived waypoints); решта (`DOOR`, `IDLE_POS`) ще fractional — повна POI-система на T4+
+
+---
+
+### M1 + M2 + T1 — Excalibur, spriteCache, top-down кімната ✅
+
+**Що зроблено:**
+- `excalibur@0.32` встановлено; `@babylonjs/core` + `@babylonjs/loaders` видалено з `package.json`
+- `scene.js` — переписано на Excalibur Actors; `colorRect` helper; top-down PA-style кімната (підлога, 4 стіни з дверним прорізом внизу, стіл, лампа)
+- Кімната займає верхні 65% canvas (`ROOM_H = 0.65`) — нижче DOM-панель; усі об'єкти у видимій зоні
+- `loader.js` — `ImageSource.load()` з graceful fallback (404 → `null` у кеші → rect fallback)
+- `spriteCache.js` — pure-JS модуль без Excalibur-імпортів; тестується в Node без WebGL
+- `manifest.js` — перейменовано `MODELS`→`SPRITES`, URL `.glb`→`.png`, якорі стали 2D-зміщеннями `{x,y}`
+- `kits.js` — `modelKey`→`spriteKey`
+- `scripts/gen-placeholder-sprites.js` — генератор 4 placeholder PNG (solid-color)
+- `public/sprites/` — `mini_drone`, `delivery_box`, `workbench`, `soldering_iron`
+- Видалено: `modelCache.js`, `loader.test.js`, `public/models/`, `src/assets/models/`
+- Тести: 62, всі зелені
+
+**Відхилення від плану / рішення:**
+- `loadSprites` викликається з `initScene` (не через Excalibur `Loader`) — зберігає існуючий DOM load-overlay без змін у `main.js`
+- FPS: Excalibur не має `getFps()` → обгортка `engine: { getFps: () => engine.clock.fpsSampler.fps }`
+- Кімната обмежена `ROOM_H = 0.65` бо DOM-панель стартує на ~68% висоти viewport; 65% дає 23px буфера
+- Excalibur Actor pointer events (`actor.on('pointerup', ...)`) дають нативний hit-test — вручну перевіряти координати не треба
+
+---
+
+### 1.8 — Capacitor + тест на залізі ✅
+
+**Що зроблено:**
+- `@capacitor/core`, `@capacitor/cli`, `@capacitor/android` встановлено; Capacitor ініціалізовано (`com.fpvfactory.tycoon`)
+- `android/` — нативний проєкт згенеровано і налаштовано
+- `npm run android` / `make android` — повний цикл build→sync→deploy на підключений Android
+- `npm run android:debug` / `make android-debug` — дебаг-білд з FPS-лічильником (зелений кут зверху-справа, оновлюється кожні 500 мс)
+- Гейт пройдено: гра запускається на реальному пристрої, FPS прийнятний, повний цикл працює, збереження між запусками ✓
+
+**Відхилення від плану / рішення:**
+- FPS-лічильник реалізовано через `--mode debug` (Vite), не як окремий `?debug`-параметр — так він автоматично зникає з продакшн-білду без зміни коду
+- Android Studio не потрібен — Gradle wrapper завантажується автоматично при першій збірці
+
+---
+
+### 1.0 — Каркас і тулчейн ✅
+
+**Що зроблено:**
+- Vite 6 + Vitest 3, скрипти `dev / build / test`
+- Структура `src/state/ ui/ scene/ save/`
+- `index.html`: `<canvas id="game-canvas">` + `<div id="ui-root">` (canvas під 3D, ui-root — DOM-оверлей)
+- `src/main.js` — точка входу; `src/style.css` — темний фон, canvas на весь екран
+
+**Відхилення від плану / рішення:**
+- `create vite` CLI скасовувалась через наявні файли в теці → створили структуру вручну (результат ідентичний)
+- Vitest одразу взяли v3 (замість v2 з roadmap), щоб закрити вразливість esbuild у dev-залежностях
+
+### 1.7 — Babylon 3D + доставка коробки ✅
+
+**Що зроблено:**
+- `src/scene/scene.js`: low-poly кімната (підлога, 2 стіни, стіл з ніжками, лампа), коробка доставки (клікабельна, анімація льоту на стіл), X-frame дрон на столі
+- Камера: Sims-like isometric (`alpha=PI/4`) — видно обидві задні стіни
+- Коробка з'являється у DELIVERY, дрон — у ASSEMBLY/READY, ховаються в решті фаз
+- Затримка доставки: `DELIVERY_DELAY_MS=5000` в config, авто-перехід ORDERED→DELIVERY
+- Restore з ORDERED → миттєва доставка (посилка прийшла поки сторінка була закрита)
+- Мобільний: bottom-sheet панель (≤640px), `touch-action:none` на canvas
+
+**Відхилення від плану / рішення:**
+- Затримка доставки додана разом з 1.7 (не була в оригінальному DoD — логічно доповнює механіку)
+- Кнопка "Отримати доставку" видалена — доставка тепер автоматична
+
+---
+
+### 1.6 — Збереження ✅
+
+**Що зроблено:**
+- `src/save/storage.js` — `saveGame / loadGame / clearSave` обгортка над `localStorage`
+- Версіонування `SAVE_VERSION = 1` — некоректна/стара версія ігнорується
+- Автозбереження при кожному `update()` в `main.js`
+- Відновлення при старті з merge-стратегією — нові поля дефолтів заповнюються автоматично
+- `salesLog` зберігається разом зі станом
+
+**Відхилення від плану / рішення:**
+- Щоб перейти на `@capacitor/preferences` — міняється тільки `storage.js`, решта коду не чіпається
+
+---
+
+### 1.5 — Дерево апгрейдів ✅
+
+**Що зроблено:**
+- 4 рівні паяльника: ручний → кращий (ширша зона, −60% перегріву) → напівавтомат (1 тап/збірка, 65–85%) → автопаяльник (фоновий таймер, 55–75%)
+- `buyUpgrade(state, 'soldering')` у state-модулі; купівля тільки між циклами (IDLE)
+- Попередження при купівлі якщо залишиться менше ніж на комплект
+- Кольорові кружечки прогресу (зелений/жовтий/червоний за якістю), видно й у READY
+- Холодна пайка: ретрай + `coldSolderPenalty += 0.15` (cap на фінальну якість), скидається на початку циклу
+- **Config cleanup:** всі магічні числа перенесено до `config.js`
+
+**Відхилення від плану / рішення:**
+- Гейт дизайну перевірено: ідеальна ручна → avg ~$124, автопаяльник → avg ~$100 — мотивація паяти руками зберігається ✓
+- Холодна пайка змінена: штраф до якості (було: тільки ретрай без наслідків)
+
+---
+
+### 1.4 — Поломка ✅
+
+**Що зроблено:**
+- `Phase.BURNT` + `burnKit()` + `abandonBurntDrone(state, salvageRate)` у state-модулі
+- `src/state/config.js`: `COLD_SOLDER_THRESHOLD=0.40`, `OVERHEAT_CHANCE=0.25`, `SALVAGE_RATE=0.40`
+- Два результати промаху: холодна пайка (75%) — переробити точку; перегрів (25%) — `BURNT`
+- **Захист від банкрутства**: overheat блокується якщо `money + salvage < kit.cost`
+- Salvage при abandon: повертається 40% вартості ($28.80) — гравець може замовити знову
+- Назви кроків збірки у `KIT_TYPES.assemblySteps` (раму→мотори→ESC→прошивка)
+
+**Відхилення від плану / рішення:**
+- `abandonBurntDrone` приймає `salvageRate` параметром — щоб апгрейди (1.5) могли збільшувати відшкодування
+- Overheat заблокований програмно (не рандомом) коли мало грошей — гравець ніколи не застрягає назавжди
+
+---
+
+### 1.3 — Міні-гра паяння ✅
+
+**Що зроблено:**
+- `src/ui/solderGame.js` — повзунок по синусоїді, зелена зона, клік або Пробіл фіксує позицію
+- Якість: центр зони → 1.0, край → 0.6, за зоною → 0 (плавно)
+- Швидкість зростає на 12% з кожною точкою (`BASE_PERIOD × 0.88^i`)
+- Фідбек: "Ідеально!" / "Добре!" / "Непогано" / "Слабко…" / "Промах!" з кольором, 500ms пауза
+- `Math.random()` замінено реальною механікою
+
+**Відхилення від плану / рішення:**
+- `DEFAULT_GREEN_HALF` експортується — щоб система апгрейдів (1.5) могла розширювати зону без зміни логіки гри
+- Синусоїда замість лінійного ping-pong — природне сповільнення на краях, ефект "пружини"
+
+---
+
+### 1.2 — DOM-луп ✅
+
+**Що зроблено:**
+- `src/ui/domUI.js` — render-функція, панель через innerHTML, кнопки прив'язані до FSM-переходів
+- `src/main.js` — тримає стан, передає handlers у UI, логує продажі
+- Кнопки видно тільки у відповідній фазі; "Замовити" дизейблиться при нестачі грошей
+- Точки пайки — кружечки, заповнюються по одному
+- Лог 6 останніх продажів з кольором якості
+- Якість = `Math.random()` (заглушка до 1.3)
+
+**Відхилення від плану / рішення:**
+- Немає — реалізовано точно по DoD
+
+---
+
+### 1.1 — Чистий стан (ядро) ✅
+
+**Що зроблено:**
+- `src/state/gameState.js` — pure JS модуль, нуль залежностей від DOM/Babylon
+- FSM: `IDLE → ORDERED → DELIVERY → ASSEMBLY → READY → IDLE`
+- 6 функцій: `orderKit / receiveDelivery / startAssembly / recordSolderPoint / finishAssembly / sell`
+- Формула ціни з GDD: `ціна = база × (0.6 + 0.7 × якість) × множник_прокачки`
+- Стан незмінний (кожна функція повертає новий об'єкт)
+- `src/state/gameState.test.js` — 22 тести: повний цикл, граничні значення, відхилення невалідних FSM-переходів, immutability
+- Економіка: ідеальна пайка +$51.50, нульова −$15 (маржа має вагу)
+
+**Відхилення від плану / рішення:**
+- Додано окремі тести на immutability (не було в DoD, але критично для майбутнього збереження стану)
+- `priceMultiplier` у `state.upgrades` замість окремого аргументу — щоб збереження стану містило все в одному об'єкті
+
+---
+
+---

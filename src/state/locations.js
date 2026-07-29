@@ -30,7 +30,7 @@ export const LOCATIONS = Object.freeze({
     sceneConfig: { bgColor: '#0e0e18', floorColor: '#1a1a26' },
   },
   // The last location. Everything after this point grows inside it — rooms, not
-  // another move (Stage 5). See docs/plan_stage5_factory.md.
+  // another move (Stage 5). See docs/plans/done/stage5_factory.md.
   factory: {
     id:   'factory',
     name: 'Фабрика',
