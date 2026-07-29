@@ -20,6 +20,9 @@
 // функцією від того, що гравець зробив.
 
 import { QUEST_CHAIN, questIndex } from './quests.js'
+import { UPGRADE_TRACKS } from '../state/upgrades.js'
+import { KIT_TYPES } from '../state/kits.js'
+import { ROLES } from '../defs/roles.js'
 
 // Наступна річ ЦЬОГО ЖЕ роду, яку ланцюг збирається ввести.
 //
@@ -65,4 +68,59 @@ export function featureIntroduced(game, featureId) {
 // префікси знати не мусять.
 export function trackIntroduced(game, trackId) {
   return featureIntroduced(game, `track:${trackId}`)
+}
+
+// ── «Що буде далі» (Стадія 11 / E) ────────────────────────
+//
+// Гравець бачить поточний крок і нічого не знає про те, що по той бік нього.
+// В айдл-грі саме це й тримає між покупками: не «скільки лишилось», а «заради
+// чого». Тому картка квесту показує НАЙБЛИЖЧУ нову річ — і показує саме річ, а
+// не відстань до неї: довжина ланцюга змінюється з кожним балансним
+// правленням, і обіцяти «через 4 кроки» означає перестати бути правдою.
+
+const FEATURE_LABELS = {
+  track: (id) => ({ label: UPGRADE_TRACKS[id]?.name ?? id, where: 'у шафі' }),
+  role:  (id) => {
+    const role = ROLES[id]
+    return { label: role ? `${role.emoji} ${role.name}` : id, where: 'на дошці' }
+  },
+  mk:    (id) => {
+    const kit = KIT_TYPES[id]
+    return { label: kit ? `Mk ${kit.emoji} ${kit.name}` : id, where: 'у магазині' }
+  },
+  panel: () => ({ label: 'Підвищення людей', where: 'на дошці' }),
+}
+
+// Як назвати цю річ гравцеві. Незнайомий рід — не привід ламати картку: краще
+// показати сирий id, ніж прибрати рядок і мовчати.
+export function featureLabel(featureId) {
+  const [kind, id] = featureId.split(':')
+  return FEATURE_LABELS[kind]?.(id) ?? { label: featureId, where: '' }
+}
+
+// Найближча річ, якої гравець ще не бачив, або null у кінці ланцюга.
+//
+// Рахується від НАСТУПНОГО кроку, а не від активного: те, що просять зробити
+// зараз, уже написано заголовком картки, і повторювати його рядком «далі»
+// означало б сказати те саме двічі.
+export function nextUnlock(game) {
+  for (let i = questIndex(game) + 1; i < QUEST_CHAIN.length; i++) {
+    const step = QUEST_CHAIN[i]
+    if (!step.opens) continue
+    if (step.moot?.(game) || step.done(game)) continue
+    return { featureId: step.opens, ...featureLabel(step.opens) }
+  }
+  return null
+}
+
+// Усе, що гравцеві вже показали, — для тоста «відкрилось нове». Порівнюється
+// зі знімком попереднього кадру: момент відкриття інакше ніяк не позначений,
+// і гравець мусив би сам помітити новий рядок у панелі, у яку він у цю
+// секунду не дивиться.
+export function introducedFeatures(game) {
+  const all = new Set()
+  for (const step of QUEST_CHAIN) {
+    if (step.opens && featureIntroduced(game, step.opens)) all.add(step.opens)
+  }
+  return all
 }

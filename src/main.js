@@ -26,6 +26,7 @@ import { settleOffline } from './sim/offline.js'
 import {
   playerStation, guidanceActive, ironIsHandsOff, incomePerSec, arrowAllowed,
 } from './sim/derive.js'
+import { introducedFeatures, featureLabel } from './sim/unlocks.js'
 import { SYSTEMS } from './sim/systems/index.js'
 
 import { createHUD, stepHint } from './ui/hud.js'
@@ -292,6 +293,24 @@ const questTracker = createQuestTracker(uiRoot, {
   onShowArrow: () => { send('showArrow'); uiDirty = true; present() },
 })
 
+// Тост «відкрилось нове» (Стадія 11 / E3).
+//
+// Знімок береться на старті, а не порожній: інакше після кожного запуску гра
+// вітала б гравця списком усього, що він відкрив колись. У сейв це не йде
+// навмисно — «що я вже бачив» тут означає «в цій сесії», а рівно стільки й
+// треба, щоб не пропустити момент.
+let _seenFeatures = introducedFeatures(world.game)
+
+function announceUnlocks(game) {
+  const now = introducedFeatures(game)
+  for (const featureId of now) {
+    if (_seenFeatures.has(featureId)) continue
+    const { label, where } = featureLabel(featureId)
+    questTracker.announce(`🔓 Нове ${where}: ${label}`)
+  }
+  _seenFeatures = now
+}
+
 // Картка «відкрито» (Р4): що приїхало з новою кімнатою або цехом.
 const unlockCard = createUnlockCard(uiRoot)
 
@@ -486,6 +505,7 @@ function renderUI() {
     (player?.carrying ?? []).map(i => i.type),
     guidanceActive(world.game),
   ) || null, soldering, !arrowAllowed(world))
+  announceUnlocks(world.game)
   shopModal.update(world.game)
   upgradeModal.update(world.game)
   hireModal.update(world.game)

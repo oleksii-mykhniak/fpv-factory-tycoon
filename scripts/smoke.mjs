@@ -887,6 +887,7 @@ const questCard = () => page.evaluate(() => {
     hint:  el.querySelector('.quest__hint')?.textContent.trim() ?? null,
     why:   el.querySelector('.quest__why')?.textContent.trim() ?? null,
     step:  el.querySelector('.quest__step')?.textContent.trim() ?? null,
+    next:  el.querySelector('.quest__next')?.textContent.trim() ?? null,
     ready: el.classList.contains('quest--ready'),
   } : null
 })
@@ -1013,6 +1014,31 @@ await page.evaluate(() => {
 })
 await page.waitForTimeout(600)
 const pMaxed = await rackTitles()
+// E: картка обіцяє наступну нову річ, а коли річ відкривається — тост.
+// Тости стоять у черзі (виконаний крок + відкрита ним річ трапляються в одну
+// мить), тому чекаємо на потрібний, а не читаємо перший-ліпший.
+await boot(seedState({}, { money: 100, ordersPlaced: 3, stats: P_STATS, kitMarks: {} }))
+await page.waitForTimeout(600)
+const pNextEarly = (await questCard())?.next
+await page.evaluate(() => {
+  const w = globalThis.__world
+  w.game = { ...w.game, money: 9999 }
+})
+await page.waitForTimeout(400)
+await openPanelAt('rack')
+await page.click('[data-upgrade="soldering"]').catch(() => {})
+let pUnlockToast = null
+for (let i = 0; i < 20 && !pUnlockToast; i++) {
+  await page.waitForTimeout(300)
+  const t = await page.evaluate(() => {
+    const el = document.querySelector('.quest-toast')
+    return el && !el.hasAttribute('hidden') ? el.textContent.trim() : null
+  })
+  if (t && t.startsWith('🔓')) pUnlockToast = t
+}
+await page.click('#shop-close').catch(() => {})
+await page.click('#upgrade-close').catch(() => {})
+console.log(`  «далі» на картці: "${pNextEarly}" → тост відкриття: "${pUnlockToast}"`)
 console.log(`  шафа показує: ${JSON.stringify(pTracks)}`)
 console.log(`  після викупу паяльника до стелі: ${JSON.stringify(pMaxed)}`)
 
@@ -1145,6 +1171,9 @@ const checks = [
   ['P: finishing a step announces itself', !!pToast],
   ['P: and the card moves on to the next one', !!pAfter && pAfter.title !== pGoalTitle],
   // Р5: шафа показує лише введені треки, викуплений рядок зникає.
+  ['P: the card promises what comes next',  /🔓 Далі:/.test(pNextEarly ?? '')],
+  ['P: and the promise names a place',      /у шафі|на дошці|у магазині/.test(pNextEarly ?? '')],
+  ['P: an unlock announces itself',         /🔓 Нове/.test(pUnlockToast ?? '')],
   ['P: the rack hides tracks the chain has not reached', !pTracks.includes('Склад')],
   ['P: and the maxed-out track is gone',   pTracks.includes('Паяльник') && !pMaxed.includes('Паяльник')],
   ['A: slot zone put the box in hand',    aPick.carrying.includes('kit_box')],

@@ -28,6 +28,7 @@
 // саме тому, що вона заважає.
 
 import { activeQuest } from '../sim/quests.js'
+import { nextUnlock } from '../sim/unlocks.js'
 import { interruptQuest } from '../sim/derive.js'
 
 // Згорнута картка — це вибір гравця про ЕКРАН, а не стан цеху, тому в сейв гри
@@ -69,6 +70,12 @@ export function createQuestTracker(root, { onShowArrow } = {}) {
   // тримаємо з останнього малювання: тост має що показати рівно тому, що
   // квест щойно був на екрані.
   const titles = new Map()
+
+  // Тости стоять У ЧЕРЗІ, а не перебивають один одного (Стадія 11 / E3).
+  // Виконаний крок і відкрита ним річ трапляються В ОДНУ мить — «✅ Купи:
+  // Кращий паяльник» і «🔓 Нове у шафі: Репутація», — і поки це був один
+  // рядок, друге повідомлення просто стирало перше на півдорозі.
+  const queue = []
   let toastTimer = null
 
   const toast = document.createElement('div')
@@ -110,11 +117,15 @@ export function createQuestTracker(root, { onShowArrow } = {}) {
     }
     titles.set(quest.id, quest.title)
 
+    // «Далі відкриється» рахується від стану, а не від картки: вставка
+    // (згорілий комплект) перебиває ЦІЛЬ, але не змінює того, куди гра веде.
+    const next = nextUnlock(state)
+
     // Малюємо лише коли справді щось змінилось: update викликається на кожен
     // кадр, а innerHTML посеред тапу з'їдає сам тап.
     const key = JSON.stringify([
       quest.id, quest.title, Math.floor(quest.have), quest.need,
-      quest.hint, stepHint, askable, collapsed,
+      quest.hint, stepHint, askable, collapsed, next?.featureId ?? null,
     ])
     if (key === lastKey) return
     lastKey = key
@@ -124,7 +135,25 @@ export function createQuestTracker(root, { onShowArrow } = {}) {
     // невидимої області, яка їсть тапи по грі під нею.
     if (collapsed) el.setAttribute('data-collapsed', '')
     else           el.removeAttribute('data-collapsed')
-    el.innerHTML = collapsed ? collapsedCard(quest) : card(quest, stepHint, askable)
+    el.innerHTML = collapsed ? collapsedCard(quest) : card(quest, stepHint, askable, next)
+  }
+
+  const TOAST_MS = 2200
+
+  function pump() {
+    if (toastTimer) return
+    const text = queue.shift()
+    if (text === undefined) { toast.setAttribute('hidden', ''); return }
+    toast.textContent = text
+    toast.removeAttribute('hidden')
+    toastTimer = setTimeout(() => { toastTimer = null; pump() }, TOAST_MS)
+  }
+
+  function push(text) {
+    // Дубль у черзі — це те саме повідомлення двічі поспіль: ловиться тут, бо
+    // джерел два й вони одне про одного не знають.
+    if (queue[queue.length - 1] !== text) queue.push(text)
+    pump()
   }
 
   // Ціль виконано. Без цього момент непомітний: картка просто змінює текст, а
@@ -132,13 +161,18 @@ export function createQuestTracker(root, { onShowArrow } = {}) {
   function flash(questId) {
     const title = titles.get(questId)
     if (!title) return
-    toast.textContent = `✅ ${title}`
-    toast.removeAttribute('hidden')
-    clearTimeout(toastTimer)
-    toastTimer = setTimeout(() => toast.setAttribute('hidden', ''), 2200)
+    push(`✅ ${title}`)
   }
 
-  return { update, flash }
+  // Відкрилось нове. Той самий тост, що й у виконаної цілі, і саме тому черга:
+  // момент, коли в грі з'явилась річ, якої не було, інакше ніяк не позначений —
+  // гравець мусив би сам помітити новий рядок у панелі, у яку він у цю секунду
+  // не дивиться.
+  function announce(text) {
+    push(text)
+  }
+
+  return { update, flash, announce }
 }
 
 // Згорнутий вигляд: значок цілі й нічого більше. Не «менша картка», а саме
@@ -152,7 +186,7 @@ function collapsedCard(quest) {
   `
 }
 
-function card(quest, stepHint, askable) {
+function card(quest, stepHint, askable, next) {
   const pct = quest.need > 0
     ? Math.max(0, Math.min(100, (quest.have / quest.need) * 100))
     : 100
@@ -179,6 +213,7 @@ function card(quest, stepHint, askable) {
       ${quest.hint ? `<div class="quest__hint">${quest.hint}</div>` : ''}
       ${quest.why  ? `<div class="quest__why">${quest.why}</div>` : ''}
       ${stepHint   ? `<div class="quest__step">→ ${stepHint}</div>` : ''}
+      ${next       ? `<div class="quest__next">🔓 Далі: ${next.label} — ${next.where}</div>` : ''}
       ${askable    ? '<div class="quest__ask">🧭 тап — показати шлях</div>' : ''}
     </div>
   `

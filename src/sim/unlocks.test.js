@@ -11,7 +11,9 @@
 // його щойно послав квест.
 
 import { describe, it, expect } from 'vitest'
-import { featureIntroduced, trackIntroduced } from './unlocks.js'
+import {
+  featureIntroduced, trackIntroduced, nextUnlock, featureLabel, introducedFeatures,
+} from './unlocks.js'
 import { QUEST_CHAIN, questIndex } from './quests.js'
 import { createState } from '../state/gameState.js'
 import { ROLE_ORDER } from '../defs/roles.js'
@@ -97,5 +99,60 @@ describe('featureIntroduced', () => {
       if (!step.opens) continue
       expect(featureIntroduced(s, step.opens), step.opens).toBe(true)
     }
+  })
+})
+
+describe('«що буде далі» (Стадія 11 / E)', () => {
+  it('показує річ, а не відстань до неї', () => {
+    const n = nextUnlock(home())
+    expect(n).not.toBeNull()
+    expect(n.label.length).toBeGreaterThan(0)
+    expect(n.where.length).toBeGreaterThan(0)
+    // Номера кроку тут немає навмисно: довжина ланцюга змінюється з кожним
+    // балансним правленням, і обіцяне число перестало б бути правдою.
+    expect(n).not.toHaveProperty('stepsAway')
+  })
+
+  it('не показує те, що вже на екрані як поточна ціль', () => {
+    // Рядок «далі» рахується від НАСТУПНОГО кроку: інакше він повторював би
+    // заголовок картки.
+    const s = home({ money: 9999 })
+    const active = QUEST_CHAIN[questIndex(s)]
+    if (active?.opens) expect(nextUnlock(s).featureId).not.toBe(active.opens)
+  })
+
+  it('кожну річ ланцюга можна назвати гравцеві', () => {
+    for (const step of QUEST_CHAIN) {
+      if (!step.opens) continue
+      const { label, where } = featureLabel(step.opens)
+      expect(label, step.opens).not.toBe(step.opens)   // не сирий id
+      expect(where.length, step.opens).toBeGreaterThan(0)
+    }
+  })
+
+  it('набір відкритого тільки росте — тост не стріляє двічі', () => {
+    const seq = [home(), home({ money: 9999 }), garage({ money: 9999 }), factory({ money: 9999 })]
+    let prev = new Set()
+    for (const s of seq) {
+      const now = introducedFeatures(s)
+      for (const f of prev) expect(now.has(f), `${f} зникло`).toBe(true)
+      prev = now
+    }
+  })
+
+  it('у кінці ланцюга обіцяти нічого — і рядок зникає', () => {
+    // Стан, у якому всі кроки з `opens` пройдені або безглузді.
+    const done = factory({
+      money: 1e9,
+      unlockedHalls: ['hall-1', 'hall-2', 'hall-3'],
+      workers: ROLE_ORDER.map((role, i) => ({ id: `w${i}`, role, level: 3, hallId: 'hall-1', x: 0, y: 0 })),
+      kitMarks: { mini_drone: 5, racing_drone: 5, cinematic_drone: 5, longrange_drone: 5 },
+      upgrades: {
+        priceMultiplier: 1, solderingLevel: 3, consumablesLevel: 2, storageLevel: 2,
+        logisticsLevel: 2, benchLevel: 2, reputationLevel: 9, bulkLevel: 9,
+        toolingLevel: 9, courierLevel: 9,
+      },
+    })
+    expect(nextUnlock(done)).toBeNull()
   })
 })
