@@ -40,7 +40,7 @@
 import {
   KIT_TYPES, nextHireCost, workersInRole, nextRoomId, canUnlockRoom,
   nextHallId, canUnlockHall, kitCost, kitMark, markUnlocked, nextMarkCost,
-  canUpgradeMark,
+  canUpgradeMark, assembledOfKit,
 } from '../state/gameState.js'
 import { UPGRADE_TRACKS, levelData, nextCost } from '../state/upgrades.js'
 import {
@@ -50,7 +50,7 @@ import {
 import { roomDef } from '../defs/layouts/rooms.js'
 import { hallDef } from '../defs/layouts/factory.js'
 import { roleDef } from '../defs/roles.js'
-import { ENDGAME_RATE_TARGET } from '../state/config.js'
+import { ENDGAME_RATE_TARGET, MK_BUILD_REQ } from '../state/config.js'
 
 // ── Дрібні читачі стану ───────────────────────────────────
 
@@ -123,7 +123,7 @@ const buyMark = (id, kitId, target, why) => ({
 // Найняти першого працівника ролі. Штат «не всіх» — це вже правило локації
 // (roleCapHere), тому крок сам себе вимикає там, де вакансій нема.
 const hireRole = (roleId, why) => ({
-  id: `hire_${roleId}`, kind: 'buy', zoneKind: 'jobboard', why,
+  id: `hire_${roleId}`, kind: 'buy', zoneKind: 'jobboard', why, roleId,
   moot: (game) => roleCapHere(game, roleId) < 1,
   done: (game) => hired(game, roleId) >= 1,
   resolve(game) {
@@ -139,6 +139,24 @@ const sellCount = (id, need, title, why, kitId = null) => ({
   id, kind: 'do', viaLoop: true, why,
   moot: (game) => kitId ? !kitsForLocation(game).includes(kitId) : false,
   have: (game) => kitId ? (stats(game).soldByKit?.[kitId] ?? 0) : (stats(game).sold ?? 0),
+  done(game) { return this.have(game) >= need },
+  resolve: () => ({ title, need }),
+})
+
+// Зібрати N дронів КОНКРЕТНОГО типу (Стадія 11 / C1).
+//
+// Не те саме, що продати: продаж — це кур'єр і скринька, збірка — верстак.
+// Саме тому цей крок і з'явився — норма Mk (Стадія 11 / A2) рахується по
+// збірках, і крок «збери 3 такі» перед кроком «прокачай його до Mk II» тепер
+// не сюжет, а буквально умова наступного кроку.
+//
+// ПОРЯДОК НЕСУЧИЙ так само, як у `buyMark`: крок збірки мусить стояти
+// безпосередньо перед своїм Mk, інакше ланцюг просить купити те, що ще
+// заблоковане нормою, і картка мовчки показує повну смужку грошей.
+const buildCount = (id, kitId, need, title, why) => ({
+  id, kind: 'do', viaLoop: true, why,
+  moot: (game) => !kitsForLocation(game).includes(kitId),
+  have: (game) => assembledOfKit(game, kitId),
   done(game) { return this.have(game) >= need },
   resolve: () => ({ title, need }),
 })
@@ -188,13 +206,20 @@ export const QUEST_ACTS = Object.freeze([
         done: (game) => (stats(game).sold ?? 0) >= 1,
         resolve: () => ({ title: 'Продай перший дрон', need: 1 }),
       },
+      // Саме міні-дрони, хоч інших типів тут ще й немає: цей крок — доказ, що
+      // гравець уже збирав цей тип, і на нього спирається наступний за ним
+      // крок Mk (норма збірок, Стадія 11 / A2). Загальний лічильник такого
+      // доказу не дає — з нього не видно, ЯКИЙ дрон продавали.
       sellCount('sell_three', 3, 'Продай 3 дрони',
-        'Згорілий не рахується — стеж за перегрівом'),
+        'Згорілий не рахується — стеж за перегрівом', 'mini_drone'),
       buyUpgrade('iron_1', 'soldering', 1, 'Зона пайки ширша, перегрів рідший'),
       buyMark('mk_mini_1', 'mini_drone', 1,
         'Той самий дрон, дорожчий — і продається дорожче'),
-      sellCount('sell_five', 5, 'Продай 5 дронів',
-        'Mk II міні-дрона відкриє гоночний'),
+      // Норма Mk (Стадія 11 / A2) стоїть у ланцюгу окремим кроком, а не
+      // з'являється підказкою на картці: «зберіть ще 3» — це те, що гра
+      // просить зробити, отже це квест.
+      buildCount('build_mini_six', 'mini_drone', MK_BUILD_REQ[1],
+        `Збери ${MK_BUILD_REQ[1]} міні-дронів`, 'Mk II міні-дрона відкриє гоночний'),
       buyMark('mk_mini_2', 'mini_drone', 2,
         'Mk II відкриває гоночний дрон'),
       sellCount('sell_racing', 1, 'Продай гоночний дрон',
@@ -205,6 +230,9 @@ export const QUEST_ACTS = Object.freeze([
       buyUpgrade('reputation_1', 'reputation', 1,
         'Перший трек без стелі — його можна качати нескінченно'),
       buyUpgrade('flux_1', 'consumables', 1, 'Перегрів −30%'),
+      buildCount('build_racing_six', 'racing_drone', MK_BUILD_REQ[1],
+        `Збери ${MK_BUILD_REQ[1]} гоночних`,
+        'Норма на Mk II — і рука на ньому набивається'),
       buyMark('mk_racing_2', 'racing_drone', 2,
         'Mk II гоночного відкриває кінематографічний'),
       sellCount('sell_cine', 1, 'Продай кінематографічний дрон',
@@ -239,6 +267,13 @@ export const QUEST_ACTS = Object.freeze([
         'Це вміє тільки гараж', 'longrange_drone'),
       buyUpgrade('bench_2', 'benches', 1, 'Дві збірки паралельно — кур\'єру є що робити'),
       hireRole('tech', 'Верстак працює, поки тебе там немає'),
+      // Далекобійний — єдиний комплект, який уміє тільки гараж, тож і качається
+      // він тут. Заразом це другий найм, розведений роботою: два наймання
+      // підряд читаються як платіжна відомість, а не як гра.
+      buildCount('build_longrange_three', 'longrange_drone', MK_BUILD_REQ[0],
+        `Збери ${MK_BUILD_REQ[0]} далекобійні`, 'Норма на Mk II далекобійного'),
+      buyMark('mk_longrange_1', 'longrange_drone', 1,
+        'Найдорожчий комплект гаража — і найдорожчий продаж'),
       sellCount('sell_ten', 10, 'Продай 10 дронів',
         'Двома верстаками це вдвічі швидше'),
       buyUpgrade('bulk_1', 'bulk', 1, 'Комплекти дешевшають — маржа росте з другого боку'),
@@ -292,6 +327,9 @@ export const QUEST_ACTS = Object.freeze([
       {
         id: 'promote_any', kind: 'do', zoneKind: 'promote',
         why: 'Підійди до працівника і постій поруч — панель відкриється сама',
+        // Панель підвищення — теж те, що ланцюг вводить (Стадія 11 / C4):
+        // рівні працівників не мають з'являтись у грі, де ще нікого не найняли.
+        opens: 'panel:promote',
         moot: (game) => !(game.workers ?? []).length,
         have: (game) => (game.workers ?? []).filter(w => (w.level ?? 0) >= 1).length,
         done: (game) => (game.workers ?? []).some(w => (w.level ?? 0) >= 1),
@@ -313,6 +351,18 @@ export const QUEST_ACTS = Object.freeze([
           }
         },
       },
+      // Два останні рівні просторових треків доступні ТІЛЬКИ на фабриці
+      // (стелі `storage`/`logistics` тут 2, у гаражі — 1). Доти ланцюг про них
+      // не згадував узагалі, тобто гравець дізнавався про них, лише якщо сам
+      // відкривав шафу й гортав: єдине джерело нового мовчало про те, що
+      // з'явилось разом із локацією.
+      buyUpgrade('storage_2', 'storage', 2, 'Три доставки в дорозі одночасно'),
+      buyUpgrade('logistics_2', 'logistics', 2, 'Доставка на 50% швидше'),
+      buildCount('build_cine_three', 'cinematic_drone', MK_BUILD_REQ[0],
+        `Збери ${MK_BUILD_REQ[0]} кінематографічні`,
+        'Найдорожчий тип у грі — качати його є сенс'),
+      buyMark('mk_cine_1', 'cinematic_drone', 1,
+        'Стеля Mk на фабриці найвища — тут дрон доводять до кінця'),
       buyUpgrade('courier_1', 'courier', 1,
         'Останній із чотирьох треків без стелі — далі росте тільки темп'),
       {
@@ -334,10 +384,34 @@ function openHallCount(game) {
   return (game.unlockedHalls ?? []).length
 }
 
+// Що цей крок ВВОДИТЬ у гру (Стадія 11 / C4).
+//
+// Не косметика: на цьому полі стоїть прогресивне розкриття панелей — трек у
+// шафі, роль на дошці, рядок Mk на картці комплекту з'являються тому, що
+// ланцюг до них дійшов, а не тому, що кожна панель має власне правило.
+//
+// Рахується при складанні ланцюга, а не пишеться руками на кожному кроці, і це
+// принципово: «вводить» означає ПЕРША ЗГАДКА, тож двоє дверей до однієї речі
+// неможливі за побудовою. Руками довелося б стежити, що `iron_2` не
+// «відкриває» паяльник удруге, а `mk_racing_2` (у ланцюгу перший крок про
+// гоночний) — навпаки, відкриває.
+const featureOf = (step) =>
+  step.opens
+  ?? (step.trackId ? `track:${step.trackId}`
+    : step.kitId   ? `mk:${step.kitId}`
+    : step.roleId  ? `role:${step.roleId}`
+    : null)
+
 // Ланцюг як плоский список — у тому порядку, у якому його проходять.
-export const QUEST_CHAIN = Object.freeze(
-  QUEST_ACTS.flatMap(act => act.steps.map(step => ({ ...step, actId: act.id })))
-)
+export const QUEST_CHAIN = Object.freeze((() => {
+  const seen = new Set()
+  return QUEST_ACTS.flatMap(act => act.steps.map(step => {
+    const feature = featureOf(step)
+    const opens   = feature && !seen.has(feature) ? feature : null
+    if (opens) seen.add(opens)
+    return { ...step, actId: act.id, opens }
+  }))
+})())
 
 const ACT_OF = new Map(QUEST_ACTS.map(act => [act.id, act]))
 

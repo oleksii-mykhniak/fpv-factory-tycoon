@@ -914,7 +914,14 @@ console.log(`  "${pFirst?.title}" · крок петлі: "${pFirst?.step}"`)
 // на Mk II міні-дрон коштує вже $162, і вікно між «не застряг» і «не вистачає
 // на паяльник» зникає взагалі. Сценарій мовчки перевіряв би вставку про
 // смітник замість кроку-покупки — саме так це й проявилось.
-const P_STATS = { sold: 3, assembled: 3, burnt: 0, bestQuality: 0, bestRate: 0, soldByKit: {} }
+// Лічильники по типах (Стадія 11): крок «продай 3 дрони» рахує саме
+// міні-дрони — він і є доказ, на який спирається наступний крок Mk. Голий
+// агрегат `sold: 3` лишив би картку на тому самому кроці, і сценарій
+// перевіряв би не те, що збирався.
+const P_STATS = {
+  sold: 3, assembled: 3, burnt: 0, bestQuality: 0, bestRate: 0,
+  soldByKit: { mini_drone: 3 }, assembledByKit: { mini_drone: 3 },
+}
 await boot(seedState({}, { money: 100, ordersPlaced: 3, stats: P_STATS, kitMarks: {} }))
 await page.waitForTimeout(600)
 const pPoor  = await questCard()

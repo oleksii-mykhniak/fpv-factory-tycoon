@@ -19,8 +19,8 @@ import { INTERACTIONS } from '../defs/interactions.js'
 import { EV } from './events.js'
 import { layoutFor } from '../defs/layouts/index.js'
 import { createState, buyUpgrade } from '../state/gameState.js'
-import { UPGRADE_TRACKS } from '../state/upgrades.js'
-import { capFor } from '../state/locations.js'
+import { UPGRADE_TRACKS, trackMaxLevel } from '../state/upgrades.js'
+import { capFor, LOCATIONS } from '../state/locations.js'
 import { TICK_MS, ARROW_FREE_STEPS, ARROW_REQUEST_MS } from '../state/config.js'
 
 const T0 = 1_000_000
@@ -34,6 +34,7 @@ const withStats = (extra = {}, stats = {}) => ({
   stats: {
     ...createState().stats,
     assembledByKit: { mini_drone: stats.assembled ?? 0 },
+    soldByKit:      { mini_drone: stats.sold ?? 0 },
     ...stats,
   },
 })
@@ -85,6 +86,59 @@ describe('форма ланцюга', () => {
         run = step.kind === 'buy' ? run + 1 : 0
         expect(run).toBeLessThanOrEqual(3)
       }
+    }
+  })
+})
+
+describe('ланцюг — єдині двері (Стадія 11 / C4)', () => {
+  it('кожну річ відкриває рівно один крок', () => {
+    // Двоє дверей до однієї речі означають, що сховати її не вийде: панель
+    // спитає «чи введено», і дві відповіді розійдуться.
+    const opened = QUEST_CHAIN.map(s => s.opens).filter(Boolean)
+    expect(new Set(opened).size).toBe(opened.length)
+  })
+
+  it('усе, що ланцюг просить купити, він же й уводить', () => {
+    // Крок, який просить купити трек, про який панель ще мовчить, — це
+    // порожня шафа з квестом «купи в ній».
+    for (const step of QUEST_CHAIN) {
+      if (!step.trackId) continue
+      const introducedAt = QUEST_CHAIN.findIndex(s => s.opens === `track:${step.trackId}`)
+      expect(introducedAt).toBeGreaterThanOrEqual(0)
+      expect(introducedAt).toBeLessThanOrEqual(QUEST_CHAIN.indexOf(step))
+    }
+  })
+
+  it('норму збірок ланцюг просить ПЕРЕД самим Mk', () => {
+    // Інакше крок Mk показує повну смужку грошей і мовчки не купується
+    // (Стадія 11 / A2): норма — це те, що гра просить зробити, отже квест.
+    for (const step of QUEST_CHAIN) {
+      if (step.kind !== 'buy' || !step.kitId) continue
+      const buildAt = QUEST_CHAIN.findIndex(s =>
+        s.kind === 'do' && s.id.startsWith('build_') && buildsKit(s, step.kitId))
+      const sellAt  = QUEST_CHAIN.findIndex(s => s.kind === 'do' && sellsKit(s, step.kitId))
+      const at = QUEST_CHAIN.indexOf(step)
+      // Або крок збірки, або крок продажу цього типу — але щось із них мусить
+      // стояти раніше: обидва означають, що дрон уже збирали.
+      expect(Math.min(...[buildAt, sellAt].filter(i => i >= 0), Infinity))
+        .toBeLessThan(at)
+    }
+  })
+
+  it('останній досяжний рівень кожного треку ланцюг згадує', () => {
+    // Без цього наступний доданий рівень мовчки випадає з ланцюга — рівно як
+    // випали `storage 2` і `logistics 2` до Стадії 11.
+    for (const [id] of Object.entries(UPGRADE_TRACKS)) {
+      const max = trackMaxLevel(id)
+      if (!Number.isFinite(max)) {
+        // Нескінченний трек «до кінця» провести неможливо — досить, щоб ланцюг
+        // показав його бодай раз.
+        expect(QUEST_CHAIN.some(s => s.trackId === id)).toBe(true)
+        continue
+      }
+      const cap = Math.min(max, reachableCap(id))
+      const asked = Math.max(0, ...QUEST_CHAIN.filter(s => s.trackId === id).map(s => s.target))
+      expect(asked, `трек ${id}: ланцюг просить ${asked}, а доступно ${cap}`).toBe(cap)
     }
   })
 })
@@ -571,3 +625,37 @@ describe('виконаний крок повідомляє про себе од�
     expect(activeQuest(w.game).id).not.toBe('iron_1')
   })
 })
+
+// ── Читачі кроків для тестів форми (Стадія 11 / C5) ───────
+//
+// Про який тип цей крок — визначається ЗОНДОМ, а не полем: `have` кроку читає
+// рівно свою мапу лічильників, і саме вона однозначно називає тип. Через
+// `moot` це не працює (див. коментар у marks.test.js): відкриття типів
+// ланцюгове, тож будь-який стан, що відкриває один, відкриває й попередній.
+const MARKER = 7
+
+const probes = (kitId) => ({
+  sold:  { stats: { sold: 0, soldByKit: { [kitId]: MARKER } } },
+  built: { stats: { assembled: 0, assembledByKit: { [kitId]: MARKER } } },
+})
+
+const sellsKit  = (step, kitId) => typeof step.have === 'function'
+  && step.have(probes(kitId).sold) === MARKER
+const buildsKit = (step, kitId) => typeof step.have === 'function'
+  && step.have(probes(kitId).built) === MARKER
+
+// Докуди трек взагалі можна докачати за все проходження.
+//
+// Для замороженого треку це стеля ГАРАЖА, а не фабрики: `freezeTracks` фіксує
+// рівень на момент переїзду, тож фабричний кап у нього недосяжний за
+// визначенням. Плутати ці два числа — означало б вимагати від ланцюга просити
+// те, чого гравець купити не може.
+function reachableCap(trackId) {
+  const flat    = createState()
+  const garage  = { ...flat, unlockedRooms: ['flat', 'garage'] }
+  const factory = { ...flat, locationId: 'factory',
+    unlockedHalls: ['hall-1', 'hall-2', 'hall-3'] }
+  const frozen  = (LOCATIONS.factory.freezeTracks ?? []).includes(trackId)
+  const spaces  = frozen ? [flat, garage] : [flat, garage, factory]
+  return Math.max(...spaces.map(s => capFor(s, trackId)))
+}
