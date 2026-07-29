@@ -12,11 +12,11 @@ import {
   calcPrice, kitBasePrice, DeliveryStatus, cheapestKitCost,
 } from '../state/gameState.js'
 import {
-  GUIDANCE_ORDERS, GUIDANCE_SCRAP_RUNS, MANAGER_RESERVE, INCOME_WINDOW_MS,
-  SALVAGE_RATE, ARROW_FREE_STEPS, MANUAL_POINT_MS, MANUAL_POINT_QUALITY,
+  GUIDANCE_ORDERS, GUIDANCE_SCRAP_RUNS, INCOME_WINDOW_MS,
+  SALVAGE_RATE, ARROW_FREE_STEPS,
 } from '../state/config.js'
 import { levelData, UPGRADE_TRACKS, trackMaxLevel, nextCost, salePriceMult } from '../state/upgrades.js'
-import { pointMsFor, kitCycleMs } from './offline.js'
+import { kitRatePerSec, bestKitByValue } from './economy.js'
 import {
   kitsForLocation, hiringAllowed, roleCapHere, roleCapInHall, capFor, ruleAt,
   canMoveToLocation, LOCATION_ORDER, LOCATIONS,
@@ -30,6 +30,11 @@ import { questZoneKind, questIsLoop, questIndex, trackIntroduced } from './quest
 // рахується) і ре-експортується звідси: споживачів у нього багато, і всі вони
 // звикли брати «чи гравець на мілині» саме тут.
 export { cheapestKitCost }
+
+// Темп комплекту переїхав у `sim/economy.js` — туди ж, де тепер живе вибір
+// менеджера (Стадія 11 / B): це одне число на двох, і два його дублікати вже
+// один раз розійшлись. Ре-експорт, бо картка комплекту бере його звідси.
+export { kitRatePerSec }
 
 // The piggy bank is a rescue: it shows only when the player is stuck — too poor
 // for any kit, with nothing already in flight.
@@ -174,14 +179,11 @@ export function managerKitChoice(game, level = 0) {
   if (!freeSlots(game)) return null
   if (!idleStations(game).length) return null
 
-  const tier = roleLevelData('manager', level).tier ?? 0
-  const affordable = kitsForLocation(game)
-    .filter(id => KIT_TYPES[id]?.cost > 0)
-    .sort((a, b) => kitCost(game, a) - kitCost(game, b))
-    .filter((id, i) => i <= tier && game.money >= kitCost(game, id) * MANAGER_RESERVE)
-    .map(id => KIT_TYPES[id])
-
-  return affordable.length ? affordable[affordable.length - 1] : null
+  // Що саме брати — рахує `sim/economy.js`: найвигідніший по $/сек серед тих,
+  // які цей тир узагалі веде (Стадія 11 / B). Тут лишаються тільки умови
+  // ЖИВОГО менеджера — вільний слот доставки й вільний верстак, — яких офлайн
+  // не має.
+  return bestKitByValue(game, roleLevelData('manager', level).tier ?? 0)
 }
 
 // What the manager should order right now: the best kit they can afford, or —
@@ -207,29 +209,6 @@ export function incomePerSec(salesLog = [], now = Date.now(), hallId = undefined
     .filter(s => hallId === undefined || (s.hallId ?? null) === hallId)
     .reduce((sum, s) => sum + s.price, 0)
   return total / (INCOME_WINDOW_MS / 1000)
-}
-
-// ── Скільки цей комплект приносить за секунду (Стадія 10 / B4) ──
-//
-// Оцінка, а не факт: скільки чистими дасть один верстак, якщо крутити САМЕ цей
-// комплект без простоїв. Потрібна, щоб рішення «Mk III міні чи Mk I
-// кінематографічного» взагалі можна було прийняти: типи різняться кількістю
-// кроків збірки (4 проти 8), і сама ціна на це питання не відповідає.
-//
-// ЧИСТИМИ, а не виторгом — на відміну від `$/сек` у HUD. Виторг, який
-// ігнорує ціну комплекту, радив би дорогі кіти з тонкою маржею. З приладом це
-// число все одно не збігається (той міряє фактично зароблене за хвилину,
-// разом із ходьбою й простоями), тому воно й показується з «≈».
-//
-// Модель циклу спільна з офлайн-розрахунком — два уявлення про «як швидко тут
-// збирають» неминуче розійшлися б.
-export function kitRatePerSec(game, kitId) {
-  const rate = pointMsFor(game)
-    ?? { ms: MANUAL_POINT_MS, q: MANUAL_POINT_QUALITY }
-  const cycleMs = kitCycleMs(game, kitId, rate)
-  if (!(cycleMs > 0)) return 0
-  const revenue = calcPrice(kitBasePrice(game, kitId), rate.q, salePriceMult(game))
-  return (revenue - kitCost(game, kitId)) / (cycleMs / 1000)
 }
 
 // The station the player is standing at, if it has a kit on it (C6).
