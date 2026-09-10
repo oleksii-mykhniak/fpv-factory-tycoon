@@ -23,6 +23,9 @@ export function deliverySystem(world, _dt, events) {
     if (d.readyAt > world.now) continue
     if (world.announcedArrivals.includes(d.id)) continue
     world.announcedArrivals.push(d.id)
-    emit(events, EV.DELIVERY_ARRIVED, { id: d.id, kitId: d.kitId, slotIndex: d.slotIndex })
+    // hallId — щоб ефект прибуття знав, ЯКИЙ ящик просів (Стадія 12 / Д5).
+    emit(events, EV.DELIVERY_ARRIVED, {
+      id: d.id, kitId: d.kitId, slotIndex: d.slotIndex, hallId: d.hallId ?? null,
+    })
   }
 }

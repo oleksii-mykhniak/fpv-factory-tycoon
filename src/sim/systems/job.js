@@ -21,8 +21,8 @@ const stationZone = (world, stationId) =>
   (world.zones ?? []).find(z => z.kind === 'bench' && z.meta?.stationId === stationId)?.id
 
 // The post box this hall ships from. Each hall has its own (F4): a seller bound
-// to hall 3 carrying every drone back to hall 1 would be exactly the walk the
-// conveyor was built to delete.
+// to hall 3 carrying every drone back to hall 1 would be exactly the long walk
+// the per-hall boxes exist to delete.
 const mailboxZone = (world, hallId) => {
   const boxes = (world.zones ?? []).filter(z => z.kind === 'mailbox')
   return (hallId && boxes.find(z => z.meta?.hallId === hallId))?.id ?? boxes[0]?.id
@@ -36,14 +36,13 @@ const stationOutZone = (world, stationId) =>
 const slotZone = (world, slotIndex) =>
   (world.zones ?? []).find(z => z.kind === 'delivery_slot' && z.meta?.slotIndex === slotIndex)?.id
 
-// Where this box is standing right now: a street slot, or the belt drop the
-// conveyor left it at (F3). A box still riding the belt has NO pickup zone, and
-// that is the whole gate — no job exists for it, so no courier sets off to meet
-// a box that has not arrived anywhere yet.
+// Where this box is standing right now: a street slot, or the intake box of the
+// hall it was ordered for (Стадія 12 / Д1). The hall is chosen at order time, so
+// a courier never sets off across the factory to meet it.
 const pickupZone = (world, delivery) =>
-  delivery.dropIndex !== undefined && delivery.dropIndex !== null
+  delivery.hallId
     ? (world.zones ?? []).find(
-        z => z.kind === 'belt_drop' && z.meta?.dropIndex === delivery.dropIndex)?.id
+        z => z.kind === 'intake' && z.meta?.hallId === delivery.hallId)?.id
     : slotZone(world, delivery.slotIndex)
 
 // Stable ids: the same situation always produces the same job id, which is what
@@ -75,12 +74,11 @@ export function deriveJobs(world) {
   // A box already in hand keeps its errand whether or not a bench is free —
   // the carrier waits at one until it clears, which is what a person would do.
   //
-  // Given a choice, send it to a bench in the hall the belt chose. Without this
-  // the belt's whole purpose leaks away: a box dropped at hall 3 could be
-  // assigned to a bench in hall 1 and walked back across the factory.
+  // Given a choice, send it to a bench in the hall the box was delivered to.
+  // Without this the whole point leaks away: a box waiting in hall 3's intake
+  // could be assigned to a bench in hall 1 and walked back across the factory.
   const nextTarget = (delivery) => {
-    const hall = (world.layout?.conveyor?.drops ?? [])
-      .find(dr => dr.index === delivery?.dropIndex)?.hallId ?? null
+    const hall = delivery?.hallId ?? null
     const i = hall ? targets.findIndex(id => stationHall(world, id) === hall) : -1
     if (i >= 0) return targets.splice(i, 1)[0]
     return targets.shift() ?? allStationIds[0]

@@ -19,7 +19,7 @@
 import {
   Phase, DeliveryStatus, KIT_TYPES,
   pickupDelivery, startAssembly, startScrapAssembly, getStation,
-  sell as sellStation, calcPrice, takeOutput, orderKit, abandonBurntDrone,
+  sell as sellStation, calcPrice, takeOutput, abandonBurntDrone,
   beginScrapRun, idleStations,
   kitCost, kitBasePrice,
 } from '../state/gameState.js'
@@ -36,6 +36,7 @@ import {
   managerOrderChoice,
 } from '../sim/derive.js'
 import { hiringAllowed } from '../state/locations.js'
+import { orderKitInto } from '../sim/intake.js'
 
 // ── Carry helpers ─────────────────────────────────────────
 
@@ -80,10 +81,10 @@ export const INTERACTIONS = {
     },
   },
 
-  // Belt drop: the box the conveyor left at this hall. Deliberately the SAME
-  // definition as a street slot — the courier's job did not change, only where
-  // the box is waiting (F3.4).
-  belt_drop: null,   // filled in below, from delivery_slot
+  // Приймальний ящик цеху (Стадія 12 / Д1). Навмисно ТЕ САМЕ визначення, що й
+  // у вуличного слоту: робота кур'єра не змінилась, змінилось тільки місце, де
+  // чекає коробка.
+  intake: null,   // filled in below, from delivery_slot
 
   // Workbench, front side: drop a box to start assembly, or — while it is being
   // assembled — work at it. Collecting the result happens at `bench_out`.
@@ -271,7 +272,7 @@ export const INTERACTIONS = {
       }
       const kit = managerOrderChoice(world.game, agent.level ?? 0)
       if (!kit) return
-      world.game = orderKit(world.game, kit.id, world.now, () => `kit-${world.seq++}`)
+      orderKitInto(world, kit.id, () => `kit-${world.seq++}`)
       // A short cooldown so a rich manager does not fill every slot in one walk.
       world.managerNextOrderAt = world.now + MANAGER_COOLDOWN_MS
       emit(events, EV.DELIVERY_ORDERED, { kitId: kit.id, byAgent: agent.id })
@@ -316,10 +317,10 @@ export const INTERACTIONS = {
   },
 }
 
-// The belt drop IS the street slot, standing somewhere else. Aliasing rather
-// than copying is the point: if picking a box up ever changes, it changes in
-// one place and both keep agreeing.
-INTERACTIONS.belt_drop = INTERACTIONS.delivery_slot
+// Ящик прийому — ЦЕ вуличний слот, який стоїть в іншому місці. Аліас, а не
+// копія: якщо підбір коробки колись зміниться, він зміниться в одному місці й
+// обидва лишаться згодні.
+INTERACTIONS.intake = INTERACTIONS.delivery_slot
 
 // Should this zone be lit up and pointed at? Defaults to "is there anything to
 // do here at all" — only the panels (S2) draw the distinction.
@@ -341,13 +342,13 @@ function stationOf(world, zone) {
 
 // The arrived, unclaimed delivery waiting in this zone, if any.
 //
-// Two kinds of zone ask this: a street slot (matched by slotIndex) and a belt
-// drop (matched by dropIndex). Keeping it one function is what lets the belt
-// reuse the slot's interaction wholesale.
+// Про це питають два різні типи зон: вуличний слот (звіряється по slotIndex) і
+// приймальний ящик цеху (по hallId). Одна функція на обох — саме те, що дозволяє
+// ящику перевикористати взаємодію слоту цілком.
 function arrivedIn(world, zone) {
-  const wantDrop = zone.meta?.dropIndex !== undefined
+  const byHall = zone.kind === 'intake'
   return (world.game.deliveries ?? []).find(d =>
-    (wantDrop ? d.dropIndex === zone.meta.dropIndex : d.slotIndex === zone.meta?.slotIndex) &&
+    (byHall ? d.hallId === zone.meta?.hallId : d.slotIndex === zone.meta?.slotIndex) &&
     d.status === DeliveryStatus.TRANSIT &&
     d.readyAt <= world.now
   )

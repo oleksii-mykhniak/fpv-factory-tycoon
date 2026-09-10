@@ -11,7 +11,7 @@
 export const EV = Object.freeze({
   // Deliveries
   DELIVERY_ORDERED: 'delivery.ordered',   // { kitId, slotIndex, readyAt }
-  DELIVERY_ARRIVED: 'delivery.arrived',   // { id, kitId, slotIndex }
+  DELIVERY_ARRIVED: 'delivery.arrived',   // { id, kitId, slotIndex, hallId }
   DELIVERY_PICKED:  'delivery.picked',    // { id, kitId, slotIndex }
 
   // Station (workbench)
@@ -60,7 +60,6 @@ export const EV = Object.freeze({
   HALL_UNLOCKED:    'factory.hallOpened', // { hallId }
   ROOM_UNLOCKED:    'home.roomOpened',    // { roomId }
   QUEST_DONE:       'quest.done',         // { questId }
-  BELT_DROPPED:     'belt.dropped',       // { deliveryId, hallId }
   WORKER_PROMOTED:  'worker.promoted',    // { workerId, role, level }
   COMMAND_REJECTED: 'command.rejected',   // { type, reason }
   STATE_DIRTY:      'state.dirty',        // {} — view/persistence should save

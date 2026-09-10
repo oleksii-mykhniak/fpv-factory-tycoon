@@ -55,7 +55,7 @@ export const FACTORY_HALLS = Object.freeze([
     unlocks: [
       '🔧 Два верстаки',
       "🧑‍🔧 Три вакансії: кур'єр, технік, продавець",
-      '📦 Конвеєр носить коробки в цей цех',
+      '📦 Свій приймальний ящик — замовлення їдуть сюди',
     ],
   },
   {
@@ -72,7 +72,7 @@ export const FACTORY_HALLS = Object.freeze([
     unlocks: [
       '🔧 Два верстаки',
       "🧑‍🔧 Три вакансії: кур'єр, технік, продавець",
-      '📦 Конвеєр носить коробки в цей цех',
+      '📦 Свій приймальний ящик — замовлення їдуть сюди',
     ],
   },
 ])
@@ -91,9 +91,6 @@ export function openHalls(hallIds) {
   return FACTORY_HALLS.slice(0, count)
 }
 
-// The belt runs along the line of the hall doorways, so it visibly threads
-// through the whole factory instead of stopping at every wall.
-const BELT_INSET = 40
 const ROOM_H     = 1400
 const STREET_H   = 500
 const DOOR_W     = 240      // street door, in hall 1
@@ -176,16 +173,21 @@ export function buildFactoryLayout(hallIds) {
     rack: { x: home.x0 + 220, y: 720, w: u(1), h: u(1.4), sprite: 'f_bookshelf', color: '#3a6a72' },
   }
 
-  // A board and a post box PER HALL (F4). Both follow from binding staff to a
-  // hall: the board is where you hire INTO this hall, and without a local post
-  // box a seller bound to hall 3 would carry every drone back across the whole
-  // factory — exactly the walk the conveyor was built to remove.
+  // Ящики й дошка — ПО ЦЕХУ (F4). Усе троє випливає з того, що штат прив'язаний
+  // до цеху: дошка — це «найняти СЮДИ», а без своїх ящиків кур'єр і продавець
+  // цеху 3 тягали б кожну коробку через усю фабрику.
   for (const hall of placed) {
     props[`lamp_${hall.id}`] = {
       x: hall.cx, y: 130, w: u(1), h: u(1), sprite: 'f_painting', color: '#d4c060', z: 2,
     }
+    // Прийом і відвантаження — ПАРА (Стадія 12 / Д2): один силует, два кольори,
+    // на протилежних краях цеху. Поки одне було палетою, а друге — синьою
+    // поштовою скринькою, зв'язок між ними було видно тільки з коду.
+    props[`intake_${hall.id}`] = {
+      x: hall.cx + 420, y: 1240, w: u(0.9), h: u(1), sprite: 'f_crate', color: '#7a6a44',
+    }
     props[`mailbox_${hall.id}`] = {
-      x: hall.x0 + 300, y: 1240, w: u(0.8), h: u(1), sprite: 'o_postbox', color: '#3a5db8',
+      x: hall.x0 + 300, y: 1240, w: u(0.9), h: u(1), sprite: 'f_crate', color: '#3a5db8',
     }
     // Well below the rack: at y=700 the board's zone overlapped the rack's, so
     // walking up to buy an upgrade opened the hiring panel on top of it. Two
@@ -195,45 +197,25 @@ export function buildFactoryLayout(hallIds) {
     }
   }
 
-  // The dock: where an ordered kit lands. On the factory it lands ON THE BELT,
-  // so these are only the spots the countdown is drawn at — nobody walks out to
-  // the street here, which is the whole difference between a garage and a
-  // production floor (F3.2).
+  // Точки, де малюється зворотний відлік для замовлень БЕЗ цеху. На фабриці
+  // кожне замовлення їде в конкретний ящик, і відлік малюється над ним — але
+  // сам масив лишається контрактом розкладки, тож тримаємо його прив'язаним до
+  // воріт, а не до стрічки, якої більше немає.
   const deliverySlots = [
-    { x: WALL_SIDE + BELT_INSET,       y: gapCy },
-    { x: WALL_SIDE + BELT_INSET + 110, y: gapCy },
-    { x: WALL_SIDE + BELT_INSET + 220, y: gapCy },
+    { x: doorX - 110, y: ROOM_H + 120 },
+    { x: doorX,       y: ROOM_H + 120 },
+    { x: doorX + 110, y: ROOM_H + 120 },
   ]
 
-  // The conveyor itself: a straight run at doorway height, with one drop point
-  // per hall. `t` is distance along the belt, so a box's position is a single
-  // number and the system that moves it needs no geometry at all.
-  const beltX0 = WALL_SIDE + BELT_INSET
-  const beltX1 = worldW - WALL_SIDE - BELT_INSET
-  const conveyor = {
-    y:      gapCy,
-    x0:     beltX0,
-    x1:     beltX1,
-    length: beltX1 - beltX0,
-    drops: placed.map((hall, i) => ({
-      index:  i,
-      hallId: hall.id,
-      x:      hall.cx,
-      t:      hall.cx - beltX0,
-    })),
-  }
-
   const zones = [
-    // No street slots here: a box is taken off the BELT, at the hall that
-    // needed it. The zone behaves exactly like a street slot — same interaction,
-    // different place — which is why the courier's role did not have to change.
-    ...conveyor.drops.map(drop => ({
-      id:   `drop${drop.index}`,
-      kind: 'belt_drop',
-      ...rect(drop.x, conveyor.y + 120, 170, 150),
-      meta: { dropIndex: drop.index, hallId: drop.hallId },
-    })),
     ...placed.flatMap(hall => [
+      // Ящик прийому поводиться рівно як вуличний слот — та сама взаємодія,
+      // інше місце. Саме тому роль кур'єра не довелось міняти.
+      {
+        id: `intake_${hall.id}`, kind: 'intake',
+        ...rect(props[`intake_${hall.id}`].x, props[`intake_${hall.id}`].y, 170, 150),
+        meta: { hallId: hall.id },
+      },
       {
         id: `mailbox_${hall.id}`, kind: 'mailbox',
         ...rect(props[`mailbox_${hall.id}`].x, props[`mailbox_${hall.id}`].y, 150, 150),
@@ -294,12 +276,11 @@ export function buildFactoryLayout(hallIds) {
     // is why the `benches` upgrade track is frozen here — two ways to grow the
     // same number would only fight each other.
     stationsFromLayout: true,
-    conveyor,
     halls: placed.map(h => ({ id: h.id, name: h.name, x0: h.x0, w: h.w })),
     spawns: {
-      // Well clear of the belt drop zone: the first version put the player
-      // spawn inside it, so every box the conveyor delivered jumped straight
-      // into their hands the moment it arrived.
+      // Подалі від приймального ящика: перша версія ставила спавн гравця
+      // всередину зони підбору, і кожна привезена коробка стрибала йому в руки
+      // просто в момент прибуття.
       player:     { x: home.cx, y: 1250 },
       workerIdle: { x: home.cx + 160, y: 1250 },
       // Продавець чекає МІЖ ВЕРСТАКАМИ, а не біля скриньки (П4): скринька — це
@@ -315,7 +296,9 @@ export function buildFactoryLayout(hallIds) {
       // A post per role PER HALL, so staff stand where they work instead of
       // gathering in hall 1 (F4.3).
       postsByHall: Object.fromEntries(placed.map(hall => [hall.id, {
-        courier: { x: hall.cx - 200, y: conveyor.y + 190 },
+        // Кур'єр чекає між ящиком прийому і верстаками — на своєму маршруті,
+        // а не в його кінці.
+        courier: { x: hall.cx + 200, y: 1150 },
         tech:    { x: hall.cx,       y: 560 },
         seller:  { x: hall.cx,       y: 660 },
         manager: { x: props.desk.x - 40, y: props.desk.y + 160 },

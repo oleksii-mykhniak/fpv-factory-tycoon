@@ -174,6 +174,36 @@ describe('C7 — locations are floor plans, not palettes', () => {
     }
   })
 
+  // Стадія 12 / Д4 — інваріант доставки.
+  //
+  // Стрічка існувала тому, що маршрут коробки був довгий. Тепер довжину
+  // маршруту тримає РОЗКЛАДКА, і це має перевірятись тестом, а не наміром:
+  // якщо колись з'явиться цех іншої форми (Стадія 14), тест одразу скаже, що
+  // ящик у ньому поставлений не там.
+  it('від ящика до найдальшого верстака свого цеху — не більше 1.2 ширини цеху', () => {
+    for (const halls of [['hall-1'], ['hall-1', 'hall-2'], ['hall-1', 'hall-2', 'hall-3']]) {
+      const layout = layoutFor('factory', { unlockedHalls: halls })
+      expect(layout.halls).toHaveLength(halls.length)
+
+      for (const hall of layout.halls) {
+        const intake = layout.props[`intake_${hall.id}`]
+        expect(intake, `${hall.id}: немає приймального ящика`).toBeTruthy()
+
+        const benches = layout.stationSlots.filter(s => s.hallId === hall.id)
+        expect(benches.length).toBeGreaterThan(0)
+
+        for (const bench of benches) {
+          const dist = Math.hypot(bench.x - intake.cx, bench.y - intake.cy)
+          expect(dist, `${hall.id}: ящик задалеко від верстака`)
+            .toBeLessThanOrEqual(hall.w * 1.2)
+        }
+        // І, окремо, ящик стоїть у СВОЄМУ цеху, а не поруч із ним.
+        expect(intake.cx).toBeGreaterThan(hall.x0)
+        expect(intake.cx).toBeLessThan(hall.x0 + hall.w)
+      }
+    }
+  })
+
   it('no station footprint blocks its own interaction zone', () => {
     for (const [id, extra] of [['apartment', {}], ['apartment', GARAGE], ['factory', {}]]) {
       const w = boot(id, { ...extra, upgrades: { ...createState().upgrades, benchLevel: 2 } })

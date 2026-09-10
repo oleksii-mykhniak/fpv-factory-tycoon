@@ -33,6 +33,16 @@ export function createEffects({
   const HANDLERS = {
     [EV.DELIVERY_ORDERED]: () => { playSfx('order'); haptic('medium') },
 
+    // Прибуття коробки (Стадія 12 / Д5). Єдиний виняток із правила «звук
+    // належить тому, що зробив гравець»: замовлення робить або гравець, або
+    // його менеджер, а результат приходить у ящик, на який ніхто не дивиться.
+    // Без звуку й просідання прибуття взагалі нічим не відрізняється від
+    // нічого — стрічка хоч рухалась. Вібрації тут немає навмисно: подія часта.
+    [EV.DELIVERY_ARRIVED]: ({ hallId }) => {
+      playSfx('drop')
+      getRefs()?.intakeBoxes?.[hallId]?.bump()
+    },
+
     [EV.STAGE_STARTED]: ({ stationId, label, total, done, durationMs }) => {
       progressOf(stationId)?.startStep(label, total, done, durationMs)
     },

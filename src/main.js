@@ -1,5 +1,6 @@
 import './style.css'
 import { saveGame, loadGame, clearSave } from './save/storage.js'
+import { migrateDeliveries } from './save/migrate.js'
 import {
   createState, Phase, DeliveryStatus,
   createStation, stationsOf, KIT_TYPES,
@@ -118,6 +119,9 @@ function migrateState(raw) {
   if (s.locationId === 'garage') {
     s = { ...s, locationId: 'apartment', unlockedRooms: ['flat', 'garage'] }
   }
+
+  // Стадія 12 / Д3.1: коробки зі стрічки переїжджають у приймальні ящики.
+  s = migrateDeliveries(s)
 
   return s
 }

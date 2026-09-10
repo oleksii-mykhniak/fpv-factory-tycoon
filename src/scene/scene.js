@@ -9,6 +9,7 @@ import {
   FLOAT_GAIN_JITTER_X, FLOAT_GAIN_JITTER_Y, FLOAT_GAIN_DRIFT_X,
   CHARACTER_U as TILE_U,
   CHARACTER_ART,
+  INTAKE_CAPACITY,
 } from '../state/config.js'
 import { loadSprites, getSprite } from './loader.js'
 import { createCharacterSprite, createTileCharacter } from './character.js'
@@ -138,24 +139,6 @@ function buildRoom(scene, layout) {
   tileFloor(scene, theme.floorTile, 0, 0, room.w, room.h, 0.2)
   tileFloor(scene, theme.streetTile, 0, street.y, world.w, street.h, 0.2)
 
-  // ── Conveyor (F3) ──────────────────────────────────────
-  // Drawn on the floor rather than as an obstacle: characters walk over the
-  // belt, which is what keeps it out of the nav grid entirely.
-  const belt = layout.conveyor
-  if (belt) {
-    const beltW = belt.x1 - belt.x0
-    colorRect(scene, {
-      x: (belt.x0 + belt.x1) / 2, y: belt.y, w: beltW, h: 54, hex: '#232336', z: 0.4,
-    })
-    // Cross-slats, so the belt reads as moving even when it is empty.
-    for (let x = belt.x0 + 20; x < belt.x1; x += 46) {
-      colorRect(scene, { x, y: belt.y, w: 6, h: 46, hex: '#31314a', z: 0.5 })
-    }
-    for (const drop of belt.drops) {
-      colorRect(scene, { x: drop.x, y: belt.y + 44, w: 120, h: 10, hex: '#4a6a3a', z: 0.5 })
-    }
-  }
-
   // ── Walls + door opening ───────────────────────────────
   // Three strips, not one flat rectangle: body, a lit top edge and a shadow
   // where the wall meets the floor. The same light every object in the game is
@@ -221,6 +204,11 @@ function buildRoom(scene, layout) {
   // prefix, not by exact name: the factory has one post box per hall (F4), and
   // looking up a single `props.mailbox` is what made the whole scene throw there.
   for (const [name, p] of Object.entries(props)) {
+    // Прийом і відвантаження — один силует, дві смуги (Стадія 12 / Д2). Смуга
+    // і є те, чим вони відрізняються: зелена — сюди приходить, синя — звідси
+    // йде. Колір самого спрайта не працює — спрайт не тонується.
+    if (name.startsWith('intake'))
+      colorRect(scene, { x: p.cx, y: p.cy - p.h * 0.34, w: p.w, h: 5, hex: '#4f9e3a', z: 4 })
     if (name.startsWith('mailbox'))
       colorRect(scene, { x: p.cx, y: p.cy - p.h * 0.34, w: p.w, h: 5, hex: '#2244a0', z: 4 })
     if (name.startsWith('trashbin'))
@@ -711,6 +699,17 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     return lbl
   })
 
+  // Куди дивиться це замовлення: приймальний ящик свого цеху, якщо цех уже
+  // вибрано в момент замовлення (Стадія 12 / Д1), інакше — вуличний слот.
+  // Одна коробка — одне місце: і відлік, і сама коробка стоять там, куди вона
+  // приїде, а не в двох місцях одразу.
+  const intakeSpot = (hallId, slotIdx) => {
+    const prop = hallId ? layout.props?.[`intake_${hallId}`] : null
+    if (!prop) return slotSpawns[slotIdx]
+    // Дві коробки в одному ящику не мають лежати одна в одній.
+    return ex.vec(prop.cx + (slotIdx - 1) * 34, prop.cy - prop.h * 0.55)
+  }
+
   slotIndicators.forEach((ind, slotIdx) => {
     const lbl = slotLabels[slotIdx]
 
@@ -727,18 +726,18 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
         return
       }
 
+      const at = intakeSpot(d.hallId ?? null, slotIdx)
+      ind.pos.x = at.x
+      ind.pos.y = at.y
+      lbl.pos.x = at.x
+      lbl.pos.y = at.y - BOX_W * 1.05
+
       const ms  = Math.max(0, d.readyAt - now)
       const kit = KIT_TYPES[d.kitId]
       if (ms > 0) {
         ind.graphics.visible = false
         lbl.text = `${kit?.emoji ?? '📦'} ${fmtSlotTime(ms)}`
         lbl.graphics.visible = true
-      } else if (layout.conveyor) {
-        // Arrived on the factory means "on the belt", and the belt draws its
-        // own boxes. Showing the dock marker too would put the same box in two
-        // places at once — the bug the piggy bank taught us to look for.
-        ind.graphics.visible = false
-        lbl.graphics.visible = false
       } else {
         ind.graphics.visible = true
         lbl.graphics.visible = false
@@ -811,25 +810,54 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     st.lbl.graphics.visible = true
   }
 
-  // ── Boxes on the belt (F3) ─────────────────────────────
-  // One actor per delivery slot, since that is the hard cap on how many boxes
-  // can exist at once. Position comes from the sim's `t`, so what you see on
-  // the belt is exactly what the job board thinks is there.
-  const beltBoxes = layout.conveyor
-    ? Array.from({ length: 3 }, () => {
-        const a = new ex.Actor({
-          pos:    ex.vec(layout.conveyor.x0, layout.conveyor.y),
-          width:  sizes.box.w,
-          height: sizes.box.h,
-          z: 4,
-          color: ex.Color.fromHex('#c08a4a'),
-        })
-        a.graphics.visible = false
-        scene.add(track(a))
-        applySprite(a, 'delivery_box')
-        return a
+  // ── Приймальні ящики: прибуття видно й чути (Стадія 12 / Д5) ──
+  //
+  // Разом зі стрічкою зникає єдине, що показувало «приїхало»: коробка більше
+  // нікуди не повзе, вона просто починає бути. Без заміни це тихий регрес, тому
+  // ящик робить дві речі — коротко просідає під вагою і показує, скільки в
+  // ньому місця.
+  //
+  // Лічильник — крапки, а не текст «2/3»: цифру над ящиком доводиться читати,
+  // а три крапки, з яких дві горять, видно з іншого кінця фабрики, і вона
+  // читається однаково в будь-якій мові (Стадія 13).
+  const PIP_W = 14
+  const PIP_GAP = 6
+  const PIP_FULL  = '#e0b24a'
+  const PIP_EMPTY = '#3b3550'
+  const intakes = Object.entries(layout.props ?? {})
+    .filter(([name]) => name.startsWith('intake_'))
+    .map(([name, p]) => {
+      const hallId = name.slice('intake_'.length)
+      const actor  = propActors[name]
+      const row    = (PIP_W + PIP_GAP) * INTAKE_CAPACITY - PIP_GAP
+      const pips = Array.from({ length: INTAKE_CAPACITY }, (_, i) => colorRect(scene, {
+        x: p.cx - row / 2 + PIP_W / 2 + i * (PIP_W + PIP_GAP),
+        y: p.cy - p.h * 0.72,
+        w: PIP_W, h: 8, hex: PIP_EMPTY, z: 5,
+      }))
+
+      // Одна пружина на ящик: `squash` виставляється в 1 у момент прибуття і
+      // згасає сама. Та сама модель, що в pulse — жодних таймерів у симуляції.
+      const state = { squash: 0 }
+      actor.on('preupdate', (evt) => {
+        const { game } = getWorld()
+        const held = (game.deliveries ?? []).filter(
+          d => d.hallId === hallId && d.status === DeliveryStatus.TRANSIT).length
+        for (let i = 0; i < pips.length; i++) {
+          pips[i].color = ex.Color.fromHex(i < held ? PIP_FULL : PIP_EMPTY)
+        }
+        if (state.squash > 0) {
+          state.squash = Math.max(0, state.squash - (evt.delta ?? 16) / 220)
+          const k = Math.sin(state.squash * Math.PI)
+          actor.scale = ex.vec(1 + k * 0.12, 1 - k * 0.18)
+        } else if (actor.scale.x !== 1) {
+          actor.scale = ex.vec(1, 1)
+        }
       })
-    : []
+
+      return [hallId, { bump: () => { state.squash = 1 } }]
+    })
+  const intakeBoxes = Object.fromEntries(intakes)
 
   // ── Piggy bank (built from the layout; only its behaviour lives here) ──
   // A location without the prop simply has no piggy bank — the rescue mechanic
@@ -1128,8 +1156,8 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     box, piggy, workbench,
     cat: { actor: catActor, anim: catAnim },
     ...propActors,
-    beltBoxes,
     floatGain,
+    intakeBoxes,
     stations,
     player, playerRig, workerView, workerViews,
     carrySlotActors,

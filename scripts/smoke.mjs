@@ -555,47 +555,53 @@ const jWalked = await page.evaluate(() => {
 })
 console.log(`  crossed the factory to the mailbox: ${jWalked.dist.toFixed(0)} units away`)
 
-// ── K. The conveyor carries the box, not the courier (F3) ──
-console.log('\n### K. The conveyor')
+// ── K. Замовлення приїжджає в приймальний ящик свого цеху (Стадія 12) ──
+console.log('\n### K. Приймальний ящик')
 await boot(seedState({ storageLevel: 2 }, { locationId: 'factory', money: 6000 }))
 await orderFirstKit()
 
-// While in transit there is nothing on the belt yet.
-await page.waitForTimeout(1200)
-const kTransit = await page.evaluate(() => ({
-  onBelt: (globalThis.__world.belt?.items ?? []).length,
-}))
-
-// Arrives at the dock and starts moving on its own.
-await page.waitForTimeout(4500)
-const kRidingA = await page.evaluate(() => ({
-  onBelt: (globalThis.__world.belt?.items ?? []).length,
-  t:      globalThis.__world.belt?.items?.[0]?.t ?? -1,
-  drop:   globalThis.__world.game.deliveries[0]?.dropIndex ?? null,
-}))
-await page.waitForTimeout(1500)
-const kRidingB = await page.evaluate(() => ({
-  t: globalThis.__world.belt?.items?.[0]?.t ?? -1,
-}))
-
-// Gets off at the hall, and only then is there anything to fetch.
-await page.waitForTimeout(6000)
-const kDropped = await page.evaluate(() => {
+// Цех обрано ще в момент замовлення, а не в дорозі — і поки коробка їде,
+// роботи по неї немає взагалі.
+const kOrdered = await page.evaluate(() => {
   const w = globalThis.__world
+  const d = w.game.deliveries[0]
   return {
-    drop:  w.game.deliveries[0]?.dropIndex ?? null,
-    jobs:  (w.jobs ?? []).filter(j => j.type === 'haul_delivery').length,
-    boxVisible: (globalThis.__refs.beltBoxes ?? []).filter(a => a.graphics.visible).length,
+    hallId: d?.hallId ?? null,
+    status: d?.status ?? null,
+    jobs:   (w.jobs ?? []).filter(j => j.type === 'haul_delivery').length,
   }
 })
-console.log(`  transit=${kTransit.onBelt} on belt; rode ${kRidingA.t}→${kRidingB.t}; ` +
-            `dropped at hall ${kDropped.drop}, ${kDropped.jobs} haul job(s)`)
 
-// And the last few metres are still walked, by hand, into a bench.
-await goTo('drop0'); await page.waitForTimeout(1000)
-const kInHand = await log('picked the box off the belt')
+// Прибуття: коробка лежить у ящику СВОГО цеху, і тільки тепер з'являється
+// робота, і тільки на цей ящик.
+await page.waitForTimeout(9000)
+const kArrived = await page.evaluate(() => {
+  const w = globalThis.__world
+  const job = (w.jobs ?? []).find(j => j.type === 'haul_delivery')
+  const from = job && w.zones.find(z => z.id === job.fromZone)
+  const bench = job && w.zones.find(z => z.id === job.toZone)
+  const i = bench && w.game.stations.findIndex(st => st.id === bench.meta?.stationId)
+  return {
+    hallId:    w.game.deliveries[0]?.hallId ?? null,
+    fromKind:  from?.kind ?? null,
+    fromHall:  from?.meta?.hallId ?? null,
+    benchHall: i >= 0 ? w.layout.stationSlots[i]?.hallId ?? null : null,
+    // Маршрут ніколи не виходить за межі цеху — інваріант Стадії 12 / Д4.
+    haul:      from && bench ? Math.hypot(from.cx - bench.cx, from.cy - bench.cy) : -1,
+    hallW:     w.layout.halls[0].w,
+    boxVisible: (globalThis.__refs.intakeBoxes ?? null) !== null,
+  }
+})
+console.log(`  замовлено в ${kOrdered.hallId} (робіт до прибуття: ${kOrdered.jobs}); ` +
+            `забирати з ${kArrived.fromKind} цеху ${kArrived.fromHall}, ` +
+            `нести на верстак цеху ${kArrived.benchHall}, ` +
+            `маршрут ${kArrived.haul.toFixed(0)} з ${(kArrived.hallW * 1.2).toFixed(0)}`)
+
+// І останні метри й далі йде людина — руками, у верстак.
+await goTo('intake_hall-1'); await page.waitForTimeout(1000)
+const kInHand = await log('забрав коробку з ящика')
 await goTo('zone-station-0'); await page.waitForTimeout(2000)
-const kOnBench = await log('carried it to the bench')
+const kOnBench = await log('доніс її до верстака')
 
 // ── M. Income on screen (F7, переглянуто Стадією 10 / D1) ──
 //
@@ -1258,14 +1264,16 @@ const checks = [
   ['J: each hall has its own job board',  jBoardTitle.includes('Цех 2')],
   ['J: hiring there binds the person to that hall',
    jHired.hallId === 'hall-2' && jHired.agentHall === 'hall-2'],
-  ['K: nothing on the belt while in transit', kTransit.onBelt === 0],
-  ['K: the box lands on the belt at the dock', kRidingA.onBelt === 1],
-  ['K: it moves along the belt on its own',   kRidingB.t > kRidingA.t],
-  ['K: it gets off at a hall',                kDropped.drop !== null],
-  ['K: only then does a haul job exist',      kDropped.jobs === 1],
-  ['K: the box is drawn on the belt',         kDropped.boxVisible === 1],
-  ['K: a character takes it off the belt',    kInHand.carrying.includes('kit_box')],
-  ['K: and carries it into a bench',          kOnBench.phase === 'ASSEMBLY'],
+  ['K: цех обрано в момент замовлення',        kOrdered.hallId !== null],
+  ['K: поки коробка їде — роботи немає',       kOrdered.jobs === 0],
+  ['K: приїхала в ящик СВОГО цеху',            kArrived.fromKind === 'intake' &&
+                                               kArrived.fromHall === kArrived.hallId],
+  ['K: нести на верстак того самого цеху',     kArrived.benchHall === kArrived.hallId],
+  ['K: маршрут не виходить за межі цеху',      kArrived.haul > 0 &&
+                                               kArrived.haul <= kArrived.hallW * 1.2],
+  ['K: ящики є у сцені',                       kArrived.boxVisible === true],
+  ['K: людина забирає коробку з ящика',        kInHand.carrying.includes('kit_box')],
+  ['K: і доносить її до верстака',             kOnBench.phase === 'ASSEMBLY'],
   ['L: no promote zone on the floor any more', lBefore.zone === false],
   ['L: and no price tag over their head',      lBefore.tag === null],
   ['L: standing next to them does nothing',    lStanding.panel === false &&

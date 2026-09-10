@@ -22,6 +22,9 @@ const BASE = import.meta.env.BASE_URL
 // harder than a click the player hears fifty times a minute.
 const GAIN = {
   order:       0.7,
+  // Прибуття коробки (Стадія 12 / Д5). Тихіше за продаж: подія часта й не є
+  // виплатою — вона лише каже «дивись сюди», поки камера в іншому цеху.
+  drop:        0.45,
   solder_good: 0.5,
   solder_cold: 0.7,
   overheat:    1.0,

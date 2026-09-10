@@ -101,15 +101,12 @@ export const INCOME_WINDOW_MS = 60_000
 // а не поясненням.
 export const ENDGAME_RATE_TARGET = 10
 
-// ── Conveyor (F3) ────────────────────────────────────────
-// Belt speed in world units per second. A courier walks at 170–240, so the belt
-// is deliberately slower than a person: it is not a shortcut, it is the thing
-// that removes the walk entirely — nobody has to escort the box.
-export const CONVEYOR_SPEED = 150
-// How many boxes may wait at one hall's drop point before the belt stops
-// offloading there. This is what turns "the hall cannot keep up" into a visible
-// queue riding past instead of a number in a panel.
-export const CONVEYOR_DROP_CAPACITY = 2
+// ── Приймальний ящик (Стадія 12 / Д1) ────────────────────
+// Скільки коробок вміщає ящик одного цеху. Замовлення їде в той цех, у якого є
+// вільний верстак і місце в ящику; коли місця немає ніде — у цех із найкоротшою
+// чергою. Тому число тут — це не оптимізація, а межа, після якої цех перестає
+// встигати, і її видно на самому ящику лічильником.
+export const INTAKE_CAPACITY = 3
 
 // ── Camera (C1) ──────────────────────────────────────────
 // The world is now larger than the screen and measured in fixed world units,

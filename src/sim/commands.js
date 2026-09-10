@@ -9,7 +9,7 @@
 
 import {
   Phase, DeliveryStatus, KIT_TYPES,
-  orderKit, pickupDelivery, startAssembly,
+  pickupDelivery, startAssembly,
   recordSolderPoint, finishAssembly, applyColdSolderPenalty,
   burnKit, abandonBurntDrone,
   buyUpgrade as buyUpgradeState, moveToLocation as moveToLocationState,
@@ -32,6 +32,7 @@ import { EV, emit } from './events.js'
 import { rebuildStationGeometry, stationCountFor, syncWorkerAgents, applyLayout } from './world.js'
 import { layoutFor } from '../defs/layouts/index.js'
 import { promoteCost } from '../defs/roles.js'
+import { orderKitInto } from './intake.js'
 
 // Commands that come from a UI button rather than a zone have no station in
 // hand; they act on the one the player is most likely looking at.
@@ -44,7 +45,7 @@ const targetStation = (world, stationId) =>
 const HANDLERS = {
   order(world, { kitId }, events) {
     const kit = KIT_TYPES[kitId]
-    world.game = orderKit(world.game, kitId, world.now, () => `d${world.now}-${world.seq++}`)
+    orderKitInto(world, kitId, () => `d${world.now}-${world.seq++}`)
     emit(events, EV.MONEY_SPENT, { amount: kitCost(world.game, kit.id), reason: 'kit' })
     emit(events, EV.DELIVERY_ORDERED, { kitId })
   },

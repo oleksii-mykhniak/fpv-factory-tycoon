@@ -427,7 +427,7 @@ describe('стрілка і квест синхронні', () => {
   // Усі зони, які може дати петля (PRIORITY у derive.js) — це «наступний
   // фізичний крок». Усе інше стрілка має право показати лише як місце цілі.
   const LOOP_KINDS = [
-    'mailbox', 'bench_out', 'bench', 'delivery_slot', 'belt_drop', 'trashbin',
+    'mailbox', 'bench_out', 'bench', 'delivery_slot', 'intake', 'trashbin',
     'piggy', 'desk',
   ]
 
