@@ -79,6 +79,38 @@ export const SPRITES = Object.freeze({
   tile_wood_2: { url: `${BASE}sprites/tile_wood_2.png`, anchors: {} },
   wall_tile: { url: `${BASE}sprites/wall_tile.png`, anchors: {} },
 
+  // ── Значки ролей (Стадія 13 / А2) ────────────────────────────
+  // Читає лише сцена, над головою робітника. Імена мають збігатися з
+  // `ROLES[*].badgeSprite`, і це перевіряє manifest.test.js.
+  badge_courier: { url: `${BASE}sprites/badge_courier.png`, anchors: {} },
+  badge_tech: { url: `${BASE}sprites/badge_tech.png`, anchors: {} },
+  badge_seller: { url: `${BASE}sprites/badge_seller.png`, anchors: {} },
+  badge_manager: { url: `${BASE}sprites/badge_manager.png`, anchors: {} },
+
+  // ── Іконки комплектів і цифри (Стадія 13 / А3) ───────────────
+  // Іконка — не зменшений повний спрайт, а своя фігура: 96×52, стиснуті до
+  // третини, дають брудний піксель. Цифри — сімковий сегмент, з якого сцена
+  // складає числа замість шрифта ОС.
+  icon_mini_drone: { url: `${BASE}sprites/icon_mini_drone.png`, anchors: {} },
+  icon_racing_drone: { url: `${BASE}sprites/icon_racing_drone.png`, anchors: {} },
+  icon_cinematic_drone: { url: `${BASE}sprites/icon_cinematic_drone.png`, anchors: {} },
+  icon_longrange_drone: { url: `${BASE}sprites/icon_longrange_drone.png`, anchors: {} },
+  digit_0: { url: `${BASE}sprites/digit_0.png`, anchors: {} },
+  digit_1: { url: `${BASE}sprites/digit_1.png`, anchors: {} },
+  digit_2: { url: `${BASE}sprites/digit_2.png`, anchors: {} },
+  digit_3: { url: `${BASE}sprites/digit_3.png`, anchors: {} },
+  digit_4: { url: `${BASE}sprites/digit_4.png`, anchors: {} },
+  digit_5: { url: `${BASE}sprites/digit_5.png`, anchors: {} },
+  digit_6: { url: `${BASE}sprites/digit_6.png`, anchors: {} },
+  digit_7: { url: `${BASE}sprites/digit_7.png`, anchors: {} },
+  digit_8: { url: `${BASE}sprites/digit_8.png`, anchors: {} },
+  digit_9: { url: `${BASE}sprites/digit_9.png`, anchors: {} },
+  digit_colon: { url: `${BASE}sprites/digit_colon.png`, anchors: {} },
+
+  // ── Стани верстака (Стадія 13 / А4) ──────────────────────────
+  state_overheat: { url: `${BASE}sprites/state_overheat.png`, anchors: {} },
+  state_done: { url: `${BASE}sprites/state_done.png`, anchors: {} },
+
   desk:     { url: `${BASE}sprites/desk.png`,     anchors: {} },
   rack:     { url: `${BASE}sprites/rack.png`,     anchors: {} },
   jobboard: { url: `${BASE}sprites/jobboard.png`, anchors: {} },

@@ -108,8 +108,11 @@ export function syncScene(refs, world) {
         const kit     = KIT_TYPES[station.kitId]
         const step    = kit?.assemblySteps?.[station.solderPoints.length]
         const salvage = (kit?.cost ?? 0) * SALVAGE_RATE
+        // Стадія 13 / А4: рядок починався з «🔥». Іскру малює сцена спрайтом
+        // ліворуч від тексту — саме та частина, яку око ловить першою, більше
+        // не залежить від шрифта ОС.
         view.burnt.show(
-          step?.label ? `🔥 Перегрів: ${trim(step.label, 26)}` : '🔥 Комплект перегрітий',
+          step?.label ? `Перегрів: ${trim(step.label, 26)}` : 'Комплект перегрітий',
           salvage > 0
             ? `Стань тут — утиль +$${salvage.toFixed(0)}`
             : 'Стань тут, щоб прибрати',

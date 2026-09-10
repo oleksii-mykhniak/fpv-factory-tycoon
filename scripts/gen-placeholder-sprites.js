@@ -3,6 +3,16 @@
 // Replace with real art later — sizes and shapes tuned to scene.js layout.
 import { writeFileSync, mkdirSync } from 'fs'
 import { deflateSync } from 'zlib'
+// Розміри й кольори беруться з ТИХ САМИХ модулів, що їх читає гра. Спрайт,
+// намальований не в масштабі персонажа, — це та сама помилка, через яку
+// викинули три паки Kenney (CREDITS.md); а бейдж ролі, пофарбований власною
+// копією кольору, розійшовся б із кільцем під ногами тієї ж людини.
+import { u, CHARACTER_U } from '../src/state/config.js'
+import { ROLES, ROLE_ORDER } from '../src/defs/roles.js'
+
+const hex = (s) => [
+  parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16),
+]
 
 // ── PNG encoder (RGBA, color type 6) ─────────────────────────────────────────
 
@@ -1065,6 +1075,205 @@ function drawTrashbin(pixels, w, h) {
   drawLine(pixels, w, 24, 3, 30, 8, 0xb0, 0xb0, 0xbc, 2)
 }
 
+// ── Іконки комплектів (Стадія 13 / А3) ──────────────────────────────────────
+//
+// На плашці доставки стояло `${kit.emoji} ${час}` — тобто «який дрон їде»
+// казав гліф ОС. Тепер це намальована іконка.
+//
+// Іконка НЕ є зменшеним повним спрайтом: 96×52 стиснуті до третини дають
+// брудний піксель (диски пропелерів зливаються в одну пляму), а масштабування
+// піксель-арту в рантаймі — те саме, тільки ще й щокадру. Тому іконка — своя
+// фігура з тими самими прикметами, за якими дрон упізнають: чотири диски,
+// корпус, колір і одна деталь, що відрізняє тип.
+function drawKitIcon({ frame, body, bodyHi, accent, mark, bw, bh }) {
+  return (px, w, h) => {
+    const cx = w >> 1, cy = h >> 1
+    const mx = 4, my = 4
+    const motors = [[mx, my], [w - 1 - mx, my], [mx, h - 1 - my], [w - 1 - mx, h - 1 - my]]
+
+    for (const [x, y] of motors) fillCircle(px, w, x, y, 4, ...frame, 70)
+    if (mark === 'gps') {
+      // H-рама: одна горизонтальна балка замість Х — саме нею далекобійний
+      // відрізняється від решти навіть у силуеті.
+      fillRect(px, w, mx, cy - 1, w - 1 - mx, cy + 1, ...frame)
+      for (const [x, y] of motors) drawLine(px, w, x, cy, x, y, ...frame, 2)
+    } else {
+      for (const [x, y] of motors) drawLine(px, w, cx, cy, x, y, ...frame, 2)
+    }
+    for (const [x, y] of motors) fillCircle(px, w, x, y, 2, ...frame)
+
+    // Корпус — головна різниця силуетів: гоночний вузький, кінематографічний
+    // важкий. Колір лишає їх різними навіть коли розмір ще не читається.
+    box(px, w, cx - (bw >> 1), cy - (bh >> 1), bw, bh, body, bodyHi, P.darkLo)
+    if (mark === 'cam')    fillCircle(px, w, cx + (bw >> 1), cy, 2, ...accent)
+    if (mark === 'gimbal') fillCircle(px, w, cx, cy + (bh >> 1) + 1, 3, ...accent)
+    if (mark === 'gps')    fillCircle(px, w, cx, 2, 2, ...accent)
+    if (mark === 'led')    fillCircle(px, w, cx, cy, 2, ...accent)
+  }
+}
+
+const KIT_ICONS = {
+  mini_drone: {
+    frame: [0x5a, 0x5a, 0x90], body: [0x28, 0x28, 0x44], bodyHi: [0x3c, 0x3c, 0x60],
+    accent: [0x50, 0x90, 0xff], mark: 'led', bw: 11, bh: 7,
+  },
+  racing_drone: {
+    frame: [0x40, 0x98, 0xcc], body: [0x20, 0x50, 0x78], bodyHi: [0x38, 0x78, 0xa8],
+    accent: [0xff, 0x40, 0x40], mark: 'cam', bw: 9, bh: 5,
+  },
+  cinematic_drone: {
+    frame: [0x86, 0x86, 0x9c], body: [0x3a, 0x3a, 0x4e], bodyHi: [0x56, 0x56, 0x6e],
+    accent: [0x18, 0x90, 0xd0], mark: 'gimbal', bw: 17, bh: 9,
+  },
+  longrange_drone: {
+    frame: [0x50, 0x80, 0x50], body: [0x32, 0x52, 0x32], bodyHi: [0x4a, 0x72, 0x4a],
+    accent: [0xee, 0xee, 0x60], mark: 'gps', bw: 13, bh: 7,
+  },
+}
+
+// ── Стани верстака (Стадія 13 / А4) ─────────────────────────────────────────
+//
+// «🔥 Перегрів» і «✓ Зібрано» — два найважливіші повідомлення сцени: одне каже,
+// що комплект щойно згорів, друге — що дрон готовий. Обидва починались гліфом
+// ОС, тобто саме та частина, яку око ловить першою, малювалась не нами.
+//
+// Текст поруч лишається текстом (А4): прибираємо картинки-гліфи, а не написи.
+const ACCENT_HOT  = [0xe0, 0x8a, 0x3c]   // asset_specs.md: помаранчевий акцент
+const ACCENT_GOOD = [0x7d, 0xe0, 0x7d]   // той самий зелений, що в крапках кроків
+
+// Іскра: чотири промені й ядро. Читається як «щось спалахнуло» і на 19 px, і
+// в кутку картки, де на неї ніхто не дивиться прямо.
+function drawStateOverheat(px, w, h) {
+  const cx = w >> 1, cy = h >> 1
+  const r  = Math.min(cx, cy) - 1
+  for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]])
+    drawLine(px, w, cx, cy, cx + dx * r, cy + dy * r, ...ACCENT_HOT, 3)
+  const d = Math.round(r * 0.62)
+  for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]])
+    drawLine(px, w, cx, cy, cx + dx * d, cy + dy * d, ...ACCENT_HOT, 2)
+  fillCircle(px, w, cx, cy, Math.max(2, Math.round(r * 0.42)), ...ACCENT_HOT)
+  fillCircle(px, w, cx, cy, Math.max(1, Math.round(r * 0.20)), ...P.white)
+}
+
+// Галочка: дві лінії, коротка вниз і довга вгору.
+function drawStateDone(px, w, h) {
+  const t = Math.max(2, Math.round(h * 0.18))
+  drawLine(px, w, Math.round(w * 0.18), Math.round(h * 0.52),
+                  Math.round(w * 0.42), Math.round(h * 0.76), ...ACCENT_GOOD, t)
+  drawLine(px, w, Math.round(w * 0.42), Math.round(h * 0.76),
+                  Math.round(w * 0.84), Math.round(h * 0.22), ...ACCENT_GOOD, t)
+}
+
+// ── Цифри (Стадія 13 / А3) ──────────────────────────────────────────────────
+//
+// Зворотний відлік доставки — це ЧИСЛО на сцені, і воно малювалось шрифтом ОС
+// разом з емодзі. Сімковий сегмент, а не мальована цифра: він читається на
+// 17 px, він однаковий у будь-якій локалі, і його ширина фіксована — рядок
+// «1:05» не смикається, коли одиниця змінюється на вісімку.
+//
+// Тінь на піксель нижче-праворуч: цифра має лишатись читаною і над світлою
+// підлогою цеху, і над темним асфальтом.
+const SEG = {
+  0: 'abcdef', 1: 'bc', 2: 'abdeg', 3: 'abcdg', 4: 'bcfg',
+  5: 'acdfg', 6: 'acdefg', 7: 'abc', 8: 'abcdefg', 9: 'abcdfg',
+}
+
+function digitStrokes(w, h, t) {
+  const x0 = 0, x1 = w - 1, y0 = 0, y1 = h - 1, ym = (h - t) >> 1
+  return {
+    a: [x0, y0, x1, y0 + t - 1],
+    b: [x1 - t + 1, y0, x1, ym + t - 1],
+    c: [x1 - t + 1, ym, x1, y1],
+    d: [x0, y1 - t + 1, x1, y1],
+    e: [x0, ym, x0 + t - 1, y1],
+    f: [x0, y0, x0 + t - 1, ym + t - 1],
+    g: [x0, ym, x1, ym + t - 1],
+  }
+}
+
+function drawDigit(n) {
+  return (px, w, h) => {
+    const t = Math.max(2, Math.round(h * 0.16))
+    const strokes = digitStrokes(w - 1, h - 1, t)
+    for (const pass of [[1, 1, P.darkLo], [0, 0, P.white]]) {
+      const [dx, dy, col] = pass
+      for (const key of SEG[n])
+        fillRect(px, w, strokes[key][0] + dx, strokes[key][1] + dy,
+                        strokes[key][2] + dx, strokes[key][3] + dy, ...col)
+    }
+  }
+}
+
+// Двокрапка тієї ж висоти — інакше «2:14» розпадається на три окремі речі.
+function drawColon(px, w, h) {
+  const t = Math.max(2, Math.round(h * 0.16))
+  for (const [dx, dy, col] of [[1, 1, P.darkLo], [0, 0, P.white]])
+    for (const y of [Math.round(h * 0.28), Math.round(h * 0.64)])
+      fillRect(px, w, dx, y + dy, dx + t - 1, y + t - 1 + dy, ...col)
+}
+
+// ── Бейджі ролей (Стадія 13 / А2) ───────────────────────────────────────────
+//
+// Над головою в кожного робітника висів емодзі: 📦 🔧 💵 🧾. Він малювався
+// шрифтом ОС — тобто на Android, iOS і в браузері це були три різні набори
+// картинок, жодна з яких не мала стосунку до палітри гри, — і жив у піксельному
+// розмірі шрифта, тобто ігнорував одиницю U, до якої Стадія 6 звела все інше.
+//
+// Тепер це спрайт: темний кружок, кільце в КОЛЬОРІ РОЛІ (той самий `ROLES.color`,
+// що тінтує людину й малює кільце під її ногами) і світлий силует усередині.
+// Значок має читатись у натовпі з шести робітників, але не бути більшим за
+// голову — звідси u(0.34).
+
+// Коробка — кур'єр.
+function glyphBox(px, w, cx, cy, r, col) {
+  const s = Math.round(r * 1.5)
+  box(px, w, cx - (s >> 1), cy - (s >> 1), s, s, col, null, null)
+  fillRect(px, w, cx - (s >> 1), cy - 1, cx + (s >> 1) - 1, cy, ...P.darkLo)
+  fillRect(px, w, cx - 1, cy - (s >> 1), cx, cy + (s >> 1) - 1, ...P.darkLo)
+}
+
+// Ключ — технік. Голівка вгорі, ручка навскіс.
+function glyphWrench(px, w, cx, cy, r, col) {
+  drawLine(px, w, cx - r + 2, cy + r - 2, cx + r - 3, cy - r + 3, ...col, 3)
+  fillCircle(px, w, cx + r - 3, cy - r + 3, 3, ...col)
+  fillCircle(px, w, cx + r - 3, cy - r + 3, 1, ...P.darkLo)
+}
+
+// Купюра — продавець.
+function glyphNote(px, w, cx, cy, r, col) {
+  const bw = Math.round(r * 1.8), bh = Math.round(r * 1.1)
+  box(px, w, cx - (bw >> 1), cy - (bh >> 1), bw, bh, col, null, null)
+  fillCircle(px, w, cx, cy, Math.max(1, Math.round(bh * 0.28)), ...P.darkLo)
+}
+
+// Планшет із затискачем — менеджер.
+function glyphClipboard(px, w, cx, cy, r, col) {
+  const bw = Math.round(r * 1.3), bh = Math.round(r * 1.7)
+  box(px, w, cx - (bw >> 1), cy - (bh >> 1) + 1, bw, bh - 1, col, null, null)
+  fillRect(px, w, cx - 2, cy - (bh >> 1) - 1, cx + 1, cy - (bh >> 1) + 1, ...P.darkLo)
+  for (let y = cy - (bh >> 1) + 4; y < cy + (bh >> 1) - 1; y += 3)
+    fillRect(px, w, cx - (bw >> 1) + 2, y, cx + (bw >> 1) - 3, y, ...P.darkLo)
+}
+
+const ROLE_GLYPH = {
+  courier: glyphBox,
+  tech:    glyphWrench,
+  seller:  glyphNote,
+  manager: glyphClipboard,
+}
+
+function drawBadge(roleId) {
+  const ring  = hex(ROLES[roleId].color)
+  const glyph = ROLE_GLYPH[roleId]
+  return (px, w, h) => {
+    const cx = w >> 1, cy = h >> 1
+    const R  = Math.min(cx, cy) - 1
+    fillCircle(px, w, cx, cy, R, ...ring)            // кільце — колір ролі
+    fillCircle(px, w, cx, cy, R - 2, ...P.darkLo)    // темне поле під силует
+    glyph(px, w, cx, cy, R - 4, P.white)
+  }
+}
+
 // ── Cat (V5) ────────────────────────────────────────────────────────────────
 // Four frames: three walking, one sitting. Side-on, tiny, and the tail is the
 // part that has to read at 30 px — it is what says "cat" rather than "dog".
@@ -1257,6 +1466,28 @@ const worldSprites = [
 
   { name: 'wall_tile', wu: T, hu: T, draw: wallTile },
   { name: 'door_tile', wu: T, hu: T, draw: doorTile },
+
+  // Бейджі ролей (Стадія 13 / А2). Розмір — u(0.34): третина зросту персонажа.
+  ...ROLE_ORDER.map(id => ({
+    name: `badge_${id}`, wu: u(0.34), hu: u(0.34), draw: drawBadge(id),
+  })),
+
+  // Іконки комплектів (А3). План називав u(0.4); на такій ширині чотири диски
+  // пропелерів зливались в одну пляму, тож іконка ширша й тримає пропорцію
+  // повного спрайта дрона (96:52), а не квадрат.
+  ...Object.entries(KIT_ICONS).map(([id, cfg]) => ({
+    name: `icon_${id}`, wu: u(0.62), hu: u(0.34), draw: drawKitIcon(cfg),
+  })),
+
+  // Цифри для чисел на сцені (А3).
+  ...Array.from({ length: 10 }, (_, n) => ({
+    name: `digit_${n}`, wu: u(0.14), hu: u(0.24), draw: drawDigit(n),
+  })),
+  { name: 'digit_colon', wu: u(0.07), hu: u(0.24), draw: drawColon },
+
+  // Стани верстака (А4).
+  { name: 'state_overheat', wu: u(0.30), hu: u(0.30), draw: drawStateOverheat },
+  { name: 'state_done',     wu: u(0.30), hu: u(0.30), draw: drawStateDone },
 ]
 
 for (const s of worldSprites) {

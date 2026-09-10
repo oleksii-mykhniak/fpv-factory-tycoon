@@ -1,5 +1,5 @@
 import * as ex from 'excalibur'
-import { Phase, DeliveryStatus, KIT_TYPES } from '../state/gameState.js'
+import { Phase, DeliveryStatus } from '../state/gameState.js'
 import {
   VIEW_HEIGHT_UNITS, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX,
   CAMERA_ELASTICITY, CAMERA_FRICTION,
@@ -10,6 +10,7 @@ import {
   CHARACTER_U as TILE_U,
   CHARACTER_ART,
   INTAKE_CAPACITY,
+  u,
 } from '../state/config.js'
 import { loadSprites, getSprite } from './loader.js'
 import { createCharacterSprite, createTileCharacter } from './character.js'
@@ -68,9 +69,61 @@ function track(actor) {
 
 // ── Helpers ───────────────────────────────────────────────
 
+// Завжди m:ss, навіть під хвилину (Стадія 13 / А3).
+//
+// Було «42s» під хвилину і «2:14» вище. Латинська «s» — такий самий гліф ОС, як
+// емодзі поруч: намалювати її спрайтом означало б завести літери заради одного
+// суфікса. Один формат замість двох ще й прибирає стрибок ширини рядка в
+// момент, коли відлік переходить хвилину.
 function fmtSlotTime(ms) {
   const s = Math.ceil(ms / 1000)
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+// Число на сцені, зібране зі спрайтів цифр (Стадія 13 / А3).
+//
+// Пул акторів фіксованої довжини, а не актор на символ: рядок міняється
+// щокадру, і створювати по чотири актори на кадр — це GC замість гри. Зайві
+// глифи просто ховаються.
+//
+// Ширини беруться з РОЗКЛАДКИ спрайтів, а не з їхніх пікселів: одиниця U — те
+// саме, чим міряється все інше на сцені (Стадія 6).
+// Значок стану верстака (Стадія 13 / А4).
+const STATE_ICON  = u(0.30)
+const GLYPH_H     = u(0.24)
+const GLYPH_W     = u(0.14)
+const GLYPH_COLON = u(0.07)
+const GLYPH_GAP   = u(0.02)
+
+function makeNumberRow(scene, track, len) {
+  const actors = Array.from({ length: len }, () => {
+    const a = new ex.Actor({ pos: ex.vec(-9999, -9999), width: GLYPH_W, height: GLYPH_H, z: 6 })
+    a.graphics.visible = false
+    scene.add(track(a))
+    return a
+  })
+
+  // `sprite` кешується на акторі: `applySprite` щоразу створює новий Sprite, а
+  // цифра здебільшого лишається тією самою від кадру до кадру.
+  const show = (text, cx, cy) => {
+    const glyphs = [...text].slice(0, len)
+    const widths = glyphs.map(ch => (ch === ':' ? GLYPH_COLON : GLYPH_W))
+    const total  = widths.reduce((a, b) => a + b, 0) + GLYPH_GAP * (glyphs.length - 1)
+    let x = cx - total / 2
+    glyphs.forEach((ch, i) => {
+      const a = actors[i]
+      const key = ch === ':' ? 'digit_colon' : `digit_${ch}`
+      if (a._glyph !== key) { applySpriteSized(a, key, widths[i], GLYPH_H); a._glyph = key }
+      a.pos.x = x + widths[i] / 2
+      a.pos.y = cy
+      a.graphics.visible = true
+      x += widths[i] + GLYPH_GAP
+    })
+    for (let i = glyphs.length; i < len; i++) actors[i].graphics.visible = false
+  }
+
+  const hide = () => { for (const a of actors) a.graphics.visible = false }
+  return { show, hide }
 }
 
 function colorRect(scene, { x, y, w, h, hex, z = 0 }) {
@@ -274,6 +327,24 @@ function applySprite(actor, key) {
   actor.graphics.use(sprite)
 }
 
+// Те саме, але розмір задає виклик, а не актор: цифра і двокрапка стоять в
+// одному ряду й мають різну ширину (Стадія 13 / А3).
+//
+// Розмір ставиться СПРАЙТУ, не акторові: `Actor.width` в Excalibur 0.32 — це
+// геттер без сеттера, і присвоєння кидає TypeError просто в `preupdate`.
+// Виняток там не долітає нікуди: Excalibur ловить його всередині оновлення
+// сцени, а гра після цього мовчки перестає тікати — жодної помилки в консолі,
+// просто застиглий світ. Так і виявилось, що вся секція A смоуку раптом
+// перестала підбирати коробку.
+function applySpriteSized(actor, key, w, h) {
+  const src = getSprite(key)
+  if (!src) return
+  const sprite = src.toSprite()
+  sprite.width  = w
+  sprite.height = h
+  actor.graphics.use(sprite)
+}
+
 // ── Bench progress (auto / semi-auto soldering indicator) ─
 //
 // Rendered as Excalibur actors positioned above a workbench actor in world
@@ -365,7 +436,7 @@ function createBenchProgress(scene, benchActor) {
   // Result toast — a label that fades out. No plate: see the note above.
   const toastLbl = new ex.Label({
     text:  '',
-    pos:   ex.vec(cx, stepY),
+    pos:   ex.vec(cx + STATE_ICON * 0.4, stepY),
     color: ex.Color.fromHex('#7de07d'),
     font:  new ex.Font({
       size: 13, family: 'monospace',
@@ -377,6 +448,16 @@ function createBenchProgress(scene, benchActor) {
   toastLbl.graphics.visible = false
   add(toastLbl)
 
+  // Стадія 13 / А4: рядок починався з «✓», тобто найпомітніший символ у
+  // повідомленні малював шрифт ОС. Тепер галочка — намальована, а текст
+  // поруч лишається текстом.
+  const toastIcon = new ex.Actor({
+    pos: ex.vec(cx - CARD_W * 0.5, stepY), width: STATE_ICON, height: STATE_ICON, z: 13,
+  })
+  toastIcon.graphics.visible = false
+  add(toastIcon)
+  applySprite(toastIcon, 'state_done')
+
   let toastAge = 0, toastDur = 0, toasting = false
   toastLbl.on('preupdate', (evt) => {
     if (!toasting) return
@@ -384,13 +465,15 @@ function createBenchProgress(scene, benchActor) {
     if (toastAge >= toastDur) {
       toasting = false
       toastLbl.graphics.visible = false
+      toastIcon.graphics.visible = false
       return
     }
     const fadeStart = toastDur * 0.55
     const a = toastAge > fadeStart
       ? 1 - (toastAge - fadeStart) / (toastDur - fadeStart)
       : 1
-    toastLbl.graphics.opacity = a
+    toastLbl.graphics.opacity  = a
+    toastIcon.graphics.opacity = a
   })
 
   function _placeDots(total, done) {
@@ -427,6 +510,7 @@ function createBenchProgress(scene, benchActor) {
     _placeDots(total, done)
     toasting = false
     toastLbl.graphics.visible = false
+    toastIcon.graphics.visible = false
   }
 
   function advanceDots(total, done) {
@@ -448,6 +532,8 @@ function createBenchProgress(scene, benchActor) {
     toastLbl.text = text
     toastLbl.graphics.opacity = 1
     toastLbl.graphics.visible = true
+    toastIcon.graphics.opacity = 1
+    toastIcon.graphics.visible = true
     toastAge = 0
     toastDur = durationMs
     toasting = true
@@ -500,7 +586,16 @@ function createBurntNotice(scene, benchActor) {
   const what = line(-CARD_H * 0.20, '#ff9a6a', 12)
   const todo = line(CARD_H * 0.22, '#e8d0a0', 11)
 
-  const parts = [border, card, what, todo]
+  // Стадія 13 / А4: перший рядок починався з «🔥». Іскра переїхала на край
+  // картки й стала намальованою — заразом текст перестав починатися з гліфа
+  // змінної ширини, через який рядок стрибав при кожному перемальовуванні.
+  const icon = add(new ex.Actor({
+    pos: ex.vec(cx - CARD_W / 2 + STATE_ICON * 0.75, cy),
+    width: STATE_ICON, height: STATE_ICON, z: 28,
+  }))
+  applySprite(icon, 'state_overheat')
+
+  const parts = [border, card, what, todo, icon]
   for (const p of parts) p.graphics.visible = false
 
   return {
@@ -556,6 +651,10 @@ export function rebuildScene({ getWorld, onIntent, layout, world }) {
 function buildFloor({ getWorld, onIntent, layout, world }) {
   const engine = _engine
   const scene  = _scene
+
+  // Значок ролі — третина зросту персонажа (Стадія 13 / А2): має читатись у
+  // натовпі з шести робітників, але не бути більшим за голову.
+  const BADGE_U = u(0.34)
 
   const { floor, piggy, ...propActors } = buildRoom(scene, layout)
   _floorActor = floor
@@ -686,18 +785,22 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     return a
   })
 
-  const slotLabels = slotSpawns.map(pos => {
-    const lbl = new ex.Label({
-      text:  '',
-      pos:   ex.vec(pos.x, pos.y - BOX_W * 1.05),
-      color: ex.Color.fromHex('#c8d8ff'),
-      font:  new ex.Font({ size: 12, family: 'monospace', textAlign: ex.TextAlign.Center }),
-      z: 5,
-    })
-    lbl.graphics.visible = false
-    scene.add(track(lbl))
-    return lbl
+  // Плашка доставки: іконка дрона + відлік цифрами (Стадія 13 / А3).
+  //
+  // Був один `ex.Label` з текстом `${kit.emoji} ${час}` — тобто і «який дрон
+  // їде», і «скільки лишилось» малював шрифт ОС. Тепер це дві намальовані речі:
+  // іконка типу і ряд цифр. Гравець і далі читає рядок як одне ціле, бо вони
+  // стоять поруч і рухаються разом.
+  const ICON_W = u(0.62)
+  const ICON_H = u(0.34)
+  const slotIcons = slotSpawns.map(() => {
+    const a = new ex.Actor({ pos: ex.vec(-9999, -9999), width: ICON_W, height: ICON_H, z: 5 })
+    a.graphics.visible = false
+    scene.add(track(a))
+    return a
   })
+  // «59:59» — п'ять глифів; довший відлік у грі неможливий.
+  const slotClocks = slotSpawns.map(() => makeNumberRow(scene, track, 5))
 
   // Куди дивиться це замовлення: приймальний ящик свого цеху, якщо цех уже
   // вибрано в момент замовлення (Стадія 12 / Д1), інакше — вуличний слот.
@@ -711,7 +814,8 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
   }
 
   slotIndicators.forEach((ind, slotIdx) => {
-    const lbl = slotLabels[slotIdx]
+    const icon  = slotIcons[slotIdx]
+    const clock = slotClocks[slotIdx]
 
     // Projection: countdown while in transit, box sprite once it has arrived.
     // Walking into the slot's trigger zone is what picks it up (C2).
@@ -722,25 +826,28 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
       // No delivery OR the worker is carrying it — the carry box is shown instead.
       if (!d || d.status === DeliveryStatus.CARRYING) {
         ind.graphics.visible = false
-        lbl.graphics.visible = false
+        icon.graphics.visible = false
+        clock.hide()
         return
       }
 
       const at = intakeSpot(d.hallId ?? null, slotIdx)
       ind.pos.x = at.x
       ind.pos.y = at.y
-      lbl.pos.x = at.x
-      lbl.pos.y = at.y - BOX_W * 1.05
 
-      const ms  = Math.max(0, d.readyAt - now)
-      const kit = KIT_TYPES[d.kitId]
+      const ms = Math.max(0, d.readyAt - now)
       if (ms > 0) {
         ind.graphics.visible = false
-        lbl.text = `${kit?.emoji ?? '📦'} ${fmtSlotTime(ms)}`
-        lbl.graphics.visible = true
+        const key = `icon_${d.kitId}`
+        if (icon._kit !== key) { applySprite(icon, key); icon._kit = key }
+        icon.pos.x = at.x - ICON_W * 0.45
+        icon.pos.y = at.y - BOX_W * 1.05
+        icon.graphics.visible = true
+        clock.show(fmtSlotTime(ms), at.x + ICON_W * 0.62, at.y - BOX_W * 1.05)
       } else {
         ind.graphics.visible = true
-        lbl.graphics.visible = false
+        icon.graphics.visible = false
+        clock.hide()
       }
     })
   })
@@ -963,20 +1070,22 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
       ? createTileCharacter(actor, frontImg, getSprite(pair[1]))
       : createCharacterSprite(actor, getSprite(spriteKey), tint ? color : null)
 
-    // Role badge above the head — the emoji says what the colour means.
+    // Значок ролі над головою — він каже, що означає колір (Стадія 13 / А2).
+    //
+    // Був `ex.Label` з емодзі: власний шрифт, власне вирівнювання, власний
+    // піксельний розмір — і три різні картинки на трьох платформах. Актор зі
+    // спрайтом не потребує нічого з цього, тому код тут коротший, ніж був.
     let badgeLabel = null
     if (badge) {
-      badgeLabel = new ex.Label({
-        text: badge,
-        pos:  ex.vec(-9999, -9999),
+      badgeLabel = new ex.Actor({
+        pos:    ex.vec(-9999, -9999),
+        width:  BADGE_U,
+        height: BADGE_U,
         z: 25,
-        font: new ex.Font({
-          family: 'sans-serif', size: 22, unit: ex.FontUnit.Px,
-          textAlign: ex.TextAlign.Center, baseAlign: ex.BaseAlign.Middle,
-        }),
       })
       scene.add(badgeLabel)
       track(badgeLabel)
+      applySprite(badgeLabel, badge)
     }
 
     // Y-sort: whoever stands lower on screen draws in front.

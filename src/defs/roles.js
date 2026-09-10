@@ -16,10 +16,17 @@ export const ROLES = Object.freeze({
     name: "Кур'єр",
     emoji: '🏃',
     // Livery (S1.4): the shop is read at a glance, so who is who has to be a
-    // colour and not a job title. `color` tints the sprite and the ring under
-    // the feet; `badge` rides above the head.
+    // colour and not a job title. `color` тінтує спрайт і кільце під ногами;
+    // `badgeSprite` висить над головою.
+    //
+    // Стадія 13 / А2: тут був емодзі 📦. Емодзі малювався шрифтом ОС — три
+    // різні набори картинок на трьох платформах — і жив у піксельному розмірі
+    // шрифта, поза одиницею U. Тепер це намальований значок; генератор бере
+    // для нього ЦЕЙ САМИЙ `color`, тож кільце й бейдж однієї людини не можуть
+    // розійтись у кольорі. `emoji` нижче лишається — його показують HTML-панелі
+    // (А7), а не сцена.
     color: '#4a8ef0',
-    badge: '📦',
+    badgeSprite: 'badge_courier',
     hint: 'Носить коробки з вулиці на верстак',
     accepts: ['haul_delivery'],
     hire: { base: HIRE_COST_BASE.courier, growth: HIRE_COST_GROWTH },
@@ -30,7 +37,7 @@ export const ROLES = Object.freeze({
     name: 'Технік',
     emoji: '🔧',
     color: '#f0a030',
-    badge: '🔧',
+    badgeSprite: 'badge_tech',
     hint: 'Паяє за вас — навіть з ручним паяльником',
     accepts: ['assemble'],
     hire: { base: HIRE_COST_BASE.tech, growth: HIRE_COST_GROWTH },
@@ -44,7 +51,7 @@ export const ROLES = Object.freeze({
     name: 'Продавець',
     emoji: '📮',
     color: '#4fbf6a',
-    badge: '💵',
+    badgeSprite: 'badge_seller',
     hint: 'Відносить готові дрони до скриньки',
     accepts: ['sell_drone'],
     hire: { base: HIRE_COST_BASE.seller, growth: HIRE_COST_GROWTH },
@@ -60,7 +67,7 @@ export const ROLES = Object.freeze({
     emoji: '🧑‍💼',
     hint: 'Сам замовляє комплекти за ноутбуком',
     color: '#a06ad8',
-    badge: '🧾',
+    badgeSprite: 'badge_manager',
     accepts: ['order_kit'],
     hire: { base: HIRE_COST_BASE.manager, growth: HIRE_COST_GROWTH },
   },
@@ -115,7 +122,7 @@ export function promoteCost(roleId, level) {
 
 // Which roles can take this task type.
 export const roleColor = (roleId) => ROLES[roleId]?.color ?? '#f0a030'
-export const roleBadge = (roleId) => ROLES[roleId]?.badge ?? '•'
+export const roleBadge = (roleId) => ROLES[roleId]?.badgeSprite ?? null
 
 export function rolesFor(taskType) {
   return ROLE_ORDER.filter(id => ROLES[id].accepts.includes(taskType))

@@ -65,7 +65,9 @@ export function createEffects({
 
     [EV.ASSEMBLY_DONE]: ({ stationId, quality, price }) => {
       const pct = Math.round(quality * 100)
-      progressOf(stationId)?.showResult(`✓ Зібрано! ${pct}% → $${price.toFixed(0)}`)
+      // «✓» і «→» звідси прибрані (Стадія 13 / А4): галочку малює сцена
+      // спрайтом `state_done`, а стрілка була другим гліфом ОС у тому ж рядку.
+      progressOf(stationId)?.showResult(`Зібрано! ${pct}% — $${price.toFixed(0)}`)
       getRefs()?.worker?.notifySolderDone()
     },
 
