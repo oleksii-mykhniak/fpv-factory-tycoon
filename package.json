@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "sprites": "node scripts/gen-sprites.js",
     "preview": "vite preview",
     "test": "vitest",
     "smoke": "node scripts/smoke.mjs http://localhost:5174/",

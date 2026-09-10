@@ -1,18 +1,27 @@
-// Generates procedural placeholder PNG sprites for each game object.
-// Run: node scripts/gen-placeholder-sprites.js
-// Replace with real art later — sizes and shapes tuned to scene.js layout.
+// Джерело всього арту гри (Стадія 13 / А5).
+//
+// Запуск: `npm run sprites`.
+//
+// Файл довго звався gen-placeholder-sprites.js — «поки що», доки не з'явиться
+// справжній арт. Справжнім артом він і став: усе, що видно на сцені, малює цей
+// скрипт. Слово «placeholder» перестало бути правдою й зникло разом із назвою.
+//
+// Три правила, які тримають набір ОДНИМ набором:
+//
+//   1. Розмір — у СВІТОВИХ одиницях, через `u()` з гри. Піксельний виводиться.
+//   2. Колір — з `palette.js`, а не з літерала в функції малювання.
+//   3. Кожен спрайт виходить через ОДИН хвіст `finish()` (А6) — тому джерело
+//      пікселів можна колись замінити, а стиль лишиться.
 import { writeFileSync, mkdirSync } from 'fs'
+import { pathToFileURL } from 'url'
 import { deflateSync } from 'zlib'
 // Розміри й кольори беруться з ТИХ САМИХ модулів, що їх читає гра. Спрайт,
 // намальований не в масштабі персонажа, — це та сама помилка, через яку
 // викинули три паки Kenney (CREDITS.md); а бейдж ролі, пофарбований власною
 // копією кольору, розійшовся б із кільцем під ногами тієї ж людини.
-import { u, CHARACTER_U } from '../src/state/config.js'
+import { u } from '../src/state/config.js'
 import { ROLES, ROLE_ORDER } from '../src/defs/roles.js'
-
-const hex = (s) => [
-  parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16),
-]
+import { P, ACCENT, UNITS_PER_PX, hex } from './palette.js'
 
 // ── PNG encoder (RGBA, color type 6) ─────────────────────────────────────────
 
@@ -36,10 +45,9 @@ function pngChunk(type, data) {
   return Buffer.concat([len, tb, data, crcBytes])
 }
 
-function makePng(w, h, drawFn) {
-  const pixels = new Uint8Array(w * h * 4)
-  drawFn(pixels, w, h)
-
+// Кодує ГОТОВИЙ буфер пікселів. Малювання відв'язане навмисно (А6): між
+// малюванням і записом стоїть постобробка, і кодувальник не має про неї знати.
+function encodePng(w, h, pixels) {
   const sig  = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
   const ihdr = Buffer.alloc(13)
   ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4)
@@ -558,39 +566,10 @@ function drawArrow(pixels, w, h) {
 }
 
 
-// ── One palette, one light, one pixel density ───────────────────────────────
-//
-// This is what makes a set of hand-drawn sprites read as ONE set rather than as
-// thirty separate drawings. It is not discipline, it is arithmetic:
-//
-//   PALETTE     every object picks from this list and nowhere else
-//   box()       every object is lit from the top-left, because only box() shades
-//   UNITS_PER_PX one world unit is always the same number of pixels
-//
-// The last one is the rule the Kenney experiment broke: their furniture was
-// drawn for a 16px character while ours is 64px, so the same physical object
-// arrived with pixels four times the size. Here every sprite declares its size
-// in WORLD UNITS and the generator derives the pixel size, so that cannot drift.
-const UNITS_PER_PX = 74 / 64   // character: 74 world units tall, 64px sprite
-
-const P = {
-  // Woods — furniture, crates, floors
-  wood:     [0xa8, 0x7c, 0x4e], woodHi:  [0xc9, 0x9c, 0x6c], woodLo: [0x7a, 0x55, 0x33],
-  // Fabric — beds, sofas, rugs
-  cloth:    [0x7d, 0x6f, 0xb0], clothHi: [0x9d, 0x8f, 0xd0], clothLo: [0x58, 0x4c, 0x82],
-  warm:     [0xc4, 0x6a, 0x62], warmHi:  [0xe0, 0x8a, 0x80], warmLo: [0x94, 0x48, 0x42],
-  // Metals — appliances, racks, poles
-  metal:    [0x9a, 0xa2, 0xb4], metalHi: [0xc2, 0xc9, 0xd6], metalLo: [0x6b, 0x72, 0x84],
-  dark:     [0x3a, 0x38, 0x4c], darkHi:  [0x55, 0x52, 0x6e], darkLo: [0x24, 0x22, 0x32],
-  // Nature
-  leaf:     [0x5c, 0xa0, 0x58], leafHi:  [0x7c, 0xc4, 0x72], leafLo: [0x3c, 0x70, 0x3c],
-  // Accents
-  accent:   [0xe0, 0xa8, 0x48], white:   [0xe8, 0xe6, 0xf0], glass:  [0x86, 0xc8, 0xd8],
-  // Floors are their own, quieter shades. Furniture wood at full saturation
-  // across a whole room turned the flat into one orange field — a floor has to
-  // sit UNDER the furniture, not compete with it.
-  fWood:    [0x7e, 0x66, 0x4e], fWoodHi: [0x8d, 0x74, 0x5a], fWoodLo: [0x6a, 0x54, 0x40],
-}
+// Палітра, світло і щільність пікселя переїхали в `./palette.js` (А5.2): доти
+// кольори були розсипані по функціях і жоден не можна було змінити в одному
+// місці. `box()` нижче лишається тут — це не колір, а СВІТЛО: воно єдине
+// пояснює, чому всі об'єкти згодні, з якого боку падає промінь.
 
 // A lit box: body, brighter top edge, darker bottom edge. Every solid object in
 // the game is made of these, which is why they all agree about where the light is.
@@ -963,7 +942,7 @@ function drawAsphalt(px, w, h) {
 // Desk, rack, board and bin had no sprite at all — they were the fallback
 // rectangle the loader draws when a PNG is missing. They are also the four
 // things the game asks the player to walk over to, which made them the worst
-// possible place for a placeholder.
+// possible place for a stand-in rectangle.
 
 function drawDesk2(px, w, h) {
   box(px, w, 2, Math.round(h * 0.22), w - 4, Math.round(h * 0.60), P.wood, P.woodHi, P.woodLo)
@@ -1138,8 +1117,8 @@ const KIT_ICONS = {
 // ОС, тобто саме та частина, яку око ловить першою, малювалась не нами.
 //
 // Текст поруч лишається текстом (А4): прибираємо картинки-гліфи, а не написи.
-const ACCENT_HOT  = [0xe0, 0x8a, 0x3c]   // asset_specs.md: помаранчевий акцент
-const ACCENT_GOOD = [0x7d, 0xe0, 0x7d]   // той самий зелений, що в крапках кроків
+const ACCENT_HOT  = ACCENT.hot    // asset_specs.md: помаранчевий акцент
+const ACCENT_GOOD = ACCENT.good   // той самий зелений, що в крапках кроків
 
 // Іскра: чотири промені й ядро. Читається як «щось спалахнуло» і на 19 px, і
 // в кутку картки, де на неї ніхто не дивиться прямо.
@@ -1384,47 +1363,47 @@ function drawCat(pixels, w) {
 const drawWorkerWalk = (pixels, w, h) => drawWalkCycle(pixels, w, h, WORKER_PALETTE)
 const drawPlayerWalk = (pixels, w, h) => drawWalkCycle(pixels, w, h, PLAYER_PALETTE)
 
-// ── Generate all sprites ──────────────────────────────────────────────────────
+// ── Що саме генеруємо ───────────────────────────────────────────────────────
 
-mkdirSync('public/sprites', { recursive: true })
-
+// Кожен спрайт оголошує розмір у СВІТОВИХ одиницях (А5.3). Піксельний виводить
+// `finish()` — так спрайт фізично не може приїхати з чужою щільністю пікселя.
+//
+// Числа тут не «гарні»: u(1.5) — це рівно ті 96 px, у яких дрони й малювались.
+// Перевід нічого не перемалював, він лише переклав розмір мовою, якою міряється
+// решта світу.
 const sprites = [
-  // Drones — 96×52 (ratio ~1.85:1, matches SCENE_DRONE_W_RATIO : DRONE_H = W*0.09 : W*0.09*0.55)
-  { name: 'mini_drone',       w:  96, h:  52, draw: drawMiniDrone       },
-  { name: 'racing_drone',     w:  96, h:  52, draw: drawRacingDrone     },
-  { name: 'cinematic_drone',  w:  96, h:  52, draw: drawCinematicDrone  },
-  { name: 'longrange_drone',  w:  96, h:  52, draw: drawLongrangeDrone  },
-  // Box — 96×64 (ratio 1.5:1, matches scene box: W*0.12 × W*0.12*0.65)
-  { name: 'delivery_box',     w:  96, h:  64, draw: drawBox             },
-  // Workbench — 192×64 (ratio 3:1, matches scene bench: W*0.60 × RH*0.13)
-  { name: 'workbench',        w: 192, h:  64, draw: drawWorkbench       },
-  { name: 'soldering_iron',   w:  64, h:  16, draw: drawSolderingIron   },
-  // Worker — 4 frames × 64×64 = 256×64
-  { name: 'worker_walk',      w: 256, h:  64, draw: drawWorkerWalk      },
-  { name: 'player_walk',      w: 256, h:  64, draw: drawPlayerWalk      },
-  // Environment objects
-  { name: 'lamp',             w:  48, h:  48, draw: drawLamp            },
-  { name: 'mailbox',          w:  64, h:  52, draw: drawMailbox         },
-  // Piggy bank — 64×64
-  { name: 'piggy',            w:  64, h:  64, draw: drawPiggy           },
-  // Objective arrow — 32×40, points down; the scene rotates it toward the goal
-  { name: 'arrow',            w:  32, h:  40, draw: drawArrow           },
+  // Дрони — u(1.5) × u(0.81), тобто 96×52 (пропорція ~1.85:1).
+  { name: 'mini_drone',       wu: u(1.5),  hu: u(0.81), draw: drawMiniDrone       },
+  { name: 'racing_drone',     wu: u(1.5),  hu: u(0.81), draw: drawRacingDrone     },
+  { name: 'cinematic_drone',  wu: u(1.5),  hu: u(0.81), draw: drawCinematicDrone  },
+  { name: 'longrange_drone',  wu: u(1.5),  hu: u(0.81), draw: drawLongrangeDrone  },
+  { name: 'delivery_box',     wu: u(1.5),  hu: u(1.0),  draw: drawBox             },
+  { name: 'workbench',        wu: u(3.0),  hu: u(1.0),  draw: drawWorkbench       },
+  { name: 'soldering_iron',   wu: u(1.0),  hu: u(0.25), draw: drawSolderingIron   },
+  // Персонажі — чотири кадри ходьби в рядок, кожен на зріст персонажа.
+  { name: 'worker_walk',      wu: u(4.0),  hu: u(1.0),  draw: drawWorkerWalk      },
+  { name: 'player_walk',      wu: u(4.0),  hu: u(1.0),  draw: drawPlayerWalk      },
+  { name: 'lamp',             wu: u(0.75), hu: u(0.75), draw: drawLamp            },
+  { name: 'mailbox',          wu: u(1.0),  hu: u(0.81), draw: drawMailbox         },
+  { name: 'piggy',            wu: u(1.0),  hu: u(1.0),  draw: drawPiggy           },
+  // Стрілка цілі — дивиться вниз; сцена повертає її на ціль.
+  { name: 'arrow',            wu: u(0.5),  hu: u(0.62), draw: drawArrow           },
 
-  // Seven cells: four walking, then sit, sleep, groom (V5 moods).
-  { name: 'cat_walk',         w: 224, h:  32, draw: drawCat             },
+  // Сім кадрів: чотири ходьби, далі сидить, спить, вмивається (V5).
+  { name: 'cat_walk',         wu: u(3.5),  hu: u(0.5),  draw: drawCat             },
 
-  // Redrawn from the shared palette (V6): the first pass at these four used
-  // their own colours and stood out against everything drawn since.
-  { name: 'desk',             w: 104, h:  64, draw: drawDesk2           },
-  { name: 'rack',             w:  56, h:  80, draw: drawRack2           },
-  { name: 'jobboard',         w:  56, h:  64, draw: drawJobboard2       },
-  { name: 'trashbin',         w:  48, h:  58, draw: drawTrashbin2       },
+  // Перемальовані зі спільної палітри (V6): перший захід на ці чотири мав
+  // власні кольори й вибивався з усього, намальованого пізніше.
+  { name: 'desk',             wu: u(1.62), hu: u(1.0),  draw: drawDesk2           },
+  { name: 'rack',             wu: u(0.88), hu: u(1.25), draw: drawRack2           },
+  { name: 'jobboard',         wu: u(0.88), hu: u(1.0),  draw: drawJobboard2       },
+  { name: 'trashbin',         wu: u(0.75), hu: u(0.9),  draw: drawTrashbin2       },
 ]
 
-// Sprites whose size is declared in WORLD UNITS. The generator converts, so
-// every one of them lands at the same pixel density as the character (V6).
-const T = 74   // one character height
-const worldSprites = [
+// Меблі, вулиця, підлоги й стіни (V6). Той самий список, та сама одиниця —
+// `T` тут був локальною копією зросту персонажа, тепер це `u()` з гри.
+const T = u(1)
+sprites.push(
   { name: 'f_bed',       wu: T * 1.0, hu: T * 1.9, draw: drawBed },
   { name: 'f_sofa',      wu: T * 1.9, hu: T * 0.9, draw: drawSofa },
   { name: 'f_rug',       wu: T * 2.4, hu: T * 1.6, draw: drawRug },
@@ -1453,6 +1432,15 @@ const worldSprites = [
   { name: 'o_car',       wu: T * 1.0, hu: T * 1.8, draw: drawCar },
   { name: 'o_vending',   wu: T * 0.8, hu: T * 1.1, draw: drawVending },
   { name: 'o_shelf',     wu: T * 1.6, hu: T * 1.0, draw: drawShopShelf },
+
+  // Базові плитки без суфікса — запасний шлях `tileFloor`, коли варіантів
+  // немає. Довго лежали в `public/sprites` як спадок від часів до варіантів і
+  // НЕ малювались генератором узагалі: `npm run sprites` із чистої теки дав би
+  // гру без запасної плитки, і ніхто б не помітив, поки не зникне якийсь із
+  // варіантів. Знайдено тестом ідемпотентності на першому ж прогоні (А5.4).
+  { name: 'tile_wood',       wu: T, hu: T, draw: woodVariant(0) },
+  { name: 'tile_concrete',   wu: T, hu: T, draw: concreteVariant(0) },
+  { name: 'tile_asphalt',    wu: T, hu: T, draw: asphaltVariant(0) },
 
   { name: 'tile_wood_0',     wu: T, hu: T, draw: woodVariant(0) },
   { name: 'tile_wood_1',     wu: T, hu: T, draw: woodVariant(1) },
@@ -1488,19 +1476,92 @@ const worldSprites = [
   // Стани верстака (А4).
   { name: 'state_overheat', wu: u(0.30), hu: u(0.30), draw: drawStateOverheat },
   { name: 'state_done',     wu: u(0.30), hu: u(0.30), draw: drawStateDone },
-]
+)
 
-for (const s of worldSprites) {
-  sprites.push({
-    name: s.name,
-    w: Math.round(s.wu / UNITS_PER_PX),
-    h: Math.round(s.hu / UNITS_PER_PX),
-    draw: s.draw,
-  })
+// ── Хвіст (Стадія 13 / А6) ──────────────────────────────────────────────────
+//
+// Правило: ДЖЕРЕЛО ПІКСЕЛІВ ЗМІННЕ, ПОСТПРОЦЕС — НІ.
+//
+// Кожен спрайт без винятку виходить у світ через `finish()`: розмір у `u()` →
+// пікселі, малювання, постобробка, запис PNG. Якщо колись з'явиться згенерована
+// заготовка (нейромережею чи звідки завгодно), вона зайде в цей самий хвіст і
+// вийде в тому ж стилі — саме заради цього хвіст один.
+//
+// Що хвіст уміє, але НЕ робить для мальованого набору:
+//
+//   quantize — притягування кожного пікселя до найближчого кольору палітри.
+//   Для мальованого спрайта це або нічого не змінює (колір і так із палітри),
+//   або псує свідомий вибір. Для ЗАВЕЗЕНОГО — обов'язкове, бо саме воно
+//   переводить чужі пікселі в наш набір. Тому вмикається джерелом
+//   (`source: 'imported'`), а не рядком у кожному спрайті.
+//
+//   trim — обрізання порожнього поля. Вимкнене для мальованого набору
+//   свідомо: половина спрайтів має якорі (`manifest.js`), відраховані від
+//   центру повного полотна, і зсув країв тихо зрушив би точки пайки на дроні.
+
+const OUT_DIR = process.argv[2] ?? 'public/sprites'
+
+// Найближчий колір палітри — за квадратом відстані в RGB. Достатньо: палітра
+// мала й розведена, а «правильна» відстань у Lab тут не змінила б жодного
+// пікселя.
+const PALETTE_LIST = Object.values(P)
+
+export function quantize(px) {
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i + 3] === 0) continue
+    let best = null, bestD = Infinity
+    for (const c of PALETTE_LIST) {
+      const dr = px[i] - c[0], dg = px[i + 1] - c[1], db = px[i + 2] - c[2]
+      const d = dr * dr + dg * dg + db * db
+      if (d < bestD) { bestD = d; best = c }
+    }
+    px[i] = best[0]; px[i + 1] = best[1]; px[i + 2] = best[2]
+  }
 }
 
-for (const { name, w, h, draw } of sprites) {
-  const path = `public/sprites/${name}.png`
-  writeFileSync(path, makePng(w, h, draw))
-  console.log(`✓ ${path}  (${w}×${h})`)
+export function trim(px, w, h) {
+  let x0 = w, y0 = h, x1 = -1, y1 = -1
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (px[(y * w + x) * 4 + 3] === 0) continue
+    if (x < x0) x0 = x
+    if (y < y0) y0 = y
+    if (x > x1) x1 = x
+    if (y > y1) y1 = y
+  }
+  if (x1 < 0) return { px, w, h }
+  const nw = x1 - x0 + 1, nh = y1 - y0 + 1
+  const out = new Uint8Array(nw * nh * 4)
+  for (let y = 0; y < nh; y++)
+    for (let x = 0; x < nw; x++)
+      for (let c = 0; c < 4; c++)
+        out[(y * nw + x) * 4 + c] = px[((y + y0) * w + (x + x0)) * 4 + c]
+  return { px: out, w: nw, h: nh }
+}
+
+export function finish({ name, wu, hu, draw, source = 'drawn' }, outDir = OUT_DIR) {
+  let w = Math.round(wu / UNITS_PER_PX)
+  let h = Math.round(hu / UNITS_PER_PX)
+  let px = new Uint8Array(w * h * 4)
+  draw(px, w, h)
+
+  if (source === 'imported') {
+    quantize(px)
+    const t = trim(px, w, h)
+    px = t.px; w = t.w; h = t.h
+  }
+
+  const path = `${outDir}/${name}.png`
+  writeFileSync(path, encodePng(w, h, px))
+  return { path, w, h }
+}
+
+// Запуск як скрипт малює весь набір; імпорт — ні. Без цієї межі тест на
+// постобробку (А6) перемальовував би `public/sprites` щоразу, коли його
+// запускають.
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  mkdirSync(OUT_DIR, { recursive: true })
+  for (const spec of sprites) {
+    const { path, w, h } = finish(spec)
+    console.log(`✓ ${path}  (${w}×${h})`)
+  }
 }

@@ -122,7 +122,7 @@ export const CAMERA_FRICTION   = 0.28
 
 // Which art the people are drawn with (V6 revert).
 //
-//   'generated' — scripts/gen-placeholder-sprites.js: a four-frame walk cycle
+//   'generated' — scripts/gen-sprites.js: a four-frame walk cycle
 //                 per palette, tinted per role at runtime
 //   'kenney'    — the CC0 tiles: four fixed poses, movement read from a bob
 //

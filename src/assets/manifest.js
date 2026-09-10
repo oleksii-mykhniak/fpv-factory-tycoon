@@ -35,7 +35,7 @@ export const SPRITES = Object.freeze({
   },
 
   // ── Generated furniture, outdoors, floors and walls (V6) ─────
-  // Sizes come from world units in scripts/gen-placeholder-sprites.js, so
+  // Sizes come from world units in scripts/gen-sprites.js, so
   // every one of these lands at the character's pixel density.
   door_tile: { url: `${BASE}sprites/door_tile.png`, anchors: {} },
   f_bed: { url: `${BASE}sprites/f_bed.png`, anchors: {} },
