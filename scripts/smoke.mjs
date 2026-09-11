@@ -492,9 +492,15 @@ const jBefore = await page.evaluate(() => {
 
 // A hall will not open while the open ones are short-staffed, so hire first.
 // Each hall has its own board since F4 — this is hall 1's.
+//
+// Селектор прив'язаний до `#hire-modal`, і це не косметика: закриті модалки
+// лишаються в DOM, а `.shop-upgrade` є і в них. Без прив'язки `.first()`
+// одного разу зловив рядок «Відкрити Цех 3» із панелі стійки — кнопка була
+// неактивна, найм тихо не відбувався, і перевірка J падала на порожньому
+// місці (2026-09-11).
 await openPanelAt('jobboard_hall-1')
 for (const role of ['Кур', 'Технік', 'Продавець', 'Менеджер']) {
-  const btn = page.locator('.shop-upgrade', { hasText: role }).locator('button').first()
+  const btn = page.locator('#hire-modal .shop-upgrade', { hasText: role }).locator('button').first()
   if (await btn.isEnabled().catch(() => false)) await btn.click()
   await page.waitForTimeout(250)
 }
@@ -525,7 +531,7 @@ console.log(`  halls ${jBefore.halls}→${jAfter.halls}, world ${jBefore.world}�
 // F4: the new hall has its own board, and hiring there binds the person to it.
 await openPanelAt('jobboard_hall-2')
 const jBoardTitle = await page.textContent('#hire-modal .shop-section__title').catch(() => '')
-const jTechBtn = page.locator('.shop-upgrade', { hasText: 'Технік' }).locator('button').first()
+const jTechBtn = page.locator('#hire-modal .shop-upgrade', { hasText: 'Технік' }).locator('button').first()
 if (await jTechBtn.isEnabled().catch(() => false)) await jTechBtn.click()
 await page.waitForTimeout(400)
 await page.click('#hire-close').catch(() => {})
@@ -703,7 +709,7 @@ console.log('\n### L. Підвищення в панелі')
 // рівні — живе на дошці оголошень, тож і сценарій ходить туди.
 await boot(seedState({}, { locationId: 'factory', money: 20000 }))
 await openPanelAt('jobboard_hall-1')
-const lHireBtn = page.locator('.shop-upgrade', { hasText: 'Кур' }).locator('button').first()
+const lHireBtn = page.locator('#hire-modal .shop-upgrade', { hasText: 'Кур' }).locator('button').first()
 if (await lHireBtn.isEnabled().catch(() => false)) await lHireBtn.click()
 await page.waitForTimeout(500)
 
