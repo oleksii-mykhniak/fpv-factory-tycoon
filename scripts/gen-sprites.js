@@ -1191,11 +1191,25 @@ function glyphClipboard(px, w, cx, cy, r, col) {
     fillRect(px, w, cx - (bw >> 1) + 2, y, cx + (bw >> 1) - 3, y, ...P.darkLo)
 }
 
+// Колба — інженер (Стадія 14 / К2). Вузьке горло й широка основа: на u(0.34)
+// це єдина форма, яка не читається ні як коробка, ні як планшет.
+function glyphFlask(px, w, cx, cy, r, col) {
+  const top = cy - r, bot = cy + Math.round(r * 0.8)
+  fillRect(px, w, cx - 1, top, cx + 1, top + Math.round(r * 0.6), ...col)
+  for (let y = top + Math.round(r * 0.6); y <= bot; y++) {
+    const t  = (y - top - r * 0.6) / Math.max(1, bot - top - r * 0.6)
+    const hw = Math.max(1, Math.round(1 + t * (r - 1)))
+    fillRect(px, w, cx - hw, y, cx + hw, y, ...col)
+  }
+  fillRect(px, w, cx - 3, top - 1, cx + 3, top - 1, ...col)
+}
+
 const ROLE_GLYPH = {
-  courier: glyphBox,
-  tech:    glyphWrench,
-  seller:  glyphNote,
-  manager: glyphClipboard,
+  courier:  glyphBox,
+  tech:     glyphWrench,
+  seller:   glyphNote,
+  manager:  glyphClipboard,
+  engineer: glyphFlask,
 }
 
 function drawBadge(roleId) {

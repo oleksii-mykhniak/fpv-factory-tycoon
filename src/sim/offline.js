@@ -20,7 +20,7 @@ import {
   kitCost, kitBasePrice, kitSolderPointCount,
 } from '../state/gameState.js'
 import { salePriceMult } from '../state/upgrades.js'
-import { roleLevelData, ROLE_ORDER } from '../defs/roles.js'
+import { roleLevelData, LOOP_ROLES } from '../defs/roles.js'
 import { OFFLINE_CAP_MS, OFFLINE_EFFICIENCY, MANAGER_RESERVE } from '../state/config.js'
 // Модель циклу й вибір комплекту — спільні з живим цехом (Стадія 11 / B).
 // Ре-експорт, бо споживачі звикли брати темп саме звідси.
@@ -29,13 +29,13 @@ export { pointMsFor, kitCycleMs }
 
 // Чи може цех крутити петлю сам (Стадія 9 / Р6).
 //
-// Умова — по одному з КОЖНОЇ з чотирьох ролей, і саме тому вона тут одна, а не
+// Умова — по одному з кожної ролі ВИРОБНИЧОЇ ПЕТЛІ, і саме тому вона тут одна, а не
 // список винятків: кожна роль знімає свою ділянку петлі (менеджер — замовлення,
 // кур'єр — коробки, технік — пайку, продавець — продаж), і якщо бракує однієї,
 // петля стоїть на ній. Тобто це не «скільки в тебе людей», а «чи закритий
 // цикл» — і саме це остання ланка ланцюга квестів просить зробити.
 export function shopRunsItself(game) {
-  return ROLE_ORDER.every(role => workersInRole(game, role).length > 0)
+  return LOOP_ROLES.every(role => workersInRole(game, role).length > 0)
 }
 
 // Скільки повних циклів цех міг зробити сам і скільки на цьому заробив.

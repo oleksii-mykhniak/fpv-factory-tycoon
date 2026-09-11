@@ -19,6 +19,7 @@ const plans  = () => [
   ...homes(),
   layoutFor('factory'),
   layoutFor('factory', { unlockedHalls: ['hall-1', 'hall-2', 'hall-3'] }),
+  layoutFor('factory', { unlockedHalls: ['hall-1', 'hall-2', 'hall-3', 'lab-1'] }),
 ]
 
 describe('C7 — locations are floor plans, not palettes', () => {
@@ -80,6 +81,8 @@ describe('C7 — locations are floor plans, not palettes', () => {
       ]
       for (const posts of postSets) {
         const seller = posts.seller
+        // Кімната без продавця (лабораторія, К2) цього питання не ставить.
+        if (!seller) continue
         expect(near(seller, layout.stationSlots), `${layout.id}: до верстака`)
           .toBeLessThan(near(seller, boxes))
       }

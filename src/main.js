@@ -10,7 +10,7 @@ import { ADS_ENABLED, SCRAP_CONSOLATION, INPUT_DEADZONE } from './state/config.j
 import { levelData } from './state/upgrades.js'
 import { currentLocation } from './state/locations.js'
 import { roomDef } from './defs/layouts/rooms.js'
-import { hallDef } from './defs/layouts/factory.js'
+import { hallDef, HALL_KIND_ICON } from './defs/layouts/factory.js'
 import { setMuted, unlockAudio } from './audio/sfx.js'
 import { setMusicEnabled, startMusic } from './audio/music.js'
 import { showRewarded, PLACEMENTS } from './monetization/ads.js'
@@ -229,6 +229,9 @@ const effects = createEffects({
   onColdSolder: (missMsg) => { coldWarning = missMsg ?? 'cold'; uiDirty = true },
   // Trigger zones ask; the view decides how to answer (C2).
   onSaleMade:      (e) => { floatEarning(e); offerSaleBonus() },
+  // «+3 очки» над стендом — рівно та сама механіка, що й «+$47» над скринькою:
+  // подія знає свою зону, зона знає, де вона на екрані.
+  onResearchDone:  ({ points, zoneId }) => floatOverZone(zoneId, `+${points} 🔬`),
   onQuestDone:     ({ questId }) => questTracker.flash(questId),
   onPurchase:      () => hud.markPurchase(incomePerSec(world.salesLog, world.now), world.now),
   onMarkUpgraded:  ({ kitId, mk, unlocked }) => {
@@ -253,9 +256,13 @@ const effects = createEffects({
 // впасти на бойовому шляху продажу.
 function floatEarning({ price, zoneId }) {
   if (!(price > 0)) return
+  floatOverZone(zoneId, `+$${price.toFixed(0)}`)
+}
+
+function floatOverZone(zoneId, text) {
   const zone = (world.zones ?? []).find(z => z.id === zoneId)
   if (!zone) return
-  sceneRefs?.floatGain?.(zone.cx, zone.y, `+$${price.toFixed(0)}`)
+  sceneRefs?.floatGain?.(zone.cx, zone.y, text)
 }
 
 // Applies a player command and pushes the result through the presentation layer.
@@ -365,7 +372,9 @@ const upgradeModal = createUpgradeModal(uiRoot, {
     upgradeModal.close?.()
     const hall = hallDef(hallId)
     if (hall) unlockCard.open({
-      title:    `🏭 ${hall.name} відкрито`,
+      // Іконка — від ТИПУ кімнати (Стадія 14 / К1): 🏭 над лабораторією
+      // розповідало б про неї те саме, що й про цех, тобто нічого.
+      title:    `${HALL_KIND_ICON[hall.kind] ?? '🏭'} ${hall.name} відкрито`,
       subtitle: 'Що тепер можна:',
       unlocks:  hall.unlocks,
     })

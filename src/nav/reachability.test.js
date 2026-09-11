@@ -27,7 +27,13 @@ function worlds() {
     out.push([`apartment×${rooms.length}`, createWorld({ state, salesLog: [] },
       { now: 1e6, rng: () => 0.5, layout: layoutFor('apartment', state) })])
   }
-  for (const halls of [['hall-1'], ['hall-1', 'hall-2'], ['hall-1', 'hall-2', 'hall-3']]) {
+  // Остання комбінація — з лабораторією (Стадія 14 / К2): це перша кімната в
+  // ДРУГОМУ РЯДУ, тобто перше місце, куди можна потрапити лише через проріз
+  // між рядами. Саме такий проріз ламається тихо.
+  for (const halls of [
+    ['hall-1'], ['hall-1', 'hall-2'], ['hall-1', 'hall-2', 'hall-3'],
+    ['hall-1', 'hall-2', 'hall-3', 'lab-1'],
+  ]) {
     const base = createState()
     const state = { ...base, locationId: 'factory', money: 99999, unlockedHalls: halls }
     out.push([`factory×${halls.length}`, createWorld({ state, salesLog: [] },

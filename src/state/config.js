@@ -154,7 +154,7 @@ export const MOVE_MAX_STEP = 8
 
 // ── Hired workers (C5) ───────────────────────────────────
 // Hiring the n-th worker of a role costs base × growth^n.
-export const HIRE_COST_BASE   = { courier: 260, tech: 420, seller: 320, manager: 640 }
+export const HIRE_COST_BASE   = { courier: 260, tech: 420, seller: 320, manager: 640, engineer: 900 }
 export const HIRE_COST_GROWTH = 1.85
 
 // Характеристики рівнів — у ROLE_CURVES нижче (Стадія 10 / C). Таблиці
@@ -167,7 +167,7 @@ export const HIRE_COST_GROWTH = 1.85
 // Levelling somebody up, on the shop floor (F5). Cost is base × growth^level,
 // per role — the same shape as hiring, so a shop with three trained couriers is
 // visibly a bigger investment than one with three fresh ones.
-export const WORKER_UPGRADE_BASE   = { courier: 240, tech: 400, seller: 300, manager: 560 }
+export const WORKER_UPGRADE_BASE   = { courier: 240, tech: 400, seller: 300, manager: 560, engineer: 720 }
 // Крива ціни — WORKER_LEVEL_GROWTH нижче. Була 2.1, але це показник для трьох
 // рівнів; для нескінченних він робить третє підвищення недосяжним.
 // Зони підвищення більше немає (Стадія 11 / D3): щоб підняти комусь рівень,
@@ -267,7 +267,17 @@ export const NAV_CELL = 24
 // agent's larger half-extent.
 export const NAV_INFLATE = u(0.27)
 // Hard ceiling on A* work per search — returns null instead of freezing a frame.
-export const ASTAR_MAX_NODES = 4000
+//
+// Було 4000 — і цього вистачало, поки фабрика була одним рядом 5100×1900
+// (≈17 000 клітин). Другий ряд кімнат (Стадія 14 / К1.2) зробив світ
+// 5100×3100, і найдовший маршрут — з лабораторії в дальній кут цеху 3 —
+// упирався рівно в цю стелю: шлях є, A* його не знаходить, робітник просто
+// стоїть. Саме той клас помилки, який ловить reachability.test.js.
+//
+// 9000 — виміряно: найдовший маршрут у нинішньому світі бере ~6000 вузлів і
+// рахується за 6 мс. Число має рости разом із площею світу; стеля тут — щоб
+// кадр не замерзав, а не щоб економити на пошуку.
+export const ASTAR_MAX_NODES = 9000
 // How many searches may run in one tick. Pathfinding is the most expensive
 // thing in the sim on a low-end phone, so it gets a budget.
 export const PATHS_PER_TICK = 2
@@ -572,6 +582,27 @@ export const MK_CAP_FLAT   = 2
 export const MK_CAP_GARAGE = 3
 export const MK_CAP_HALL   = [3, 4, 5]
 
+// ── Дослідження (Стадія 14 / К2) ─────────────────────────
+//
+// Норма збірок (MK_BUILD_REQ) лікує не те, чим хворіє: вона просить «зроби те
+// саме ще 25 разів». Лабораторія дає ДРУГИЙ шлях до того самого Mk — розібрати
+// комплект і заплатити очками. Норма нікуди не зникає: хто хоче — досліджує,
+// хто не хоче — збирає далі.
+//
+// Скільки очок дає один розібраний комплект. Прив'язано до собівартості, а не
+// до типу: дорожчий комплект — цінніше дослідження, і таблиці з 25 чисел, яку
+// ніхто не збалансує, не з'являється.
+export const RESEARCH_YIELD_PER_COST = 1 / 60
+export const RESEARCH_YIELD_MIN      = 1
+
+// Скільки часу інженер (або гравець) стоїть над стендом, розбираючи комплект.
+// Довше за верстак навмисно: дослідження — це вкладення, а не другий конвеєр.
+export const RESEARCH_DWELL_MS = 5200
+
+// Очки, якими норма збірок для наступного Mk закривається замість збірок.
+// Індекс — поточний Mk, як у MK_BUILD_REQ.
+export const RESEARCH_MARK_COST = [4, 7, 11, 17, 28]
+
 // Який Mk якого типу відкриває наступний тип (B3).
 //
 // Порядок у ланцюгу квестів мусить бути таким, щоб крок «купи Mk» стояв ПЕРЕД
@@ -602,9 +633,16 @@ export const MK_UNLOCKS = Object.freeze({
 // перевірка: якщо крива не проходить через уже збалансовані точки, вона
 // описує іншу гру.
 export const ROLE_CURVES = Object.freeze({
-  courier: { speed:      { from: 170,  to: 340,  k: 0.35 } },
-  seller:  { speed:      { from: 170,  to: 340,  k: 0.35 } },
-  manager: { speed:      { from: 170,  to: 340,  k: 0.35 } },
+  courier:  { speed:     { from: 170,  to: 340,  k: 0.35 } },
+  seller:   { speed:     { from: 170,  to: 340,  k: 0.35 } },
+  manager:  { speed:     { from: 170,  to: 340,  k: 0.35 } },
+  // Інженер (Стадія 14 / К2). Друга вісь — не швидкість роботи, а ВИХІД: скільки
+  // очок дослідження дає один розібраний комплект. Асимптота тут та сама, що й
+  // скрізь: людина стає кращою нескінченно, але не безмежно.
+  engineer: {
+    speed:    { from: 170,  to: 340,  k: 0.35 },
+    yieldMult:{ from: 1.0,  to: 2.2,  k: 0.40 },
+  },
   tech: {
     speed:      { from: 170,  to: 340,  k: 0.35 },
     pointMs:    { from: 2600, to: 800,  k: 0.78 },

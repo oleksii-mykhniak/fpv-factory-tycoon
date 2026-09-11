@@ -41,11 +41,10 @@
   чи не забагато «продай N / збери N» підряд у 42 кроках ланцюга.
 - **Стадія 10**: баланс нескінченних треків і Mk — числа підбирались за столом.
 
-**Далі в черзі — один план написаний, робота не почата** (2026-09-11):
-
-| Стадія | План | Про що |
-|--------|------|--------|
-| 14 — «Фабрика з кімнатами» | [plans/stage14_rooms.md](plans/stage14_rooms.md) | лабораторія, контракти, обліт; потім нові типи продукту |
+**Стадія 14 «Фабрика з кімнатами» — у роботі** ([план](plans/stage14_rooms.md),
+[факти](progress/stage14_rooms.md)). К1 (кімната має тип, фабрика має сітку) і
+К2 (лабораторія: Mk очками замість норми збірок) зроблені й закомічені, на
+залізі не перевірені. Попереду К3 (контракти), К4 (обліт), К5 (нові типи).
 
 **Відкрите питання після Стадії 15:** три спрайти — `mailbox.png`, `lamp.png`,
 `soldering_iron.png` — не малюються ніде. Видаляти чи лишити на майбутнє —
@@ -70,6 +69,7 @@
 
 | Стадія | Факти | План |
 |--------|-------|------|
+| 14 — «Фабрика з кімнатами» 🟡 | [progress/stage14_rooms.md](progress/stage14_rooms.md) | [plans/stage14_rooms.md](plans/stage14_rooms.md) |
 | 15 — «Один набір кольорів» | [progress/stage15_palette.md](progress/stage15_palette.md) | [plans/done/stage15_palette.md](plans/done/stage15_palette.md) |
 | 13 — «Нуль емодзі на сцені» | [progress/stage13_art.md](progress/stage13_art.md) | [plans/done/stage13_art.md](plans/done/stage13_art.md) |
 | 12 — «Доставка без стрічки» | [progress/stage12_delivery.md](progress/stage12_delivery.md) | [plans/done/stage12_delivery.md](plans/done/stage12_delivery.md) |

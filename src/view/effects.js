@@ -11,7 +11,7 @@ import { playSfx } from '../audio/sfx.js'
 
 export function createEffects({
   getRefs, haptic, onStateDirty, onColdSolder,
-  onSaleMade, onMinigame, onPanel, onQuestDone, onPurchase, onMarkUpgraded,
+  onSaleMade, onMinigame, onPanel, onQuestDone, onPurchase, onMarkUpgraded, onResearchDone,
 }) {
   // Each station draws its own progress card (C3).
   const progressOf = (stationId) =>
@@ -82,6 +82,10 @@ export function createEffects({
       if (byPlayer(e)) haptic('sale')
       onSaleMade?.(e)
     },
+
+    // Дослідження звучить як покупка, бо ним і є: очко — це валюта, яку щойно
+    // поклали в банк (Стадія 14 / К2).
+    [EV.RESEARCH_DONE]: (e) => { playSfx('upgrade'); onResearchDone?.(e) },
 
     [EV.BENCH_CLEARED]: ({ reason }) => {
       if (reason === 'abandoned') { playSfx('sell'); haptic('medium') }

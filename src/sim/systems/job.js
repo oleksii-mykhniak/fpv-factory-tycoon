@@ -63,9 +63,18 @@ export function deriveJobs(world) {
   // the job: the courier was released mid-errand and stood holding it forever.
   // A haul job therefore lives as long as the delivery does, in either state.
   const deliveries = game.deliveries ?? []
-  const inHand = deliveries.filter(
+  // Хто саме несе цю коробку. Коробка в руках ІНЖЕНЕРА — це вже не доставка на
+  // верстак, а дослідження на півдорозі (К2): без цієї перевірки та сама
+  // доставка породжувала б і haul_delivery, і research, і кур'єр стояв би біля
+  // порожнього ящика, чекаючи коробку, яку хтось інший уже забрав.
+  const carrierRole = (d) =>
+    (world.agents ?? []).find(a => a.id === d.carriedBy)?.role ?? null
+
+  const carried = deliveries.filter(
     d => d.status === DeliveryStatus.CARRYING && d.carriedBy && d.carriedBy !== 'player'
   )
+  const inHand   = carried.filter(d => carrierRole(d) !== 'engineer')
+  const inLabHands = carried.filter(d => carrierRole(d) === 'engineer')
   const waiting = deliveries.filter(
     d => d.status === DeliveryStatus.TRANSIT && d.readyAt <= world.now
   )
@@ -98,8 +107,9 @@ export function deriveJobs(world) {
   }
 
   // Only fetch a new box when there is somewhere to put it.
+  const spare = []
   for (const d of waiting) {
-    if (!targets.length) break
+    if (!targets.length) { spare.push(d); continue }
     const fromZone = pickupZone(world, d)
     const target   = nextTarget(d)
     const toZone   = stationZone(world, target)
@@ -112,6 +122,34 @@ export function deriveJobs(world) {
       fromZone,
       toZone,
     })
+  }
+
+  // 1.2. Лабораторія їсть НАДЛИШОК (Стадія 14 / К2).
+  //
+  // Дослідницька робота береться лише з коробок, яким не знайшлось вільного
+  // верстака, — тобто саме `spare`. Це і є правило, яке тримає дві системи
+  // нарізно: без нього інженер і кур'єр змагались би за одну коробку, і
+  // дослідження купувалось би зупинкою виробництва.
+  //
+  // Заразом воно робить лабораторію осмисленою: чим більше цех замовляє понад
+  // те, що встигає спаяти, тим швидше йде дослідження.
+  const researchZone = (world.zones ?? []).find(z => z.kind === 'research')
+  if (researchZone) {
+    // Коробка, вже взята інженером, тримає свою роботу живою до кінця — та сама
+    // причина, що й у haul_delivery: інакше підняття коробки знищувало б умову,
+    // яка цю роботу створила, і інженер застигав би з нею в руках.
+    for (const d of [...inLabHands, ...spare]) {
+      const fromZone = pickupZone(world, d)
+      if (!fromZone) continue
+      jobs.push({
+        id: `research:${d.id}`,
+        type: 'research',
+        deliveryId: d.id,
+        hallId: researchZone.meta?.hallId ?? null,
+        fromZone,
+        toZone: researchZone.id,
+      })
+    }
   }
 
   // 0. Somebody should go and order a kit (S3). One job at a time: two managers

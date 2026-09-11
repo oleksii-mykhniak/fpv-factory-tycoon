@@ -71,6 +71,29 @@ export const TASKS = Object.freeze({
     ],
   },
 
+  // Комплект → дослідницький стенд (Стадія 14 / К2).
+  //
+  // Це БУКВАЛЬНО haul_delivery з іншим кінцем маршруту, і саме тому нової
+  // гілки коду не з'явилось: зона прийому кладе коробку в руки, зона стенду
+  // забирає її назад — рівно так, як це робить верстак.
+  //
+  // Пріоритет нижчий за haul_delivery навмисно: коли коробка потрібна і цеху,
+  // і лабораторії, виграє цех. Лабораторія їсть НАДЛИШОК — і в job.js це
+  // закріплено ще й тим, що дослідницька робота взагалі не з'являється, поки
+  // є вільний верстак, якому цю коробку можна віддати.
+  research: {
+    id:       'research',
+    role:     'engineer',
+    priority: 8,
+    steps: [
+      { op: 'goto',    zone: 'job.fromZone' },
+      { op: 'waitFor', cond: 'carrying', timeoutMs: 6000 },
+      { op: 'goto',    zone: 'job.toZone' },
+      { op: 'waitFor', cond: 'notCarrying', timeoutMs: 12000 },
+      { op: 'done' },
+    ],
+  },
+
   // Finished drone → mailbox.
   sell_drone: {
     id:       'sell_drone',

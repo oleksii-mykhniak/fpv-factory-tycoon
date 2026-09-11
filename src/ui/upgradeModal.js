@@ -145,7 +145,7 @@ export function createUpgradeModal(root, {
     let locationHTML = ''
     if (isTerminal(state)) {
       // The last location. There is no move to offer — what grows here is the
-      // factory itself, one hall at a time (F2).
+      // factory itself, one room at a time (F2; типи кімнат — Стадія 14 / К1).
       const open   = openHallIds(state)
       const nextId = nextHallId(state)
       const hall   = nextId ? hallDef(nextId) : null
@@ -154,7 +154,7 @@ export function createUpgradeModal(root, {
       locationHTML = `
         <div class="shop-section shop-section--location">
           <div class="shop-section__title">
-            ${loc.emoji} ${loc.name} — цехів ${open.length}/${FACTORY_HALLS.length}
+            ${loc.emoji} ${loc.name} — кімнат ${open.length}/${FACTORY_HALLS.length}
           </div>
           <div class="shop-upgrade">
             ${hall ? `
@@ -165,10 +165,15 @@ export function createUpgradeModal(root, {
               ${reasons.length
                 ? `<p class="upgrade-effect-hint">${reasons.join(' · ')}</p>`
                 : '<p class="upgrade-effect-hint">Умови виконані — цех готовий до відкриття!</p>'}
-              <p class="upgrade-effect-hint">
-                +${hall.benches} верстаки й місця для ${
-                  Object.values(hall.workerCaps).reduce((a, b) => a + b, 0)} людей
-              </p>
+              <p class="upgrade-effect-hint">${
+                // Кімната сама розповідає, що з нею приїде (Стадія 14 / К6).
+                // Доти тут був один рядок «+N верстаки», і для лабораторії,
+                // у якої верстаків нуль, він читався б як «нічого».
+                hall.unlocks?.length
+                  ? hall.unlocks.join(' · ')
+                  : `+${hall.benches} верстаки й місця для ${
+                      Object.values(hall.workerCaps).reduce((a, b) => a + b, 0)} людей`
+              }</p>
             ` : '<p class="upgrade-effect-hint">Уся фабрика відкрита</p>'}
           </div>
         </div>

@@ -120,6 +120,27 @@ const buyMark = (id, kitId, target, why) => ({
   },
 })
 
+// Відкрити N-ту кімнату фабрики (F2; типи кімнат — Стадія 14 / К1).
+//
+// `count` — скільки кімнат має бути відкрито, щоб крок зарахувався. Саме
+// кількість, а не id: кімнати відкриваються по черзі, тож «четверта» — це
+// однозначна адреса, яка не поїде, коли між ними щось вставлять.
+const openRoom = (id, count, why) => ({
+  id, kind: 'buy', zoneKind: 'rack', why,
+  moot: (game) => !nextHallId(game) && openHallCount(game) < count,
+  done: (game) => openHallCount(game) >= count || !nextHallId(game),
+  resolve(game) {
+    const hallId = nextHallId(game)
+    if (!hallId) return null
+    const hall = hallDef(hallId)
+    return {
+      title: `Відкрий: ${hall.name}`,
+      need:  hall.cost,
+      hint:  hintFrom(canUnlockHall(game, hallId).reasons),
+    }
+  },
+})
+
 // Найняти першого працівника ролі. Штат «не всіх» — це вже правило локації
 // (roleCapHere), тому крок сам себе вимикає там, де вакансій нема.
 const hireRole = (roleId, why) => ({
@@ -337,22 +358,7 @@ export const QUEST_ACTS = Object.freeze([
         done: (game) => (game.workers ?? []).some(w => (w.level ?? 0) >= 1),
         resolve: () => ({ title: 'Підвищ будь-кого до 2 рівня', need: 1 }),
       },
-      {
-        id: 'hall_2', kind: 'buy', zoneKind: 'rack',
-        why: 'Конвеєр носить коробки замість кур\'єрів',
-        moot: (game) => !nextHallId(game),
-        done: (game) => !nextHallId(game) || openHallCount(game) > 1,
-        resolve(game) {
-          const hallId = nextHallId(game)
-          if (!hallId) return null
-          const hall = hallDef(hallId)
-          return {
-            title: `Відкрий: ${hall.name}`,
-            need:  hall.cost,
-            hint:  hintFrom(canUnlockHall(game, hallId).reasons),
-          }
-        },
-      },
+      openRoom('hall_2', 2, 'Більше верстаків — більше дронів одночасно'),
       // Два останні рівні просторових треків доступні ТІЛЬКИ на фабриці
       // (стелі `storage`/`logistics` тут 2, у гаражі — 1). Доти ланцюг про них
       // не згадував узагалі, тобто гравець дізнавався про них, лише якщо сам
@@ -365,6 +371,16 @@ export const QUEST_ACTS = Object.freeze([
         'Найдорожчий тип у грі — качати його є сенс'),
       buyMark('mk_cine_1', 'cinematic_drone', 1,
         'Стеля Mk на фабриці найвища — тут дрон доводять до кінця'),
+      openRoom('hall_3', 3, 'Третій цех — і стеля Mk V разом із ним'),
+      // Крок петлі перед лабораторією, і він же — її пояснення: коли цех
+      // замовляє більше, ніж встигає паяти, зайві комплекти стають очками
+      // дослідження. Лабораторія їсть саме цей надлишок.
+      sellCount('sell_forty', 40, 'Продай 40 дронів',
+        'Три цехи мають вийти на темп, перш ніж буде що досліджувати'),
+      // Кімната, а не цех (Стадія 14 / К2): ланцюг веде до неї рівно тим самим
+      // кроком, що й до цеху, — у цьому й був сенс типізувати кімнати.
+      openRoom('lab_room', 4, 'Mk без норми збірок — очками дослідження'),
+      hireRole('engineer', 'Лабораторія без інженера не працює сама'),
       buyUpgrade('courier_1', 'courier', 1,
         'Останній із чотирьох треків без стелі — далі росте тільки темп'),
       {

@@ -5,6 +5,7 @@ import {
   STORAGE_SLOTS_BY_LEVEL, LOGISTICS_DELIVERY_MULT,
   MK_MAX, MK_COST_GROWTH, MK_PRICE_GROWTH, MK_DELIVERY_GROWTH,
   MK_UPGRADE_COST_FACTOR, MK_FINAL_COST_MULT, MK_BUILD_REQ,
+  RESEARCH_MARK_COST, RESEARCH_YIELD_PER_COST, RESEARCH_YIELD_MIN,
 } from './config.js'
 
 import { UPGRADE_TRACKS, trackMaxLevel, nextCost, salePriceMult, kitCostMult, deliveryMult } from './upgrades.js'
@@ -157,6 +158,10 @@ export function createState() {
     // Монотонне: Mk не відкуповується, і на цьому тримається односторонність
     // відкриття наступних типів.
     kitMarks:          {},
+    // Очки дослідження (Стадія 14 / К2). Спільний банк, не по типах: інакше
+    // лабораторія була б п'ятьма окремими лабораторіями, і розібраний
+    // гоночний комплект нічим би не допоміг міні-дрону.
+    researchPoints:    0,
     upgrades: {
       priceMultiplier:  1,
       solderingLevel:   0,
@@ -291,29 +296,68 @@ export function markBuildProgress(state, kitTypeId) {
   }
 }
 
+// ── Дослідження (Стадія 14 / К2) ──────────────────────────
+//
+// Очки — другий шлях до тієї самої двері, а не інша двері. Mk коштує грошей у
+// будь-якому разі; очками закривається ТІЛЬКИ норма збірок. Через це не існує
+// стану «маю очки, але Mk не беруть»: обидва шляхи ведуть в один `upgradeMark`.
+
+export const researchPoints = (state) => state?.researchPoints ?? 0
+
+// Скільки очок дає один розібраний комплект. Від собівартості — див.
+// RESEARCH_YIELD_PER_COST.
+export function researchYield(state, kitTypeId, mult = 1) {
+  const cost = KIT_TYPES[kitTypeId] ? kitCost(state, kitTypeId) : 0
+  return Math.max(RESEARCH_YIELD_MIN, Math.round(cost * RESEARCH_YIELD_PER_COST * mult))
+}
+
+export function addResearch(state, points) {
+  return { ...state, researchPoints: researchPoints(state) + Math.max(0, points) }
+}
+
+// Скільки очок закриє норму збірок для наступного Mk, або null, коли норми
+// немає (вище нікуди) чи вона вже закрита збірками.
+export function markResearchCost(state, kitTypeId) {
+  const build = markBuildProgress(state, kitTypeId)
+  if (!build || build.have >= build.need) return null
+  const mk = kitMark(state, kitTypeId)
+  return RESEARCH_MARK_COST[mk] ?? RESEARCH_MARK_COST[RESEARCH_MARK_COST.length - 1]
+}
+
 export function canUpgradeMark(state, kitTypeId) {
   const cost = nextMarkCost(state, kitTypeId)
   const reasons = []
+  const research = cost === null ? null : markResearchCost(state, kitTypeId)
   if (cost === null) reasons.push(kitMark(state, kitTypeId) >= MK_MAX
     ? 'Максимальний Mk'
     : 'Потрібен більший простір')
   else {
     // Два замки, і показуємо обидва одразу: гравець, який бачить лише ціну,
     // збере на неї — і впреться в другий, про який дізнається аж тоді.
+    //
+    // Норма збірок має ДРУГИЙ ключ (К2.3): очки дослідження. Поки вони є,
+    // замок не називається — не тому, що норми немає, а тому, що її вже є чим
+    // відкрити, і казати «зберіть ще 22» людині з повною лабораторією означало
+    // б брехати.
     const build = markBuildProgress(state, kitTypeId)
-    if (build && build.have < build.need)
-      reasons.push(`Зберіть ще ${build.need - build.have} — ${KIT_TYPES[kitTypeId].name}`)
+    if (research !== null && researchPoints(state) < research)
+      reasons.push(
+        `Зберіть ще ${build.need - build.have} — ${KIT_TYPES[kitTypeId].name}` +
+        ` (або ${research} очок дослідження)`)
     if (state.money < cost) reasons.push(`Потрібно $${Math.ceil(cost - state.money)}`)
   }
-  return { can: reasons.length === 0, reasons, cost }
+  return { can: reasons.length === 0, reasons, cost, research }
 }
 
 export function upgradeMark(state, kitTypeId) {
-  const { can, cost, reasons } = canUpgradeMark(state, kitTypeId)
+  const { can, cost, research, reasons } = canUpgradeMark(state, kitTypeId)
   if (!can) throw new Error(`upgradeMark: ${reasons.join(' · ')}`)
   return {
     ...state,
     money:    state.money - cost,
+    // Очки списуються ЛИШЕ коли норма збірок не закрита збірками: інакше
+    // гравець, який чесно зібрав 25 штук, мовчки платив би ще й лабораторією.
+    researchPoints: researchPoints(state) - (research ?? 0),
     kitMarks: { ...(state.kitMarks ?? {}), [kitTypeId]: kitMark(state, kitTypeId) + 1 },
   }
 }
@@ -410,6 +454,21 @@ export function startAssembly(state, stationId) {
     ...withStation(state, stationId, s => ({
       ...s, phase: Phase.ASSEMBLY, kitId: carrying.kitId,
     })),
+    deliveries: (state.deliveries ?? []).filter(d => d.id !== carrying.id),
+  }
+}
+
+// Розібрати комплект, який хтось приніс на стенд (Стадія 14 / К2).
+//
+// Навмисно того самого крою, що й `startAssembly`: та сама доставка зі статусом
+// CARRYING зникає зі списку, і різниця лише в тому, що лишається після неї —
+// там дрон у роботі, тут очки в банку.
+export function dismantleKit(state, mult = 1) {
+  const carrying = (state.deliveries ?? []).find(d => d.status === DeliveryStatus.CARRYING)
+  if (!carrying) throw new Error('dismantleKit: немає активної доставки (статус carrying)')
+  const gained = researchYield(state, carrying.kitId, mult)
+  return {
+    ...addResearch(state, gained),
     deliveries: (state.deliveries ?? []).filter(d => d.id !== carrying.id),
   }
 }

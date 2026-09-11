@@ -56,6 +56,7 @@ export const EV = Object.freeze({
   // Meta
   UPGRADE_BOUGHT:   'upgrade.bought',     // { trackId, level }
   MARK_UPGRADED:    'mark.upgraded',      // { kitId, mk, unlocked }
+  RESEARCH_DONE:    'research.done',      // { kitId, points, total, agentId, zoneId }
   LOCATION_CHANGED: 'location.changed',   // { locationId }
   HALL_UNLOCKED:    'factory.hallOpened', // { hallId }
   ROOM_UNLOCKED:    'home.roomOpened',    // { roomId }

@@ -1,4 +1,7 @@
-import { Phase, DeliveryStatus, KIT_TYPES, calcPrice, focusStation, idleStations } from '../state/gameState.js'
+import {
+  Phase, DeliveryStatus, KIT_TYPES, calcPrice, focusStation, idleStations,
+  researchPoints,
+} from '../state/gameState.js'
 import { levelData, salePriceMult } from '../state/upgrades.js'
 
 // Скільки дельта темпу тримається на приладі після покупки. Вікно доходу — 60 с
@@ -16,6 +19,7 @@ export function createHUD(root) {
       <span class="hud__rate" id="hud-rate">+$0.00/сек</span>
       <span class="hud__rate-delta" id="hud-rate-delta" hidden></span>
     </div>
+    <div class="hud__research" id="hud-research" hidden></div>
   `
   root.appendChild(el)
 
@@ -39,6 +43,10 @@ export function createHUD(root) {
   const moneyEl  = el.querySelector('#hud-money')
   const rateEl   = el.querySelector('#hud-rate')
   const deltaEl  = el.querySelector('#hud-rate-delta')
+  // Очки дослідження (Стадія 14 / К2). З'являються рівно тоді, коли з'являється
+  // перше очко, і не раніше: до лабораторії це порожній лічильник, який лише
+  // питає «а це що?» і не має відповіді.
+  const researchEl = el.querySelector('#hud-research')
 
   // Кожна покупка мусить бути видно на приладі (План Стадії 10 / П4).
   //
@@ -55,6 +63,10 @@ export function createHUD(root) {
 
     rateEl.textContent = `+$${rate.toFixed(2)}/сек`
     rateEl.classList.toggle('hud__rate--zero', rate <= 0)
+
+    const points = researchPoints(state)
+    researchEl.textContent = `${points} очок дослідження`
+    researchEl.toggleAttribute('hidden', points <= 0)
 
     const delta = deltaBase === null ? 0 : rate - deltaBase
     if (now < deltaUntil && delta > 0.005) {

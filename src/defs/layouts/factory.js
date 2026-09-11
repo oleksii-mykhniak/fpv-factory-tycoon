@@ -38,6 +38,12 @@ export const HALL_KINDS = Object.freeze({
   storage:   { w: 1200, h: 1200 },
 })
 
+// Емодзі типу — для HTML-панелей і карток (А7 Стадії 13 лишила емодзі саме там,
+// на сцені їх немає й тут не з'явиться).
+export const HALL_KIND_ICON = Object.freeze({
+  assembly: '🏭', lab: '🔬', contracts: '📋', flight: '🛩️', storage: '📦',
+})
+
 export const hallKind = (hall) => HALL_KINDS[hall.kind] ?? HALL_KINDS.assembly
 export const hallW = (hall) => hall.w ?? hallKind(hall).w
 export const hallH = (hall) => hall.h ?? hallKind(hall).h
@@ -103,6 +109,26 @@ export const FACTORY_HALLS = Object.freeze([
       '🔧 Два верстаки',
       "🧑‍🔧 Три вакансії: кур'єр, технік, продавець",
       '📦 Свій приймальний ящик — замовлення їдуть сюди',
+    ],
+  },
+
+  // Лабораторія (Стадія 14 / К2) — перша кімната, яка не є цехом.
+  //
+  // Вона не додає ні верстака, ні виторгу. Вона лікує те, чим хворіє Mk: норму
+  // збірок «зроби те саме ще 25 разів». Комплект, розібраний на стенді, стає
+  // очками, і тими очками норма закривається. Хто хоче — досліджує, хто не
+  // хоче — збирає далі; обидва шляхи ведуть до того самого Mk.
+  {
+    id: 'lab-1',
+    kind: 'lab',
+    name: 'Лабораторія',
+    benches: 0,
+    workerCaps: { engineer: 1 },
+    cost: 14000,
+    unlocks: [
+      '🔬 Дослідницький стенд — комплект розбирається на очки',
+      '🧑‍🔬 Вакансія інженера',
+      '⬆️ Mk можна взяти очками замість норми збірок',
     ],
   },
 ])
@@ -277,7 +303,46 @@ function furnishAssembly(hall) {
   }
 }
 
-const FURNISH = { assembly: furnishAssembly }
+// Лабораторія (К2). Порожніше за цех навмисно: тут одна річ, і вона має бути
+// видною з порогу. Дошка найму є — інакше інженера не було б куди наймати, а
+// найм у грі відбувається біля дошки СВОЄЇ кімнати (F4).
+function furnishLab(hall) {
+  const { w, h } = hall
+  const props = {
+    [`research_${hall.id}`]: {
+      x: w / 2, y: 420, w: u(1.6), h: u(0.9), sprite: 'f_table', color: '#2f6f7a',
+    },
+    [`jobboard_${hall.id}`]: {
+      x: 150, y: h - 350, w: u(1), h: u(1), sprite: 'f_painting', color: '#46c7d8',
+    },
+    [`lamp_${hall.id}`]: {
+      x: w / 2, y: 130, w: u(1), h: u(1), sprite: 'f_painting', color: '#8fe0ec', z: 2,
+    },
+  }
+  return {
+    stationSlots: [],
+    props,
+    zones: [
+      // Стенд — це МІСЦЕ, як верстак і як ноутбук: хто стоїть, той і працює.
+      // Тому він зона, а не станція: у станції є фаза, пайка й вихід, а тут
+      // немає жодного з трьох.
+      { id: `research_${hall.id}`, kind: 'research', from: `research_${hall.id}`, w: u(2.0), h: u(1.24), offsetY: u(1.02) },
+      { id: `jobboard_${hall.id}`, kind: 'jobboard', from: `jobboard_${hall.id}`, w: 150, h: 150 },
+    ],
+    decor: [
+      { sprite: 'o_shelf',  x: w - 200, y: 140, w: T * 1.4, h: T, color: '#7fa8b8', z: 2, solid: true },
+      { sprite: 'o_shelf',  x: w - 200, y: 240, w: T * 1.4, h: T, color: '#7fa8b8', z: 2, solid: true },
+      { sprite: 'floor_mark', x: w / 2, y: 340, w: w * 0.6, h: 8, color: '#46c7d8', z: 0.4 },
+      { sprite: 'f_crate',  x: 170, y: 200, w: T, h: T, color: '#3f7f8a', z: 2, solid: true },
+    ],
+    posts: {
+      // Перед стендом, з боку підходу — інженер чекає там, де працює.
+      engineer: { x: w / 2, y: 620 },
+    },
+  }
+}
+
+const FURNISH = { assembly: furnishAssembly, lab: furnishLab }
 
 // Кімната невідомого типу лишається порожньою підлогою, а не падає: розкладка
 // не те місце, де гра має право зупинитись. Тип без меблів видно одразу.
@@ -405,7 +470,7 @@ export function buildFactoryLayout(hallIds) {
   const zones = [
     ...zoneSpecs.map(z => ({
       id: z.id, kind: z.kind,
-      ...rect(propRects[z.from].cx, propRects[z.from].cy, z.w, z.h),
+      ...rect(propRects[z.from].cx, propRects[z.from].cy + (z.offsetY ?? 0), z.w, z.h),
       meta: { hallId: z.hallId },
     })),
     { id: 'desk', kind: 'desk', ...rect(propRects.desk.cx, propRects.desk.cy, 160, 150) },

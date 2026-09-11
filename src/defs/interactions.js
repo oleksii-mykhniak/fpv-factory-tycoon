@@ -22,12 +22,13 @@ import {
   sell as sellStation, calcPrice, takeOutput, abandonBurntDrone,
   beginScrapRun, idleStations,
   kitCost, kitBasePrice,
+  dismantleKit, researchYield, researchPoints,
 } from '../state/gameState.js'
 import { salePriceMult } from '../state/upgrades.js'
 import {
   ZONE_DWELL_INSTANT_MS, ZONE_DWELL_BENCH_MS, ZONE_DWELL_OUTPUT_MS,
   ZONE_DWELL_MAILBOX_MS, ZONE_DWELL_TRASH_MS, ZONE_DWELL_PANEL_MS,
-  CARRY_CAPACITY, MANAGER_COOLDOWN_MS, SALVAGE_RATE,
+  CARRY_CAPACITY, MANAGER_COOLDOWN_MS, SALVAGE_RATE, RESEARCH_DWELL_MS,
 } from '../state/config.js'
 import { EV, emit } from '../sim/events.js'
 import {
@@ -36,6 +37,7 @@ import {
   managerOrderChoice,
 } from '../sim/derive.js'
 import { hiringAllowed } from '../state/locations.js'
+import { roleLevelData } from './roles.js'
 import { orderKitInto } from '../sim/intake.js'
 
 // ── Carry helpers ─────────────────────────────────────────
@@ -200,6 +202,40 @@ export const INTERACTIONS = {
       })
       emit(events, EV.MONEY_GAINED, { amount: price, reason: 'sale' })
       emit(events, EV.BENCH_CLEARED, { reason: 'sold' })
+      emit(events, EV.STATE_DIRTY)
+    },
+  },
+
+  // Дослідницький стенд (Стадія 14 / К2).
+  //
+  // Того самого крою, що й верстак: місце, яке щось робить, ПОКИ БІЛЯ НЬОГО
+  // ХТОСЬ СТОЇТЬ. Комплект у руках перетворюється на очки — саме тому стенд
+  // нічого не виробляє й не має фази: усе, що від нього лишається, лежить у
+  // банку очок, а не на столі.
+  //
+  // `accepts: 'any'` — лабораторія без інженера не працює САМА, але гравець
+  // може постояти там своїми руками, як і за верстаком.
+  research: {
+    dwellMs: RESEARCH_DWELL_MS,
+    repeat:  false,
+    accepts: 'any',
+    enabled: (_world, _zone, agent) => !!carriedType(agent, 'kit_box'),
+    run(world, zone, agent, events) {
+      const box = carriedType(agent, 'kit_box')
+      if (!box) return
+      // Рівень інженера множить ВИХІД, а не швидкість: підвищення тут має
+      // означати «розбирає глибше», інакше це був би ще один трек швидкості.
+      const mult = agent.role === 'engineer'
+        ? (roleLevelData('engineer', agent.level ?? 0).yieldMult ?? 1)
+        : 1
+      const points = researchYield(world.game, box.kitId, mult)
+      drop(agent, 'kit_box')
+      world.game = dismantleKit(world.game, mult)
+      emit(events, EV.ITEM_DROPPED, { agentId: agent.id, item: 'kit_box' })
+      emit(events, EV.RESEARCH_DONE, {
+        kitId: box.kitId, points, total: researchPoints(world.game),
+        agentId: agent.id, zoneId: zone?.id,
+      })
       emit(events, EV.STATE_DIRTY)
     },
   },
