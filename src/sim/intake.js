@@ -35,7 +35,10 @@ const hasIdleBench = (world, hallId) => {
 // Обидві половини правила несучі: без перевірки верстаків усе валиться в цех 1,
 // без місткості один цех, що застряг, ковтає весь портфель замовлень.
 export function chooseIntakeHall(world) {
-  const halls = world.layout?.halls ?? []
+  // Тільки цехи СКЛАДАННЯ (Стадія 14 / К1): у лабораторії чи на майданчику
+  // обльоту немає ні верстака, ні приймального ящика, і коробка, привезена
+  // туди, просто зникла б з гри.
+  const halls = (world.layout?.halls ?? []).filter(h => (h.kind ?? 'assembly') === 'assembly')
   if (!halls.length) return null
 
   const load  = (h) => intakeLoad(world.game, h.id)

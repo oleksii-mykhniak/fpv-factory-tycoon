@@ -38,7 +38,7 @@ export const SIZES = {
 // `from`/`to` let a wall stop halfway, which is how a room opens onto a hallway
 // without needing a doorway at all — the safest kind of opening, because there
 // is nothing narrow for the pathfinder to miss.
-function partitionRects(part) {
+export function partitionRects(part) {
   const vertical  = part.axis === 'v'
   const thickness = vertical ? WALL_SIDE : WALL_HORIZ
   const gaps = [...(part.gaps ?? [])].sort((a, b) => a.at - b.at)
