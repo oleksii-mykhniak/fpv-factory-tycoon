@@ -13,10 +13,13 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { inflateSync } from 'node:zlib'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { P, ACCENT, SPEC, UNITS_PER_PX, hex } from './palette.js'
 import { quantize, trim } from './gen-sprites.js'
+import { PRODUCT, LIVERY, CAT, PROP, SIGNAL, fullPalette, roleColors } from './palette.js'
+import { ROLES } from '../src/defs/roles.js'
 import { CHARACTER_U } from '../src/state/config.js'
 
 const ROOT   = new URL('..', import.meta.url).pathname
@@ -116,3 +119,110 @@ describe('Стадія 13 / А6 — хвіст постобробки', () => {
     expect([out.w, out.h]).toEqual([2, 2])
   })
 })
+
+// ── П4 — правило перестає бути усною домовленістю ───────────────────────────
+//
+// Це і є те, заради чого робилась Стадія 15. Квантизація виправляє те, що вже
+// намальовано; ці два тести не дають намалювати нове повз палітру. Без них усе
+// повернеться через дві стадії — рівно як повернулись би емодзі без А1.
+//
+// Перевірок дві, і вони ловлять різне:
+//
+//   ДЖЕРЕЛО — жодного сирого кольору у функціях малювання. Ловить намір:
+//   хтось узяв три байти замість імені з набору.
+//
+//   ВИХІД — жодного пікселя поза палітрою в готових PNG. Ловить наслідок,
+//   якого дисципліна в джерелі принципово не ловить: `setPixel` змішує з
+//   альфою, і піксель на межі двох фігур виходить проміжним, хоча обидва
+//   вихідні кольори названі.
+describe('Стадія 15 / П4 — колір тільки з палітри', () => {
+  it('у generator-і немає жодного сирого кольору', () => {
+    const src = readFileSync(join(ROOT, 'scripts/gen-sprites.js'), 'utf8')
+    const raws = [...src.matchAll(/0x[0-9a-fA-F]{2}, 0x[0-9a-fA-F]{2}, 0x[0-9a-fA-F]{2}/g)]
+      .map(m => m[0])
+    expect(raws, `сирі кольори: ${raws.join(' | ')}`).toEqual([])
+  })
+
+  it('і жодного hex-літерала повз palette.js', () => {
+    const src = readFileSync(join(ROOT, 'scripts/gen-sprites.js'), 'utf8')
+    const hexes = [...src.matchAll(/hex\('#[0-9a-fA-F]{6}'\)/g)].map(m => m[0])
+    expect(hexes, 'hex() має жити в palette.js, а не в функціях малювання').toEqual([])
+  })
+
+  it('кожен піксель кожного спрайта — колір із палітри', () => {
+    const PAL = new Set(fullPalette(roleColors(ROLES)).map(c => c.join(',')))
+    const offenders = []
+    for (const name of readdirSync(PUBLIC).filter(f => f.endsWith('.png'))) {
+      const { px } = decodePng(readFileSync(join(PUBLIC, name)))
+      const bad = new Set()
+      for (let i = 0; i < px.length; i += 4) {
+        if (px[i + 3] === 0) continue
+        const key = `${px[i]},${px[i + 1]},${px[i + 2]}`
+        if (!PAL.has(key)) bad.add(key)
+      }
+      if (bad.size) offenders.push(`${name}: ${[...bad].slice(0, 4).join(' ')}`)
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('групи значення не порожні — інакше правило тримає порожнечу', () => {
+    expect(Object.keys(PRODUCT)).toHaveLength(4)
+    expect(Object.keys(CAT).length).toBeGreaterThan(3)
+    expect(Object.keys(SIGNAL).length).toBeGreaterThan(2)
+    expect(Object.keys(PROP).length).toBeGreaterThan(3)
+    expect(LIVERY.player.jacket).not.toEqual(LIVERY.worker.jacket)
+  })
+
+  // Колір ролі виводиться з гри, а не дублюється (Стадія 13 / А2). Якби
+  // квантизація притягнула бейдж до меблевої фарби, вона зламала б рівно те,
+  // що А2 будував: кільце під ногами й значок над головою — одне число.
+  it('кольори ролей у палітрі — ті самі, що в ROLES', () => {
+    const PAL = new Set(fullPalette(roleColors(ROLES)).map(c => c.join(',')))
+    for (const role of Object.values(ROLES)) {
+      const rgb = [1, 3, 5].map(i => parseInt(role.color.slice(i, i + 2), 16))
+      expect(PAL.has(rgb.join(',')), `${role.id} ${role.color}`).toBe(true)
+    }
+  })
+})
+
+// Мінімальний декодер PNG — рівно стільки, скільки треба, щоб прочитати
+// власний вихід. Тягнути залежність заради перевірки чотирьох байтів на
+// піксель було б дорожче за сорок рядків.
+function decodePng(buf) {
+  let i = 8, w = 0, h = 0
+  const idat = []
+  while (i < buf.length) {
+    const len = buf.readUInt32BE(i)
+    const type = buf.toString('ascii', i + 4, i + 8)
+    const data = buf.subarray(i + 8, i + 8 + len)
+    if (type === 'IHDR') { w = data.readUInt32BE(0); h = data.readUInt32BE(4) }
+    if (type === 'IDAT') idat.push(data)
+    i += 12 + len
+  }
+  const raw = inflateSync(Buffer.concat(idat))
+  const px = new Uint8Array(w * h * 4)
+  const rowBytes = 1 + w * 4
+  let prev = Buffer.alloc(w * 4)
+  for (let y = 0; y < h; y++) {
+    const filter = raw[y * rowBytes]
+    const line = Buffer.from(raw.subarray(y * rowBytes + 1, y * rowBytes + 1 + w * 4))
+    for (let x = 0; x < w * 4; x++) {
+      const a = x >= 4 ? line[x - 4] : 0
+      const b = prev[x]
+      const c = x >= 4 ? prev[x - 4] : 0
+      let v = line[x]
+      if (filter === 1) v += a
+      else if (filter === 2) v += b
+      else if (filter === 3) v += (a + b) >> 1
+      else if (filter === 4) {
+        const p = a + b - c
+        const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c)
+        v += (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c)
+      }
+      line[x] = v & 255
+    }
+    for (let k = 0; k < w * 4; k++) px[y * w * 4 + k] = line[k]
+    prev = line
+  }
+  return { w, h, px }
+}
