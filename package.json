@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "vitest",
     "smoke": "node scripts/smoke.mjs http://localhost:5174/",
+    "smoke:build": "node scripts/smoke-build.mjs",
     "android": "vite build && npx cap sync android && npx cap run android",
     "android:sync": "vite build && npx cap sync android",
     "android:debug": "vite build --mode debug && npx cap sync android && npx cap run android"

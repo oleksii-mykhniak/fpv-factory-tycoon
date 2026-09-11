@@ -1,5 +1,7 @@
 const SETTINGS_KEY = 'fpv_settings'
-const APP_VERSION  = '0.2.0-dev'
+// Підставляється на збірці (`vite.config.js`): версія · коміт · дата.
+// Фолбек — на випадок, якщо модуль колись зберуть повз vite.
+const APP_VERSION  = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev'
 
 function loadSettings() {
   try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') }

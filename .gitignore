@@ -4,3 +4,5 @@ dist/
 .idea/
 .smoke.png
 .shot-*.png
+dist-smoke/
+dist-test/

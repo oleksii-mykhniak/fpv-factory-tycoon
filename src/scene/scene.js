@@ -5,7 +5,7 @@ import {
   CAMERA_ELASTICITY, CAMERA_FRICTION,
   PIGGY_COOLDOWN_MS,
   PULSE_FREQ_HZ, PULSE_SCALE_AMP,
-  FLOAT_GAIN_MS, FLOAT_GAIN_RISE, FLOAT_GAIN_POOL,
+  FLOAT_GAIN_POOL,
   FLOAT_GAIN_JITTER_X, FLOAT_GAIN_JITTER_Y, FLOAT_GAIN_DRIFT_X,
   CHARACTER_U as TILE_U,
   CHARACTER_ART,
@@ -15,6 +15,7 @@ import {
 import { loadSprites, getSprite } from './loader.js'
 import { createCharacterSprite, createTileCharacter } from './character.js'
 import { frameMs } from './frame.js'
+import { floatPose } from './floatGain.js'
 import { roleColor, roleBadge } from '../defs/roles.js'
 
 // How many carried items the stack can show at once. The gameplay limit is
@@ -880,25 +881,43 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
       }),
     })
     lbl.graphics.visible = false
-    const st = { lbl, age: 0, live: false, x: 0, y: 0, driftX: 0 }
-    lbl.on('preupdate', (evt) => {
-      if (!st.live) return
-      st.age += frameMs(evt)
-      if (st.age >= FLOAT_GAIN_MS) {
-        st.live = false
-        lbl.graphics.visible = false
-        return
-      }
-      const t = st.age / FLOAT_GAIN_MS
-      // Підйом сповільнюється (1-(1-t)²), знос убік — рівномірний: гроші
-      // спурхують і зависають, а не їдуть угору з постійною швидкістю.
-      const rise = FLOAT_GAIN_RISE * (1 - (1 - t) * (1 - t))
-      lbl.pos = ex.vec(st.x + st.driftX * t, st.y - rise)
-      // Повний тон більшу частину життя, згасання — в останній третині.
-      lbl.graphics.opacity = t < 0.65 ? 1 : 1 - (t - 0.65) / 0.35
-    })
     scene.add(track(lbl))
-    return st
+    return { lbl, age: 0, live: false, x: 0, y: 0, driftX: 0 }
+  })
+
+  // Один обробник на весь пул, а не по обробнику на напис
+  // (фікс «збірка ≠ dev», 2026-09-11).
+  //
+  // Це не стиль, це єдина форма, яка переживає збірку. Кожен напис мав власне
+  // замикання над своїм `st`, і `st.live` там ініціалізувався `false`. Rollup
+  // при tree-shaking згортає таку властивість літерала в константу: він бачив
+  // `if (!st.live) return` як «завжди вихід» і вирізав ВСЕ тіло анімації —
+  // у зібраній грі обробник ставав `(evt) => { return }`. Присвоєння
+  // `st.live = true` у `floatGain` нижче він не пов'язував із тим об'єктом, бо
+  // той дістається через `floaters.find(...)`.
+  //
+  // Симптом на пристрої: «+$47» з'являвся над скринькою і висів вічно, по
+  // напису на кожен продаж. У `npm run dev` усе працювало — tree-shaking там
+  // не виконується, — тож жоден прогін це не ловив. Коли `st` дістається з
+  // масиву в циклі, згорнути його властивість у константу вже не можна.
+  //
+  // Обробник висить на першому написі пулу: той доданий через `track()`, а
+  // отже вмирає разом із рештою розкладки при перебудові фабрики — на сцені не
+  // лишається таймера, що крутить убитих акторів.
+  floaters[0].lbl.on('preupdate', (evt) => {
+    const dt = frameMs(evt)
+    for (const st of floaters) {
+      if (!st.live) continue
+      st.age += dt
+      const pose = floatPose(st.age)
+      if (pose.done) {
+        st.live = false
+        st.lbl.graphics.visible = false
+        continue
+      }
+      st.lbl.pos = ex.vec(st.x + st.driftX * pose.t, st.y - pose.rise)
+      st.lbl.graphics.opacity = pose.opacity
+    }
   })
 
   let floatNext = 0
@@ -954,7 +973,7 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
           pips[i].color = ex.Color.fromHex(i < held ? PIP_FULL : PIP_EMPTY)
         }
         if (state.squash > 0) {
-          state.squash = Math.max(0, state.squash - (evt.delta ?? 16) / 220)
+          state.squash = Math.max(0, state.squash - frameMs(evt) / 220)
           const k = Math.sin(state.squash * Math.PI)
           actor.scale = ex.vec(1 + k * 0.12, 1 - k * 0.18)
         } else if (actor.scale.x !== 1) {
