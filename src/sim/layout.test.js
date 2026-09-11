@@ -3,6 +3,7 @@ import { createWorld, applyLayout } from './world.js'
 import { dispatch } from './commands.js'
 import { layoutFor } from '../defs/layouts/index.js'
 import { createState } from '../state/gameState.js'
+import { FACTORY_HALL_IDS } from '../defs/layouts/factory.js'
 
 const boot = (locationId = 'apartment', extra = {}) => {
   const base = createState()
@@ -20,6 +21,13 @@ const plans  = () => [
   layoutFor('factory'),
   layoutFor('factory', { unlockedHalls: ['hall-1', 'hall-2', 'hall-3'] }),
   layoutFor('factory', { unlockedHalls: ['hall-1', 'hall-2', 'hall-3', 'lab-1'] }),
+  layoutFor('factory', {
+    unlockedHalls: ['hall-1', 'hall-2', 'hall-3', 'lab-1', 'contracts-1'] }),
+  layoutFor('factory', {
+    unlockedHalls: [
+      'hall-1', 'hall-2', 'hall-3', 'lab-1', 'contracts-1', 'flight-1'] }),
+  // Уся фабрика: сім кімнат у трьох рядах (Стадія 14).
+  layoutFor('factory', { unlockedHalls: FACTORY_HALL_IDS }),
 ]
 
 describe('C7 — locations are floor plans, not palettes', () => {

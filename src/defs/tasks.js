@@ -94,6 +94,27 @@ export const TASKS = Object.freeze({
     ],
   },
 
+  // Готовий дрон → майданчик обльоту → скринька (Стадія 14 / К4).
+  //
+  // Той самий `sell_drone` з однією зупинкою посередині. Маршрут довшає рівно
+  // на цю ланку — і саме тому кімната обльоту мусить стояти поруч із цехами.
+  sell_via_flight: {
+    id:       'sell_via_flight',
+    role:     'seller',
+    priority: 15,
+    steps: [
+      { op: 'goto',    zone: 'job.fromZone' },
+      { op: 'waitFor', cond: 'carrying', timeoutMs: 6000 },
+      { op: 'goto',    zone: 'job.viaZone' },
+      // Дрон, відхилений на обльоті, зникає з рук — умова має бути виконана і
+      // тоді: інакше продавець стояв би над порожнім майданчиком до таймауту.
+      { op: 'waitFor', cond: 'flightDone', timeoutMs: 20000 },
+      { op: 'goto',    zone: 'job.toZone' },
+      { op: 'waitFor', cond: 'notCarrying', timeoutMs: 6000 },
+      { op: 'done' },
+    ],
+  },
+
   // Finished drone → mailbox.
   sell_drone: {
     id:       'sell_drone',

@@ -57,6 +57,12 @@ export const EV = Object.freeze({
   UPGRADE_BOUGHT:   'upgrade.bought',     // { trackId, level }
   MARK_UPGRADED:    'mark.upgraded',      // { kitId, mk, unlocked }
   RESEARCH_DONE:    'research.done',      // { kitId, points, total, agentId, zoneId }
+  CONTRACT_FILLED:  'contract.filled',    // { id, kitId, qty, bonus, zoneId }
+  CONTRACT_FAILED:  'contract.failed',    // { id, kitId, qty, done }
+  FLIGHT_STARTED:   'flight.started',     // { kitId, agentId, zoneId, durationMs }
+  FLIGHT_PASSED:    'flight.passed',      // { kitId, quality, agentId, zoneId }
+  FLIGHT_REJECTED:  'flight.rejected',    // { kitId, quality, salvage, zoneId }
+  BAD_SHIPPED:      'quality.badShipped', // { kitId, quality, zoneId }
   LOCATION_CHANGED: 'location.changed',   // { locationId }
   HALL_UNLOCKED:    'factory.hallOpened', // { hallId }
   ROOM_UNLOCKED:    'home.roomOpened',    // { roomId }

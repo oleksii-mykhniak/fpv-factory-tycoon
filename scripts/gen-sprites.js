@@ -250,6 +250,101 @@ function drawLongrangeDrone(pixels, w, h) {
   fillCircle(pixels, w, cx, cy, 2,  ...PRODUCT.longrange.led)   // green LED
 }
 
+// ── Три типи Стадії 14 / К5 ─────────────────────────────────────────────────
+//
+// Кожен входить у гру через кімнату, і кожен мусить читатись СИЛУЕТОМ: на
+// відстані, з якої гра грається, колір уже не працює, а форма ще працює.
+// Тому вони навмисно не схожі на чотири наявні квадрокоптери.
+
+// Літак (fixed-wing) — суцільне крило й фюзеляж. Єдиний тип у грі без
+// пропелерних дисків по кутах: саме тому його видно з першого кадру.
+function drawFixedWing(pixels, w, h) {
+  const cx = w >> 1, cy = h >> 1
+
+  // Крило — одна широка трапеція від краю до краю.
+  for (let x = 6; x < w - 6; x++) {
+    const t  = Math.abs(x - cx) / (cx - 6)
+    const hh = Math.round(3 + (1 - t) * 4)
+    fillRect(pixels, w, x, cy - hh, x, cy + hh, ...PRODUCT.fixedwing.mid)
+  }
+  fillRect(pixels, w, 6, cy - 2, w - 7, cy - 1, ...PRODUCT.fixedwing.hi)
+  fillRect(pixels, w, 6, cy + 4, w - 7, cy + 5, ...PRODUCT.fixedwing.lo)
+
+  // Фюзеляж — веретено вздовж крила.
+  fillRect(pixels, w, cx - 20, cy - 5, cx + 22, cy + 5, ...PRODUCT.fixedwing.body)
+  fillRect(pixels, w, cx - 18, cy - 3, cx + 20, cy + 3, ...PRODUCT.fixedwing.mid)
+
+  // Ніс і штовхаючий гвинт позаду — компоновка, за якою літак і впізнають.
+  fillCircle(pixels, w, cx - 22, cy, 5, ...PRODUCT.fixedwing.lo)
+  fillCircle(pixels, w, cx - 23, cy, 3, ...PRODUCT.fixedwing.hi)
+  fillCircle(pixels, w, cx + 26, cy, 8, ...PRODUCT.fixedwing.mid, 55)
+  drawLine(pixels, w, cx + 26, cy - 7, cx + 26, cy + 7, ...PRODUCT.fixedwing.dark, 2)
+
+  // V-подібне хвостове оперення.
+  drawLine(pixels, w, cx + 20, cy, cx + 30, cy - 10, ...PRODUCT.fixedwing.lo, 3)
+  drawLine(pixels, w, cx + 20, cy, cx + 30, cy + 10, ...PRODUCT.fixedwing.lo, 3)
+
+  fillCircle(pixels, w, cx - 6, cy, 2, ...PRODUCT.fixedwing.led)
+}
+
+// Важкий носій — гексакоптер: шість моторів і підвішений вантаж під черевом.
+// Шість, а не чотири: «важкий» має бути видно рахунком, а не написом.
+function drawHeavyLifter(pixels, w, h) {
+  const cx = w >> 1, cy = h >> 1
+  const motors = [
+    [9, 9], [cx, 6], [w - 10, 9],
+    [9, h - 10], [cx, h - 7], [w - 10, h - 10],
+  ]
+
+  for (const [mx, my] of motors)
+    fillCircle(pixels, w, mx, my, 10, ...PRODUCT.heavy.mid, 55)
+  for (const [mx, my] of motors)
+    drawLine(pixels, w, cx, cy, mx, my, ...PRODUCT.heavy.lo, 4)
+  for (const [mx, my] of motors)
+    droneMotor(pixels, w, mx, my, 8, 6, ...PRODUCT.heavy.hi, ...PRODUCT.heavy.dark)
+
+  // Масивне черево.
+  fillRect(pixels, w, cx - 14, cy - 8, cx + 14, cy + 8, ...PRODUCT.heavy.dark)
+  fillRect(pixels, w, cx - 12, cy - 6, cx + 12, cy + 6, ...PRODUCT.heavy.body)
+
+  // Вантаж на стропах — те, заради чого носій і існує.
+  drawLine(pixels, w, cx - 8, cy + 8, cx - 6, cy + 14, ...PRODUCT.heavy.lo, 2)
+  drawLine(pixels, w, cx + 8, cy + 8, cx + 6, cy + 14, ...PRODUCT.heavy.lo, 2)
+  fillRect(pixels, w, cx - 9, cy + 14, cx + 9, h - 2, ...P.wood)
+  fillRect(pixels, w, cx - 7, cy + 16, cx + 7, h - 4, ...P.accent)
+
+  fillCircle(pixels, w, cx, cy, 2, ...PRODUCT.heavy.led)
+}
+
+// Прототип — відкрита рама без корпусу: видно плату, кабелі й великий сенсор.
+// «Ще не серійний» — це те, що ВИДНО, а не те, що написано на картці.
+function drawPrototype(pixels, w, h) {
+  const cx = w >> 1, cy = h >> 1
+  const motors = [[12, 11], [w - 13, 11], [12, h - 12], [w - 13, h - 12]]
+
+  for (const [mx, my] of motors)
+    fillCircle(pixels, w, mx, my, 9, ...PRODUCT.proto.mid, 45)
+  // Рама — тонкі відкриті балки, не суцільне тіло.
+  for (const [mx, my] of motors)
+    drawLine(pixels, w, cx, cy, mx, my, ...PRODUCT.proto.lo, 2)
+  for (const [mx, my] of motors)
+    droneMotor(pixels, w, mx, my, 6, 4, ...PRODUCT.proto.hi, ...PRODUCT.proto.dark)
+
+  // Гола плата замість корпусу.
+  fillRect(pixels, w, cx - 12, cy - 6, cx + 12, cy + 6, ...PRODUCT.proto.body)
+  for (let x = cx - 9; x <= cx + 9; x += 4)
+    drawLine(pixels, w, x, cy - 4, x, cy + 4, ...PRODUCT.proto.hi, 1)
+
+  // Сенсор на кронштейні — єдина завершена деталь на всьому апараті.
+  fillCircle(pixels, w, cx, cy - 12, 6, ...PRODUCT.proto.lo)
+  fillCircle(pixels, w, cx, cy - 12, 4, ...PRODUCT.proto.led)
+  drawLine(pixels, w, cx, cy - 6, cx, cy - 10, ...PRODUCT.proto.dark, 2)
+
+  // Кабельна петля збоку — те, що на серійному сховали б усередину.
+  drawLine(pixels, w, cx + 12, cy, cx + 18, cy + 6, ...PRODUCT.proto.led, 2)
+  drawLine(pixels, w, cx + 18, cy + 6, cx + 14, cy + 10, ...PRODUCT.proto.led, 2)
+}
+
 // Delivery box — cardboard with tape X. 96×64.
 function drawBox(pixels, w, h) {
   // Body
@@ -1065,6 +1160,18 @@ const KIT_ICONS = {
     frame: [...PRODUCT.longrange.hi], body: [...PRODUCT.longrange.body], bodyHi: [...PRODUCT.longrange.hi],
     accent: [...PRODUCT.longrange.gpsHi], mark: 'gps', bw: 13, bh: 7,
   },
+  fixedwing_drone: {
+    frame: [...PRODUCT.fixedwing.mid], body: [...PRODUCT.fixedwing.body], bodyHi: [...PRODUCT.fixedwing.hi],
+    accent: [...PRODUCT.fixedwing.led], mark: 'led', bw: 19, bh: 7,
+  },
+  heavy_drone: {
+    frame: [...PRODUCT.heavy.mid], body: [...PRODUCT.heavy.body], bodyHi: [...PRODUCT.heavy.hi],
+    accent: [...PRODUCT.heavy.led], mark: 'led', bw: 15, bh: 9,
+  },
+  proto_drone: {
+    frame: [...PRODUCT.proto.mid], body: [...PRODUCT.proto.body], bodyHi: [...PRODUCT.proto.hi],
+    accent: [...PRODUCT.proto.led], mark: 'cam', bw: 11, bh: 7,
+  },
 }
 
 // ── Стани верстака (Стадія 13 / А4) ─────────────────────────────────────────
@@ -1344,6 +1451,9 @@ const sprites = [
   { name: 'racing_drone',     wu: u(1.5),  hu: u(0.81), draw: drawRacingDrone     },
   { name: 'cinematic_drone',  wu: u(1.5),  hu: u(0.81), draw: drawCinematicDrone  },
   { name: 'longrange_drone',  wu: u(1.5),  hu: u(0.81), draw: drawLongrangeDrone  },
+  { name: 'fixedwing_drone',  wu: u(1.5),  hu: u(0.81), draw: drawFixedWing       },
+  { name: 'heavy_drone',      wu: u(1.5),  hu: u(0.81), draw: drawHeavyLifter     },
+  { name: 'proto_drone',      wu: u(1.5),  hu: u(0.81), draw: drawPrototype       },
   { name: 'delivery_box',     wu: u(1.5),  hu: u(1.0),  draw: drawBox             },
   { name: 'workbench',        wu: u(3.0),  hu: u(1.0),  draw: drawWorkbench       },
   { name: 'soldering_iron',   wu: u(1.0),  hu: u(0.25), draw: drawSolderingIron   },

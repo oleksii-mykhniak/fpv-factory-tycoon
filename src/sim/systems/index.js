@@ -11,6 +11,7 @@
 //   zone     → occupancy and dwell progress (detection only)
 //   interact → applies whatever a zone decided should fire
 //   station  → advances assembly on the bench
+//   contract → keeps the order book full and drops what ran out of time (К3)
 //   quest    → notices a goal that stopped being one (П1); last, so it sees
 //              everything this tick already did
 //
@@ -27,6 +28,7 @@ import { catSystem }         from './cat.js'
 import { zoneSystem }        from './zone.js'
 import { interactionSystem } from './interaction.js'
 import { stationSystem }     from './station.js'
+import { contractSystem }     from './contract.js'
 import { questSystem }       from './quest.js'
 
 export const SYSTEMS = Object.freeze([
@@ -40,5 +42,6 @@ export const SYSTEMS = Object.freeze([
   zoneSystem,
   interactionSystem,
   stationSystem,
+  contractSystem,
   questSystem,
 ])

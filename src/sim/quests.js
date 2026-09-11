@@ -40,7 +40,7 @@
 import {
   KIT_TYPES, nextHireCost, workersInRole, nextRoomId, canUnlockRoom,
   nextHallId, canUnlockHall, kitCost, kitMark, markUnlocked, nextMarkCost,
-  canUpgradeMark, assembledOfKit,
+  canUpgradeMark, assembledOfKit, researchPoints,
 } from '../state/gameState.js'
 import { UPGRADE_TRACKS, levelData, nextCost } from '../state/upgrades.js'
 import {
@@ -50,7 +50,7 @@ import {
 import { roomDef } from '../defs/layouts/rooms.js'
 import { hallDef } from '../defs/layouts/factory.js'
 import { roleDef } from '../defs/roles.js'
-import { ENDGAME_RATE_TARGET, MK_BUILD_REQ } from '../state/config.js'
+import { ENDGAME_RATE_TARGET, MK_BUILD_REQ, RESEARCH_MARK_COST } from '../state/config.js'
 
 // ── Дрібні читачі стану ───────────────────────────────────
 
@@ -381,8 +381,31 @@ export const QUEST_ACTS = Object.freeze([
       // кроком, що й до цеху, — у цьому й був сенс типізувати кімнати.
       openRoom('lab_room', 4, 'Mk без норми збірок — очками дослідження'),
       hireRole('engineer', 'Лабораторія без інженера не працює сама'),
+      // Крок петлі, який показує, що лабораторія справді працює: очки
+      // з'являються самі, поки цех замовляє більше, ніж встигає паяти.
+      {
+        id: 'research_points', kind: 'do', viaLoop: true,
+        why: 'Цими очками береться наступний Mk без норми збірок',
+        have: (game) => researchPoints(game),
+        done: (game) => researchPoints(game) >= RESEARCH_MARK_COST[0],
+        resolve: () => ({
+          title: `Назбирай ${RESEARCH_MARK_COST[0]} очок дослідження`,
+          need:  RESEARCH_MARK_COST[0],
+        }),
+      },
       buyUpgrade('courier_1', 'courier', 1,
         'Останній із чотирьох треків без стелі — далі росте тільки темп'),
+      // Остання кімната цієї стадії (Стадія 14 / К3): вона й робить трек
+      // «Репутація», куплений двома кроками раніше, чимось більшим за множник.
+      openRoom('contracts_room', 5, 'Репутація почне вирішувати, які партії дають'),
+      openRoom('flight_room', 6, 'Дрон нарешті полетить — і брак не доїде до клієнта'),
+      // Перший тип, який увійшов у гру ЧЕРЕЗ КІМНАТУ, а не через норму збірок
+      // (Стадія 14 / К5). Крок `moot` сам по собі там, де майданчика немає, —
+      // тобто ланцюг не просить продати те, чого в каталозі ще нема.
+      sellCount('sell_fixedwing', 1, 'Продай літак',
+        'Літака не можна продати без обльоту — тому він і чекав кімнати',
+        'fixedwing_drone'),
+      openRoom('storage_room', 7, 'Є де тримати дорогі комплекти — і чим їх возити'),
       {
         id: 'endgame_rate', kind: 'do', viaLoop: true,
         why: 'Дивись на $/сек угорі екрана',

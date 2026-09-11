@@ -1,7 +1,7 @@
 import { UPGRADE_TRACKS } from './upgrades.js'
 import { STARTING_MONEY } from './config.js'
-import { openHalls } from '../defs/layouts/factory.js'
-import { markUnlocked } from './kits.js'
+import { openHalls, hasHallKind } from '../defs/layouts/factory.js'
+import { markUnlocked, KIT_TYPES } from './kits.js'
 import { APARTMENT_ROOMS, openRooms, roomUpgradeCaps, roomDef } from '../defs/layouts/rooms.js'
 import { ROLE_ORDER } from '../defs/roles.js'
 
@@ -35,7 +35,12 @@ export const LOCATIONS = Object.freeze({
     id:   'factory',
     name: 'Фабрика',
     emoji: '🏭',
-    kitIds: ['mini_drone', 'racing_drone', 'cinematic_drone', 'longrange_drone'],
+    kitIds: [
+      'mini_drone', 'racing_drone', 'cinematic_drone', 'longrange_drone',
+      // Стадія 14 / К5. Стоять у каталозі фабрики, але кожен замкнений на
+      // СВОЮ кімнату (`unlock.hallKind`) — див. kitsForLocation.
+      'proto_drone', 'fixedwing_drone', 'heavy_drone',
+    ],
     upgradeCaps: { soldering: 3, storage: 2, logistics: 2, consumables: 2, benches: 2 },
     // Headcount is per HALL here, not per location: opening a hall is what
     // buys the people to run it (F2). Summed over open halls by roleCapHere.
@@ -97,7 +102,18 @@ export function kitsForLocation(state) {
   // адреса. Двері односторонні (`kitMarks` тільки росте), і це не стилістика:
   // тип, який може зачинитись назад, відкотив би ланцюг квестів на пройдений
   // крок — рівно те, чого забороняє П2 Стадії 9.
-  return here.filter(id => markUnlocked(state, id))
+  // Третій ключ `unlock` (Стадія 14 / К5): тип, якому потрібна КІМНАТА.
+  //
+  // Це те саме правило, що вже тримає гараж (`unlock.room`) — просто питається
+  // в іншого простору. Двері односторонні так само: кімнати не закриваються, і
+  // тип, відкритий нею, не може зачинитись назад.
+  const roomOpen = (id) => {
+    const kind = KIT_TYPES[id]?.unlock?.hallKind
+    if (!kind) return true
+    return !loc.rooms && hasHallKind(state.unlockedHalls, kind)
+  }
+
+  return here.filter(id => markUnlocked(state, id) && roomOpen(id))
 }
 
 // Max level allowed for a track at the current location. Infinity when no cap

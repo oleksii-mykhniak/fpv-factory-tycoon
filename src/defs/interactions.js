@@ -22,13 +22,14 @@ import {
   sell as sellStation, calcPrice, takeOutput, abandonBurntDrone,
   beginScrapRun, idleStations,
   kitCost, kitBasePrice,
-  dismantleKit, researchYield, researchPoints,
+  dismantleKit, researchYield, researchPoints, rejectDrone,
 } from '../state/gameState.js'
 import { salePriceMult } from '../state/upgrades.js'
 import {
   ZONE_DWELL_INSTANT_MS, ZONE_DWELL_BENCH_MS, ZONE_DWELL_OUTPUT_MS,
   ZONE_DWELL_MAILBOX_MS, ZONE_DWELL_TRASH_MS, ZONE_DWELL_PANEL_MS,
   CARRY_CAPACITY, MANAGER_COOLDOWN_MS, SALVAGE_RATE, RESEARCH_DWELL_MS,
+  FLIGHT_MS, FLIGHT_PRICE_BONUS, FLIGHT_REJECT_QUALITY, FLIGHT_SKIP_REP_PENALTY,
 } from '../state/config.js'
 import { EV, emit } from '../sim/events.js'
 import {
@@ -38,6 +39,7 @@ import {
 } from '../sim/derive.js'
 import { hiringAllowed } from '../state/locations.js'
 import { roleLevelData } from './roles.js'
+import { creditShipment } from '../state/contracts.js'
 import { orderKitInto } from '../sim/intake.js'
 
 // ── Carry helpers ─────────────────────────────────────────
@@ -185,13 +187,44 @@ export const INTERACTIONS = {
 
       const kit     = KIT_TYPES[station.kitId]
       const quality = station.quality
-      const price   = calcPrice(kitBasePrice(world.game, kit.id), quality, salePriceMult(world.game))
+      // Обліт (Стадія 14 / К4.2) змінює рівно одне число — ціну. Усе інше в
+      // продажу лишилось тим самим, і це й був сенс зробити обліт зупинкою на
+      // маршруті, а не окремою дією.
+      const flown = drone?.flown === true
+      const price = calcPrice(kitBasePrice(world.game, kit.id), quality, salePriceMult(world.game))
+        * (flown ? 1 + FLIGHT_PRICE_BONUS : 1)
 
       // `at` and `hallId` are what make income measurable (F7): a rolling
       // window needs times, and "which hall paid for itself" needs a place.
       // Both are cheap to record and impossible to reconstruct later.
       world.salesLog.push({ quality, price, at: world.now, hallId: stationHallOf(world, stationId) })
       world.game = sellStation(world.game, stationId)
+
+      // Брак, пропущений повз майданчик. Ціну репутацією платить тільки той,
+      // у кого майданчик Є: доти в грі немає що пропускати, і мовчазний мінус
+      // у лічильник до появи кімнати був би пасткою.
+      if (!flown && quality < FLIGHT_REJECT_QUALITY && hasFlightPad(world)) {
+        world.game = {
+          ...world.game,
+          contractRep: (world.game.contractRep ?? 0) - FLIGHT_SKIP_REP_PENALTY,
+        }
+        emit(events, EV.BAD_SHIPPED, { kitId: kit.id, quality, zoneId: zone?.id })
+      }
+
+      // Контракт закривається САМЕ ТУТ (Стадія 14 / К3.3): дрон спершу йде в
+      // рахунок активного замовлення свого типу й лише потім продається за
+      // звичайною ціною. Для гравця це нуль нових дій — змінюється тільки те,
+      // скільки лягає на рахунок.
+      const credited = creditShipment(world.game, kit.id)
+      world.game = credited.state
+      if (credited.completed) {
+        emit(events, EV.CONTRACT_FILLED, {
+          id: credited.contract.id, kitId: kit.id,
+          qty: credited.contract.qty, bonus: credited.contract.bonus,
+          zoneId: zone?.id,
+        })
+        emit(events, EV.MONEY_GAINED, { amount: credited.contract.bonus, reason: 'contract' })
+      }
 
       // zoneId — щоб «+$47» вилетіло над ТІЄЮ скринькою, куди донесли дрон
       // (Стадія 10 / D3). У фабрики скриньок кілька (F4), тож без цього текст
@@ -238,6 +271,66 @@ export const INTERACTIONS = {
       })
       emit(events, EV.STATE_DIRTY)
     },
+  },
+
+  // Майданчик обльоту (Стадія 14 / К4).
+  //
+  // Готовий дрон літає над майданчиком, перш ніж піти у відвантаження. Це
+  // додає рівно одну ланку в маршрут продавця — і саме тому кімната має
+  // стояти поруч із цехами (інваріант Д4 Стадії 12 поширюється на неї).
+  //
+  // Що дає: облітаний дрон коштує дорожче, а брак ловиться ТУТ і не доїжджає
+  // до клієнта. Пропустити обліт можна завжди — дешевше й ризикованіше.
+  flight_pad: {
+    dwellMs: FLIGHT_MS,
+    repeat:  false,
+    accepts: 'any',
+    enabled(world, zone, agent) {
+      const drone = carriedType(agent, 'drone')
+      if (!drone || drone.flown) return false
+      // К4.3 — один майданчик обробляє один дрон за раз. Це нормально і навіть
+      // потрібно: перше вузьке місце, яке не лікується купівлею ще одного
+      // верстака.
+      return !padBusy(world, zone, agent)
+    },
+    run(world, zone, agent, events) {
+      const drone = carriedType(agent, 'drone')
+      if (!drone) return
+      const station = drone.stationId ? stationById(world, drone.stationId) : null
+      const quality = station?.quality ?? drone.quality ?? 1
+
+      if (quality < FLIGHT_REJECT_QUALITY && station) {
+        // Брак, спійманий на обльоті: дрон не летить до клієнта, з комплекту
+        // повертається утиль. Дорого — і рівно тому оснастка (якість пайки)
+        // вперше має видиму ціну.
+        const salvage = kitCost(world.game, station.kitId) * SALVAGE_RATE
+        drop(agent, 'drone')
+        world.game = rejectDrone(world.game, station.id, SALVAGE_RATE)
+        emit(events, EV.MONEY_GAINED, { amount: salvage, reason: 'flight_reject' })
+        emit(events, EV.FLIGHT_REJECTED, {
+          kitId: station.kitId, quality, salvage, zoneId: zone?.id,
+        })
+        emit(events, EV.BENCH_CLEARED, { reason: 'rejected', stationId: station.id })
+        emit(events, EV.STATE_DIRTY)
+        return
+      }
+
+      drone.flown = true
+      emit(events, EV.FLIGHT_PASSED, {
+        kitId: drone.kitId, quality, agentId: agent.id, zoneId: zone?.id,
+      })
+    },
+  },
+
+  // Стіл контрактів (Стадія 14 / К3.2) — те саме, що дошка найму: місце,
+  // яке відкриває панель. Жодної нової механіки, інший список усередині.
+  contracts: {
+    dwellMs: ZONE_DWELL_PANEL_MS,
+    repeat:  false,
+    accepts: 'player',
+    enabled: () => true,
+    run: (_world, _zone, agent, events) =>
+      emit(events, EV.PANEL_REQUESTED, { agentId: agent.id, panel: 'contracts' }),
   },
 
   // Trash bin: salvage parts, or throw away a burnt kit.
@@ -369,6 +462,23 @@ export function zoneWantsAttention(def, world, zone, agent) {
 function stationHallOf(world, stationId) {
   const i = (world.game.stations ?? []).findIndex(s => s.id === stationId)
   return world.layout?.stationSlots?.[i]?.hallId ?? null
+}
+
+// Чи стоїть на плані майданчик обльоту. Питаємо в зон, а не в сейву: кімната
+// існує тоді, коли вона є на поверсі.
+const hasFlightPad = (world) => (world.zones ?? []).some(z => z.kind === 'flight_pad')
+
+// Хтось інший уже на майданчику з дроном у руках (К4.3).
+function padBusy(world, zone, self) {
+  return (world.agents ?? []).some(a =>
+    a !== self &&
+    (a.carrying ?? []).some(i => i.type === 'drone') &&
+    Math.abs(a.x - zone.cx) <= zone.w / 2 &&
+    Math.abs(a.y - zone.cy) <= zone.h / 2)
+}
+
+const stationById = (world, id) => {
+  try { return getStation(world.game, id) } catch { return null }
 }
 
 // The station a bench zone belongs to.

@@ -62,6 +62,13 @@ const CONDITIONS = {
     return !station || station.phase !== Phase.BURNT
   },
 
+  // Обліт закінчився (Стадія 14 / К4): або дрон у руках уже облітаний, або
+  // його в руках немає — його відхилили прямо на майданчику.
+  flightDone: (world, agent) => {
+    const drone = (agent.carrying ?? []).find(i => i.type === 'drone')
+    return !drone || drone.flown === true
+  },
+
   stationIdleOrDone: (world, agent, job) => {
     const station = stationsOf(world.game).find(s => s.id === job.stationId)
     return !station || station.phase !== Phase.ASSEMBLY
@@ -107,7 +114,8 @@ function runStep(world, agent, dt, events) {
   // hand, so the trip to the pickup point is behind us. True for a box from the
   // street and for a drone off the output table alike.
   if (agent.task.stepIndex === 0 &&
-      (job.type === 'haul_delivery' || job.type === 'sell_drone') &&
+      (job.type === 'haul_delivery' || job.type === 'sell_drone' ||
+       job.type === 'sell_via_flight') &&
       (agent.carrying ?? []).length) {
     agent.task.stepIndex = 2
     stopPath(agent)

@@ -170,6 +170,22 @@ export function syncScene(refs, world) {
     syncArrow(refs, world, player)
   }
 
+  // ── Дрон у польоті (Стадія 14 / К4) ────────────────────
+  //
+  // Політ — це ДВЕЛ зони майданчика, а не окремий стан: хто стоїть на
+  // майданчику з дроном, той і літає. Тому сцена читає рівно те саме число,
+  // що малює кільце прогресу під ногами, — двох джерел правди про політ немає.
+  if (refs.flightView) {
+    const pad = (world.zones ?? []).find(z => z.kind === 'flight_pad')
+    const dwell = pad ? (world.zoneState?.[pad.id]?.dwell ?? {}) : {}
+    const flyerId = Object.keys(dwell).find(id => dwell[id] > 0)
+    const agent = flyerId && (world.agents ?? []).find(a => a.id === flyerId)
+    const drone = agent && (agent.carrying ?? []).find(i => i.type === 'drone')
+    const def = pad && INTERACTIONS[pad.kind]
+    if (drone && def?.dwellMs) refs.flightView.show(dwell[flyerId] / def.dwellMs, drone.kitId)
+    else refs.flightView.hide()
+  }
+
   // ── The cat (V5) ───────────────────────────────────────
   const catAgent = (world.agents ?? []).find(a => a.kind === 'cat')
   if (refs.cat) {

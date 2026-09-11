@@ -20,6 +20,7 @@ import { P, ACCENT, SPEC, UNITS_PER_PX, hex } from './palette.js'
 import { quantize, trim } from './gen-sprites.js'
 import { PRODUCT, LIVERY, CAT, PROP, SIGNAL, fullPalette, roleColors } from './palette.js'
 import { ROLES } from '../src/defs/roles.js'
+import { KIT_TYPES } from '../src/state/kits.js'
 import { CHARACTER_U } from '../src/state/config.js'
 
 const ROOT   = new URL('..', import.meta.url).pathname
@@ -166,7 +167,12 @@ describe('Стадія 15 / П4 — колір тільки з палітри', 
   })
 
   it('групи значення не порожні — інакше правило тримає порожнечу', () => {
-    expect(Object.keys(PRODUCT)).toHaveLength(4)
+    // По рампі на КОЖЕН тип продукту, який має власний спрайт. Було зашите
+    // число 4; Стадія 14 / К5 додала три типи, і число одразу збрехало. Тепер
+    // це те, чим воно завжди й було по суті: у кожного типу свій колір, і
+    // жоден не лишився без нього.
+    const kinds = new Set(Object.values(KIT_TYPES).map(k => k.spriteKey))
+    expect(Object.keys(PRODUCT)).toHaveLength(kinds.size)
     expect(Object.keys(CAT).length).toBeGreaterThan(3)
     expect(Object.keys(SIGNAL).length).toBeGreaterThan(2)
     expect(Object.keys(PROP).length).toBeGreaterThan(3)

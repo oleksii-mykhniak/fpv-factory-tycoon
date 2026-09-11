@@ -196,10 +196,15 @@ export function deriveJobs(world) {
       const hallId   = stationHall(world, station.id)
       const fromZone = stationOutZone(world, station.id)
       const toZone   = mailboxZone(world, hallId)
+      // Майданчик обльоту (Стадія 14 / К4) вставляє себе в СЕРЕДИНУ вже
+      // існуючої роботи, а не заводить нову: продавець робить те саме, просто
+      // з однією зупинкою. Коли кімнати немає, робота лишається тією, що була.
+      const viaZone = (world.zones ?? []).find(z => z.kind === 'flight_pad')?.id ?? null
       if (fromZone && toZone) {
         jobs.push({
           id: `sell_drone:${station.id}`,
-          type: 'sell_drone',
+          type: viaZone ? 'sell_via_flight' : 'sell_drone',
+          viaZone,
           stationId: station.id,
           hallId,
           // A drone already in hand belongs to the one holding it: nobody else

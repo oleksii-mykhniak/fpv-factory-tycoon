@@ -10,6 +10,7 @@ import { salePriceMult } from '../state/upgrades.js'
 import { featureIntroduced } from '../sim/unlocks.js'
 import { kitsForLocation, LOCATIONS } from '../state/locations.js'
 import { roomDef } from '../defs/layouts/rooms.js'
+import { FACTORY_HALLS, HALL_KIND_ICON } from '../defs/layouts/factory.js'
 
 function isKitLocked(kit, locationKitIds) {
   return !locationKitIds.includes(kit.id)
@@ -24,7 +25,14 @@ function lockReasonText(state, kit) {
     const from = KIT_TYPES[byMark.fromKit]
     return `🔒 ${from.emoji} ${from.name} → Mk ${byMark.mk + 1}`
   }
-  const { location: locId, room: roomId } = kit.unlock ?? {}
+  // Третій замок (Стадія 14 / К5) — про КІМНАТУ фабрики. DoD стадії просить
+  // саме цього: вимога має бути видною ДО покупки, інакше тип, який стоїть у
+  // каталозі зачиненим, нічим не відрізняється від «сюди не можна ніколи».
+  const { location: locId, room: roomId, hallKind } = kit.unlock ?? {}
+  if (hallKind) {
+    const room = FACTORY_HALLS.find(h => h.kind === hallKind)
+    return `🔒 Потрібна кімната: ${HALL_KIND_ICON[hallKind] ?? ''} ${room?.name ?? hallKind}`
+  }
   const name = roomId ? (roomDef(roomId)?.name ?? roomId)
              : locId  ? (LOCATIONS[locId]?.name ?? locId)
              : 'іншій локації'

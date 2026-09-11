@@ -33,6 +33,9 @@ function worlds() {
   for (const halls of [
     ['hall-1'], ['hall-1', 'hall-2'], ['hall-1', 'hall-2', 'hall-3'],
     ['hall-1', 'hall-2', 'hall-3', 'lab-1'],
+    ['hall-1', 'hall-2', 'hall-3', 'lab-1', 'contracts-1'],
+    ['hall-1', 'hall-2', 'hall-3', 'lab-1', 'contracts-1', 'flight-1'],
+    ['hall-1', 'hall-2', 'hall-3', 'lab-1', 'contracts-1', 'flight-1', 'storage-1'],
   ]) {
     const base = createState()
     const state = { ...base, locationId: 'factory', money: 99999, unlockedHalls: halls }

@@ -30,6 +30,15 @@ export const KIT_TYPES = Object.freeze({
   racing_drone:    makeKit('racing_drone',    { name: 'Гоночний дрон',       emoji: '⚡', spriteKey: 'racing_drone',    unlock: null }),
   cinematic_drone: makeKit('cinematic_drone', { name: 'Кінематографічний',   emoji: '🎬', spriteKey: 'cinematic_drone', unlock: null }),
   longrange_drone: makeKit('longrange_drone', { name: 'Далекобійний',        emoji: '📡', spriteKey: 'longrange_drone', unlock: { room: 'garage' } }),
+  // Стадія 14 / К5 — типи, які входять у гру ЧЕРЕЗ КІМНАТУ.
+  //
+  // `unlock: { hallKind }` — третій ключ поруч із `location` і `room`, і
+  // додався він саме тому, що реєстр із самого початку описував тип ДАНИМИ.
+  // Літака не можна продати без обльоту, важкий носій нема де тримати без
+  // складу, прототип нема на чому досліджувати без лабораторії.
+  fixedwing_drone: makeKit('fixedwing_drone', { name: 'Літак',                emoji: '🛩️', spriteKey: 'fixedwing_drone', unlock: { hallKind: 'flight' } }),
+  heavy_drone:     makeKit('heavy_drone',     { name: 'Важкий носій',         emoji: '🏗️', spriteKey: 'heavy_drone',     unlock: { hallKind: 'storage' } }),
+  proto_drone:     makeKit('proto_drone',     { name: 'Прототип',             emoji: '🧪', spriteKey: 'proto_drone',     unlock: { hallKind: 'lab' } }),
   scrap_drone:     makeKit('scrap_drone',     { name: 'Дрон з брухту',       emoji: '♻️', spriteKey: 'mini_drone',      unlock: null, isSpecial: true }),
 })
 

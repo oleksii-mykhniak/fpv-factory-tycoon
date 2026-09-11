@@ -162,6 +162,11 @@ export function createState() {
     // лабораторія була б п'ятьма окремими лабораторіями, і розібраний
     // гоночний комплект нічим би не допоміг міні-дрону.
     researchPoints:    0,
+    // Контракти (Стадія 14 / К3). Порожньо доти, доки немає відділу
+    // контрактів: слоти наповнює `contractSystem`, і він же мовчить там, де
+    // кімнати немає.
+    contracts:         [],
+    contractRep:       0,
     upgrades: {
       priceMultiplier:  1,
       solderingLevel:   0,
@@ -553,6 +558,20 @@ export function abandonBurntDrone(state, stationId, salvageRate = 0) {
   return _afterStationClear(state, stationId, state.money + salvage)
 }
 
+// Дрон, відхилений на обльоті (Стадія 14 / К4.2).
+//
+// Навмисно того самого крою, що й `abandonBurntDrone`: станція звільняється,
+// з комплекту повертається утиль, і ніякого продажу в статистиці не буває —
+// цей дрон до клієнта не доїхав. Різниця лише у фазі, з якої це можна робити:
+// згорілий комплект ловлять на верстаку, брак — уже готовим.
+export function rejectDrone(state, stationId, salvageRate = 0) {
+  const station = getStation(state, stationId)
+  if (station.phase !== Phase.READY)
+    throw new Error(`rejectDrone: станція ${stationId} у фазі ${station.phase}`)
+  const salvage = kitCost(state, station.kitId) * salvageRate
+  return _afterStationClear(state, stationId, state.money + salvage)
+}
+
 export function sell(state, stationId) {
   const station = getStation(state, stationId)
   if (station.phase !== Phase.READY)
@@ -782,7 +801,12 @@ export function unlockRoom(state, roomId) {
   }
 }
 
-// ── Factory halls (F2) ────────────────────────────────────
+// ── Кімнати фабрики (F2; типи — Стадія 14 / К1) ───────────
+//
+// `hall` у назвах лишилось навмисно: слово `room` у цьому коді вже означає
+// кімнату КВАРТИРИ (`unlockedRooms`, `roomDef`, `APARTMENT_ROOMS`), і друге
+// значення того самого слова в тих самих файлах коштувало б дорожче, ніж
+// дає. Те, заради чого план просив перейменування, живе в `kind` запису.
 
 export const openHallIds = (state) =>
   FACTORY_HALL_IDS.slice(0, Math.max(1, (state.unlockedHalls ?? []).length))
@@ -798,11 +822,11 @@ export const nextHallId = (state) => FACTORY_HALL_IDS[openHallIds(state).length]
 // the opposite of what the place is for.
 export function canUnlockHall(state, hallId) {
   if ((state.locationId ?? 'apartment') !== 'factory')
-    return { can: false, reasons: ['Цехи є лише на фабриці'] }
+    return { can: false, reasons: ['Кімнати добудовують лише на фабриці'] }
 
   const expected = nextHallId(state)
-  if (!expected)      return { can: false, reasons: ['Усі цехи вже відкриті'] }
-  if (hallId !== expected) return { can: false, reasons: ['Цехи відкриваються по черзі'] }
+  if (!expected)      return { can: false, reasons: ['Уся фабрика вже відкрита'] }
+  if (hallId !== expected) return { can: false, reasons: ['Кімнати відкриваються по черзі'] }
 
   const hall    = hallDef(hallId)
   const reasons = []
@@ -812,7 +836,7 @@ export function canUnlockHall(state, hallId) {
   const missing = ROLE_ORDER
     .filter(id => workersInRole(state, id).length < roleCapHere(state, id))
     .length
-  if (missing) reasons.push(`Спершу укомплектуйте відкриті цехи (${missing} вакансій)`)
+  if (missing) reasons.push(`Спершу укомплектуйте відкриті кімнати (${missing} вакансій)`)
 
   return { can: reasons.length === 0, reasons }
 }

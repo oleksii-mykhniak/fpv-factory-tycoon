@@ -242,3 +242,345 @@ describe('К2 — інженер не в виробничій петлі', () =>
     expect(shopRunsItself(staffed)).toBe(true)
   })
 })
+
+// ── К3 — відділ контрактів ────────────────────────────────
+
+import {
+  contractsOf, contractStanding, creditShipment, expireContracts, refillContracts,
+  activeContractFor,
+} from '../state/contracts.js'
+import { CONTRACT_SLOTS, CONTRACT_REP_PENALTY, CONTRACT_REP_REWARD } from '../state/config.js'
+import { EV } from './events.js'
+
+const WITH_DESK = [...WITH_LAB, 'contracts-1']
+
+describe('К3 — контракти', () => {
+  it('кімната приносить стіл, і портфель наповнюється сам', () => {
+    const w = factory(WITH_DESK)
+    expect(w.zones.filter(z => z.kind === 'contracts')).toHaveLength(1)
+    run(w, 200)
+    expect(contractsOf(w.game)).toHaveLength(CONTRACT_SLOTS)
+    for (const c of contractsOf(w.game)) {
+      expect(c.qty).toBeGreaterThan(0)
+      expect(c.dueAt).toBeGreaterThan(w.now)
+      expect(c.bonus).toBeGreaterThan(0)
+    }
+  })
+
+  it('без кімнати контрактів немає взагалі', () => {
+    const w = factory(WITH_LAB)
+    run(w, 200)
+    expect(contractsOf(w.game)).toHaveLength(0)
+  })
+
+  it('контракт просить лише те, що цех уміє зараз', () => {
+    const w = factory(WITH_DESK)
+    run(w, 200)
+    const catalogue = new Set(['mini_drone', 'racing_drone', 'cinematic_drone', 'longrange_drone'])
+    for (const c of contractsOf(w.game)) expect(catalogue.has(c.kitId)).toBe(true)
+  })
+
+  // К3.3 — виконання це відвантаження, а не окрема дія.
+  it('відвантажений дрон зараховується сам; остання штука платить премію', () => {
+    const base = { ...createState(), money: 0, contracts: [
+      { id: 'c1', kitId: 'mini_drone', qty: 2, done: 0, dueAt: T0 + 1e6, bonus: 400 },
+    ] }
+
+    const one = creditShipment(base, 'mini_drone')
+    expect(one.completed).toBe(false)
+    expect(one.state.money).toBe(0)
+    expect(activeContractFor(one.state, 'mini_drone').done).toBe(1)
+
+    const two = creditShipment(one.state, 'mini_drone')
+    expect(two.completed).toBe(true)
+    expect(two.state.money).toBe(400)
+    expect(two.state.contractRep).toBe(CONTRACT_REP_REWARD)
+    expect(contractsOf(two.state)).toHaveLength(0)
+  })
+
+  it('дрон не того типу нічого не закриває', () => {
+    const base = { ...createState(), contracts: [
+      { id: 'c1', kitId: 'racing_drone', qty: 1, done: 0, dueAt: T0 + 1e6, bonus: 400 },
+    ] }
+    const r = creditShipment(base, 'mini_drone')
+    expect(r.contract).toBe(null)
+    expect(contractsOf(r.state)[0].done).toBe(0)
+  })
+
+  // К3.4 — штраф м'який: репутація, і жодного долара.
+  it('прострочений контракт коштує репутації, а не грошей', () => {
+    const base = { ...createState(), money: 1000, contractRep: 3, contracts: [
+      { id: 'c1', kitId: 'mini_drone', qty: 5, done: 1, dueAt: T0 - 1, bonus: 400 },
+    ] }
+    const { state, failed } = expireContracts(base, T0)
+    expect(failed).toHaveLength(1)
+    expect(state.money).toBe(1000)
+    expect(state.contractRep).toBe(3 - CONTRACT_REP_PENALTY)
+    expect(contractsOf(state)).toHaveLength(0)
+  })
+
+  it('репутація не падає нижче нуля — контракти не стають гіршими за стартові', () => {
+    const broke = { ...createState(), contractRep: -99 }
+    expect(contractStanding(broke)).toBe(0)
+  })
+
+  it('репутація визначає РОЗМІР партії — трек нарешті щось означає', () => {
+    const roll = (state) => refillContracts(
+      { ...state, contracts: [] },
+      { kitIds: ['mini_drone'], now: T0, rng: () => 0.5, makeId: (() => { let n = 0; return () => `c${n++}` })() },
+    )
+    const base   = createState()
+    const famous = { ...base, upgrades: { ...base.upgrades, reputationLevel: 10 } }
+    expect(roll(famous).contracts[0].qty).toBeGreaterThan(roll(base).contracts[0].qty)
+    expect(roll(famous).contracts[0].bonus).toBeGreaterThan(roll(base).contracts[0].bonus)
+  })
+
+  // Той самий шлях, але через справжню скриньку: К3.3 живе у взаємодії, і
+  // саме там він може розійтись із `creditShipment`.
+  it('шлях через скриньку справді зараховує — жодної нової дії', () => {
+    const w = factory(WITH_DESK)
+    run(w, 200)
+    const kitId = 'mini_drone'
+    w.game = {
+      ...w.game,
+      money: 0,
+      contracts: [{ id: 'c1', kitId, qty: 1, done: 0, dueAt: w.now + 1e6, bonus: 500 }],
+      stations: w.game.stations.map((s, i) => i === 0
+        ? { ...s, phase: Phase.READY, kitId, quality: 0.9, takenBy: 'player' }
+        : s),
+    }
+    const player = w.agents.find(a => a.kind === 'player')
+    player.carrying = [{ type: 'drone', kitId, stationId: w.game.stations[0].id }]
+    const box = w.zones.find(z => z.kind === 'mailbox' && z.meta?.hallId === 'hall-1')
+    player.x = box.cx; player.y = box.cy
+
+    const events = run(w, 4000)
+    expect(events.filter(e => e.t === EV.CONTRACT_FILLED)).toHaveLength(1)
+    // Премія ЗВЕРХУ до звичайної ціни, а не замість неї.
+    expect(w.game.money).toBeGreaterThan(500)
+  })
+
+  it('провал видно подією — репутація не просідає мовчки', () => {
+    const w = factory(WITH_DESK)
+    run(w, 200)
+    w.game = {
+      ...w.game,
+      contracts: contractsOf(w.game).map(c => ({ ...c, dueAt: w.now - 1 })),
+    }
+    const events = run(w, 200)
+    expect(events.filter(e => e.t === EV.CONTRACT_FAILED)).toHaveLength(CONTRACT_SLOTS)
+    // Слоти одразу наповнюються знову: портфель не буває порожнім.
+    expect(contractsOf(w.game)).toHaveLength(CONTRACT_SLOTS)
+  })
+})
+
+// ── К4 — майданчик обльоту ────────────────────────────────
+
+import { rejectDrone } from '../state/gameState.js'
+import {
+  FLIGHT_REJECT_QUALITY, FLIGHT_PRICE_BONUS, FLIGHT_SKIP_REP_PENALTY, FLIGHT_MS,
+} from '../state/config.js'
+import { deriveJobs as jobsOf } from './systems/job.js'
+
+const WITH_PAD = [...WITH_DESK, 'flight-1']
+
+// Ставить гравця біля скриньки з готовим дроном у руках. `flown` — чи він уже
+// пройшов обліт.
+function readyDrone(w, { quality = 0.9, flown = false } = {}) {
+  const kitId = 'mini_drone'
+  w.game = {
+    ...w.game,
+    money: 0,
+    stations: w.game.stations.map((s, i) => i === 0
+      ? { ...s, phase: Phase.READY, kitId, quality, takenBy: 'player' }
+      : s),
+  }
+  const player = w.agents.find(a => a.kind === 'player')
+  player.carrying = [{ type: 'drone', kitId, stationId: w.game.stations[0].id, ...(flown ? { flown: true } : {}) }]
+  return player
+}
+
+describe('К4 — обліт', () => {
+  it('кімната приносить майданчик, і продавець їде через нього', () => {
+    const w = factory(WITH_PAD)
+    expect(w.zones.filter(z => z.kind === 'flight_pad')).toHaveLength(1)
+
+    w.game = {
+      ...w.game,
+      stations: w.game.stations.map((s, i) => i === 0
+        ? { ...s, phase: Phase.READY, kitId: 'mini_drone', quality: 0.9 } : s),
+    }
+    const job = jobsOf(w).find(j => j.id.startsWith('sell_drone:'))
+    expect(job.type).toBe('sell_via_flight')
+    expect(job.viaZone).toBe(w.zones.find(z => z.kind === 'flight_pad').id)
+  })
+
+  it('без кімнати маршрут продажу лишається тим, що був', () => {
+    const w = factory(WITH_DESK)
+    w.game = {
+      ...w.game,
+      stations: w.game.stations.map((s, i) => i === 0
+        ? { ...s, phase: Phase.READY, kitId: 'mini_drone', quality: 0.9 } : s),
+    }
+    const job = jobsOf(w).find(j => j.id.startsWith('sell_drone:'))
+    expect(job.type).toBe('sell_drone')
+    expect(job.viaZone).toBe(null)
+  })
+
+  it('обліт ставить на дрон позначку й не чіпає нічого іншого', () => {
+    const w = factory(WITH_PAD)
+    const player = readyDrone(w, { quality: 0.9 })
+    const pad = w.zones.find(z => z.kind === 'flight_pad')
+    player.x = pad.cx; player.y = pad.cy
+
+    const events = run(w, FLIGHT_MS + 1500)
+    expect(events.filter(e => e.t === EV.FLIGHT_PASSED)).toHaveLength(1)
+    expect(player.carrying[0].flown).toBe(true)
+    expect(w.game.stations[0].phase).toBe(Phase.READY)
+  })
+
+  it('облітаний дрон коштує дорожче', () => {
+    const price = (flown) => {
+      const w = factory(WITH_PAD)
+      const player = readyDrone(w, { quality: 0.9, flown })
+      const box = w.zones.find(z => z.kind === 'mailbox' && z.meta?.hallId === 'hall-1')
+      player.x = box.cx; player.y = box.cy
+      run(w, 4000)
+      return w.salesLog.at(-1).price
+    }
+    expect(price(true)).toBeCloseTo(price(false) * (1 + FLIGHT_PRICE_BONUS), 5)
+  })
+
+  // К4.2 — брак ловиться ТУТ, а не в клієнта.
+  it('бракований дрон не проходить обліт — іде в утиль, не в продаж', () => {
+    const w = factory(WITH_PAD)
+    const player = readyDrone(w, { quality: FLIGHT_REJECT_QUALITY - 0.05 })
+    const pad = w.zones.find(z => z.kind === 'flight_pad')
+    player.x = pad.cx; player.y = pad.cy
+
+    const events = run(w, FLIGHT_MS + 1500)
+    expect(events.filter(e => e.t === EV.FLIGHT_REJECTED)).toHaveLength(1)
+    expect(player.carrying).toHaveLength(0)
+    expect(w.game.stations[0].phase).toBe(Phase.IDLE)
+    expect(w.salesLog).toHaveLength(0)
+    expect(w.game.money).toBeGreaterThan(0)     // утиль повернувся
+  })
+
+  // DoD — обліт можна пропустити: дешевше й ризикованіше.
+  it('брак, пронесений повз майданчик, коштує репутації', () => {
+    const w = factory(WITH_PAD)
+    const player = readyDrone(w, { quality: FLIGHT_REJECT_QUALITY - 0.05 })
+    const box = w.zones.find(z => z.kind === 'mailbox' && z.meta?.hallId === 'hall-1')
+    player.x = box.cx; player.y = box.cy
+
+    const events = run(w, 4000)
+    expect(events.filter(e => e.t === EV.BAD_SHIPPED)).toHaveLength(1)
+    expect(w.game.contractRep).toBe(-FLIGHT_SKIP_REP_PENALTY)
+    expect(w.salesLog).toHaveLength(1)          // продався, просто дешево
+  })
+
+  it('без майданчика брак нічого не коштує — пропускати нема чого', () => {
+    const w = factory(WITH_DESK)
+    const player = readyDrone(w, { quality: FLIGHT_REJECT_QUALITY - 0.05 })
+    const box = w.zones.find(z => z.kind === 'mailbox' && z.meta?.hallId === 'hall-1')
+    player.x = box.cx; player.y = box.cy
+    const events = run(w, 4000)
+    expect(events.filter(e => e.t === EV.BAD_SHIPPED)).toHaveLength(0)
+    expect(w.game.contractRep ?? 0).toBe(0)
+  })
+
+  it('rejectDrone працює лише з готового дрона', () => {
+    const s = createState()
+    expect(() => rejectDrone(s, s.stations[0].id, 0.3)).toThrow('rejectDrone')
+  })
+})
+
+// ── К5 — нові типи входять через кімнату ──────────────────
+
+import { kitsForLocation } from '../state/locations.js'
+import { KIT_TYPES } from '../state/kits.js'
+import { FACTORY_HALLS, hasHallKind } from '../defs/layouts/factory.js'
+
+describe('К5 — тип потребує кімнати, а не ще двадцяти п\'яти збірок', () => {
+  const at = (halls) => ({
+    ...createState(), locationId: 'factory', unlockedHalls: halls,
+    // Mk-замки тут не про це: вимикаємо їх, щоб питання лишилось одне —
+    // кімната.
+    kitMarks: { mini_drone: 5, racing_drone: 5 },
+  })
+
+  const GATED = [
+    ['proto_drone', 'lab', 'lab-1'],
+    ['fixedwing_drone', 'flight', 'flight-1'],
+    ['heavy_drone', 'storage', 'storage-1'],
+  ]
+
+  it.each(GATED)('%s замкнений, поки немає кімнати «%s»', (kitId, kind, hallId) => {
+    const before = at(['hall-1', 'hall-2', 'hall-3'])
+    expect(hasHallKind(before.unlockedHalls, kind)).toBe(false)
+    expect(kitsForLocation(before)).not.toContain(kitId)
+
+    const ids = FACTORY_HALLS.map(h => h.id)
+    const after = at(ids.slice(0, ids.indexOf(hallId) + 1))
+    expect(hasHallKind(after.unlockedHalls, kind)).toBe(true)
+    expect(kitsForLocation(after)).toContain(kitId)
+  })
+
+  it('вимога кімнати описана ДАНИМИ — третій ключ поруч із location і room', () => {
+    for (const [kitId, kind] of GATED) {
+      expect(KIT_TYPES[kitId].unlock).toEqual({ hallKind: kind })
+    }
+  })
+
+  it('нові типи мають власний спрайт — жоден не позичає чужий силует', () => {
+    const keys = GATED.map(([id]) => KIT_TYPES[id].spriteKey)
+    expect(new Set(keys).size).toBe(keys.length)
+    for (const [id] of GATED) expect(KIT_TYPES[id].spriteKey).not.toBe('mini_drone')
+  })
+
+  it('кожен новий тип дорожчий і довший за наявні — це не переспів', () => {
+    const old = ['mini_drone', 'racing_drone', 'cinematic_drone', 'longrange_drone']
+    const topCost  = Math.max(...old.map(id => KIT_TYPES[id].cost))
+    const topSteps = Math.max(...old.map(id => KIT_TYPES[id].assemblySteps.length))
+    for (const [id] of GATED) {
+      expect(KIT_TYPES[id].cost, id).toBeGreaterThan(0)
+      expect(KIT_TYPES[id].assemblySteps.length, id).toBeGreaterThanOrEqual(5)
+      expect(KIT_TYPES[id].basePrice, id).toBeGreaterThan(KIT_TYPES[id].cost)
+    }
+    // Найдорожчий у грі — важкий носій, і він же найдовший у збірці.
+    expect(KIT_TYPES.heavy_drone.cost).toBeGreaterThan(topCost)
+    expect(KIT_TYPES.heavy_drone.assemblySteps.length).toBeGreaterThanOrEqual(topSteps - 1)
+  })
+
+  it('удома кімнатні типи не з\'являються навіть із відкритими цехами в сейві', () => {
+    const home = {
+      ...createState(), locationId: 'apartment',
+      unlockedRooms: ['flat', 'garage'],
+      unlockedHalls: FACTORY_HALLS.map(h => h.id),
+    }
+    for (const [kitId] of GATED) expect(kitsForLocation(home)).not.toContain(kitId)
+  })
+})
+
+describe('К7 — кімнат скінченна кількість', () => {
+  it('їх 5–7, і кожна свого типу', () => {
+    expect(FACTORY_HALLS.length).toBeGreaterThanOrEqual(5)
+    expect(FACTORY_HALLS.length).toBeLessThanOrEqual(7)
+    const kinds = FACTORY_HALLS.map(h => h.kind)
+    expect(new Set(kinds.filter(k => k !== 'assembly')).size)
+      .toBe(kinds.filter(k => k !== 'assembly').length)
+  })
+
+  it('ціна росте від кімнати до кімнати — наступна завжди амбіція', () => {
+    for (let i = 1; i < FACTORY_HALLS.length; i++) {
+      expect(FACTORY_HALLS[i].cost, FACTORY_HALLS[i].id)
+        .toBeGreaterThan(FACTORY_HALLS[i - 1].cost)
+    }
+  })
+
+  it('кожна кімната після першої сама розповідає, що з нею приїхало (К6)', () => {
+    for (const hall of FACTORY_HALLS.slice(1)) {
+      expect(hall.unlocks?.length, hall.id).toBeGreaterThan(0)
+    }
+  })
+})

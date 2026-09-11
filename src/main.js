@@ -37,6 +37,7 @@ import { createSettingsButton } from './ui/settingsButton.js'
 import { createShopModal, mkLabel } from './ui/shopModal.js'
 import { createUpgradeModal } from './ui/upgradeModal.js'
 import { createHireModal } from './ui/hireModal.js'
+import { createContractsModal } from './ui/contractsModal.js'
 import { createPromoteModal } from './ui/promoteModal.js'
 import { createSettingsModal } from './ui/settingsModal.js'
 import { createSolderModal } from './ui/solderModal.js'
@@ -232,6 +233,14 @@ const effects = createEffects({
   // «+3 очки» над стендом — рівно та сама механіка, що й «+$47» над скринькою:
   // подія знає свою зону, зона знає, де вона на екрані.
   onResearchDone:  ({ points, zoneId }) => floatOverZone(zoneId, `+${points} 🔬`),
+  // Премія летить над тією самою скринькою, що й ціна дрона, — другим рядком:
+  // це та сама подія відвантаження, просто вона цього разу ще й закрила
+  // замовлення.
+  onContractFilled: ({ bonus, zoneId }) => floatOverZone(zoneId, `📋 +$${bonus}`),
+  onContractFailed: ({ kitId }) => {
+    const kit = KIT_TYPES[kitId]
+    questTracker.announce(`📋 Контракт зірвано: ${kit?.name ?? kitId} — мінус репутація`)
+  },
   onQuestDone:     ({ questId }) => questTracker.flash(questId),
   onPurchase:      () => hud.markPurchase(incomePerSec(world.salesLog, world.now), world.now),
   onMarkUpgraded:  ({ kitId, mk, unlocked }) => {
@@ -461,6 +470,11 @@ const hireModal = createHireModal(uiRoot, {
   onPromote: (workerId) => { hireModal.close(); promoteModal.open(world.game, workerId) },
 })
 
+// Контракти (Стадія 14 / К3). Панель без жодної кнопки: контракт закривається
+// відвантаженням, а не підтвердженням, тож усе, що вона робить, — відповідає
+// «що вигідно збирати зараз».
+const contractsModal = createContractsModal(uiRoot)
+
 // The bar is gone entirely: everything that used to sit there is a place in the
 // room now (S2), and settings moved to the top-right corner.
 createSettingsButton(uiRoot, {
@@ -470,9 +484,10 @@ createSettingsButton(uiRoot, {
 // Which panel a zone asked for. One place, so adding an object with a panel
 // behind it is a line here and an entry in defs/interactions.js.
 function openPanel(panel, e = {}) {
-  if (panel === 'shop')    shopModal.open(world.game)
-  if (panel === 'upgrade') upgradeModal.open(world.game)
-  if (panel === 'hire')    hireModal.open(world.game, e.hallId ?? null)
+  if (panel === 'shop')      shopModal.open(world.game)
+  if (panel === 'upgrade')   upgradeModal.open(world.game)
+  if (panel === 'hire')      hireModal.open(world.game, e.hallId ?? null)
+  if (panel === 'contracts') contractsModal.open(world.game, world.now)
 }
 
 let _lastRendered = null
@@ -522,6 +537,7 @@ function renderUI() {
   shopModal.update(world.game)
   upgradeModal.update(world.game)
   hireModal.update(world.game)
+  contractsModal.update(world.game, world.now)
   promoteModal.update(world.game)
   solderModal.update(world.game, coldWarning ? 'cold' : null)
 

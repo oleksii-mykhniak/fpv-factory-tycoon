@@ -1,5 +1,5 @@
 import * as ex from 'excalibur'
-import { Phase, DeliveryStatus } from '../state/gameState.js'
+import { Phase, DeliveryStatus, KIT_TYPES } from '../state/gameState.js'
 import {
   VIEW_HEIGHT_UNITS, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX,
   CAMERA_ELASTICITY, CAMERA_FRICTION,
@@ -966,6 +966,65 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     })
   const intakeBoxes = Object.fromEntries(intakes)
 
+  // ── Дрон у польоті (Стадія 14 / К4) ──────────────────────
+  //
+  // Уся кімната обльоту існує заради цих п'яти секунд: дрон кружляє над
+  // майданчиком, під ним їде тінь. Механічно це один актор по колу — найдешевша
+  // сцена в грі й водночас єдине місце, де гра про дрони показує дрон у
+  // повітрі, а не коробку на столі.
+  //
+  // Тінь обов'язкова: без неї актор просто висить у повітрі й читається як
+  // помилка рендера. Саме тінь каже «він ЛЕТИТЬ», а не «він тут лежить».
+  const flightPadProp = Object.entries(layout.props ?? {})
+    .find(([name]) => name.startsWith('flight_'))?.[1] ?? null
+
+  const flyer = flightPadProp && new ex.Actor({
+    pos: ex.vec(flightPadProp.cx, flightPadProp.cy),
+    width: layout.sizes.drone.w * 1.15, height: layout.sizes.drone.h * 1.15,
+    z: 12, color: ex.Color.fromHex('#2a2a3e'),
+  })
+  const flyerShadow = flightPadProp && new ex.Actor({
+    pos: ex.vec(flightPadProp.cx, flightPadProp.cy),
+    width: layout.sizes.drone.w * 0.8, height: layout.sizes.drone.h * 0.5,
+    z: 1.5, color: ex.Color.fromHex('#1b1526'),
+  })
+  if (flyer) {
+    flyer.graphics.visible = false
+    flyerShadow.graphics.visible = false
+    scene.add(track(flyerShadow))
+    scene.add(track(flyer))
+  }
+
+  const flightView = flightPadProp && {
+    // `show` викликає sceneSync щокадру: t — прогрес обльоту 0..1, kitId —
+    // який саме дрон літає. Нуль стану всередині: сцена нічого не пам'ятає,
+    // усе, що вона знає про політ, приходить із симуляції.
+    show(t, kitId) {
+      const a = t * Math.PI * 2 * 1.5 - Math.PI / 2
+      const rx = flightPadProp.w * 0.32
+      const ry = flightPadProp.h * 0.34
+      const x  = flightPadProp.cx + Math.cos(a) * rx
+      const groundY = flightPadProp.cy + Math.sin(a) * ry
+      // Набирає висоту на початку й сідає в кінці — політ має початок і кінець,
+      // а не просто крутиться однаково всі п'ять секунд.
+      const lift = Math.sin(Math.min(1, t * 1.15) * Math.PI) * 92 + 18
+      flyer.pos = ex.vec(x, groundY - lift)
+      flyerShadow.pos = ex.vec(x, groundY)
+      flyerShadow.graphics.opacity = 0.55 - lift / 400
+      const key = KIT_TYPES[kitId]?.spriteKey
+      if (key && flyer._flyingKit !== kitId) {
+        applySprite(flyer, key)
+        flyer._flyingKit = kitId
+      }
+      flyer.graphics.visible = true
+      flyerShadow.graphics.visible = true
+    },
+    hide() {
+      flyer.graphics.visible = false
+      flyerShadow.graphics.visible = false
+    },
+  }
+
   // ── Piggy bank (built from the layout; only its behaviour lives here) ──
   // A location without the prop simply has no piggy bank — the rescue mechanic
   // is not part of every chapter (F1.3).
@@ -1267,6 +1326,7 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     ...propActors,
     floatGain,
     intakeBoxes,
+    flightView,
     stations,
     player, playerRig, workerView, workerViews,
     carrySlotActors,

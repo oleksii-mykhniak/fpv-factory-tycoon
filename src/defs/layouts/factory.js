@@ -131,6 +131,64 @@ export const FACTORY_HALLS = Object.freeze([
       '⬆️ Mk можна взяти очками замість норми збірок',
     ],
   },
+
+  // Відділ контрактів (Стадія 14 / К3) — ритм у продажу.
+  //
+  // Не додає ні верстака, ні штату. Додає ПРИЧИНУ зібрати саме цей тип саме
+  // зараз: три замовлення з дедлайном, які закриваються звичайним
+  // відвантаженням. Саме тут трек «Репутація» вперше означає щось, крім
+  // множника ціни — за нею й видають контракти.
+  {
+    id: 'contracts-1',
+    kind: 'contracts',
+    name: 'Відділ контрактів',
+    benches: 0,
+    workerCaps: {},
+    cost: 24000,
+    unlocks: [
+      '📋 Три замовлення з дедлайном одночасно',
+      '💰 Премія зверху до звичайної ціни',
+      '⭐ Репутація тепер вирішує, які партії пропонують',
+    ],
+  },
+
+  // Майданчик обльоту (Стадія 14 / К4) — єдине місце, де гра про дрони
+  // показує дрон у польоті, а не коробку на столі.
+  //
+  // Найдешевша кімната механічно (один актор по кривій) і найдорожча за
+  // наслідками: маршрут продавця довшає на ланку, майданчик обробляє один
+  // дрон за раз — і це перше вузьке місце, яке не лікується купівлею ще
+  // одного верстака.
+  {
+    id: 'flight-1',
+    kind: 'flight',
+    name: 'Майданчик обльоту',
+    benches: 0,
+    workerCaps: { seller: 1 },
+    cost: 38000,
+    unlocks: [
+      '🛩️ Дрон літає перед відвантаженням',
+      '💵 Облітаний дрон коштує дорожче',
+      '🔍 Брак ловиться тут, а не в клієнта',
+      '✈️ Новий тип: Літак — його не можна продати без обльоту',
+    ],
+  },
+
+  // Склад (Стадія 14 / К5). Остання кімната: вона не додає механіки, вона
+  // додає МІСЦЕ — а місце тут і є умовою найдорожчого типу в грі.
+  {
+    id: 'storage-1',
+    kind: 'storage',
+    name: 'Склад',
+    benches: 0,
+    workerCaps: { courier: 1 },
+    cost: 52000,
+    unlocks: [
+      '📦 Є де тримати дорогі комплекти',
+      '🏗️ Новий тип: Важкий носій',
+      "🧑‍🔧 Ще одна вакансія кур'єра",
+    ],
+  },
 ])
 
 export const FACTORY_HALL_IDS = FACTORY_HALLS.map(h => h.id)
@@ -342,7 +400,99 @@ function furnishLab(hall) {
   }
 }
 
-const FURNISH = { assembly: furnishAssembly, lab: furnishLab }
+// Відділ контрактів (К3). Одна річ у кімнаті — стіл, до якого підходять, як до
+// дошки найму: та сама механіка «місце відкриває панель», уже написана тричі.
+function furnishContracts(hall) {
+  const { w, h } = hall
+  const props = {
+    [`contracts_${hall.id}`]: {
+      x: w / 2, y: 430, w: u(1.4), h: u(0.9), sprite: 'desk', color: '#8a6a3a',
+    },
+    [`lamp_${hall.id}`]: {
+      x: w / 2, y: 130, w: u(1), h: u(1), sprite: 'f_painting', color: '#e0c48f', z: 2,
+    },
+  }
+  return {
+    stationSlots: [],
+    props,
+    zones: [
+      { id: `contracts_${hall.id}`, kind: 'contracts', from: `contracts_${hall.id}`,
+        w: u(2.0), h: u(1.24), offsetY: u(1.02) },
+    ],
+    decor: [
+      { sprite: 'f_bookshelf', x: 180, y: 200, w: T, h: T * 1.4, color: '#7a5a3a', z: 2, solid: true },
+      { sprite: 'f_bookshelf', x: w - 180, y: 200, w: T, h: T * 1.4, color: '#7a5a3a', z: 2, solid: true },
+      { sprite: 'floor_mark', x: w / 2, y: 340, w: w * 0.6, h: 8, color: '#e0c48f', z: 0.4 },
+    ],
+    posts: {},
+  }
+}
+
+// Майданчик обльоту (К4). Порожній центр — це і є кімната: над ним літає дрон,
+// і все, що стоїть посередині, закриває єдину сцену, заради якої вона є.
+function furnishFlight(hall) {
+  const { w, h } = hall
+  const props = {
+    [`flight_${hall.id}`]: {
+      x: w / 2, y: h / 2 - 60, w: u(2.2), h: u(1.2), sprite: 'floor_mark', color: '#6fd0a0', z: 0.5,
+    },
+  }
+  return {
+    stationSlots: [],
+    props,
+    zones: [
+      { id: `flight_${hall.id}`, kind: 'flight_pad', from: `flight_${hall.id}`,
+        w: u(2.4), h: u(1.4), offsetY: u(1.1) },
+    ],
+    decor: [
+      { sprite: 'f_crate', x: 160, y: 200, w: T, h: T, color: '#4f8f6f', z: 2, solid: true },
+      { sprite: 'f_crate', x: w - 160, y: 200, w: T, h: T, color: '#4f8f6f', z: 2, solid: true },
+      { sprite: 'o_shelf', x: w - 200, y: h - 200, w: T * 1.4, h: T, color: '#7fb8a0', z: 2, solid: true },
+    ],
+    posts: {
+      // Продавець майданчика чекає збоку від кола, а не в ньому: стояти на
+      // місці, куди сам же принесеш дрон, означає блокувати власну роботу.
+      seller: { x: 260, y: h - 320 },
+    },
+  }
+}
+
+// Склад (К5). Стелажі по стінах і прохід посередині — кімната, чия функція
+// вся в тому, що вона є.
+function furnishStorage(hall) {
+  const { w, h } = hall
+  const props = {
+    [`lamp_${hall.id}`]: {
+      x: w / 2, y: 130, w: u(1), h: u(1), sprite: 'f_painting', color: '#c9a86a', z: 2,
+    },
+  }
+  const racks = []
+  for (let y = 260; y < h - 260; y += 190) {
+    racks.push({ sprite: 'o_shelf', x: 190, y, w: T * 1.4, h: T, color: '#9b8258', z: 2, solid: true })
+    racks.push({ sprite: 'o_shelf', x: w - 190, y, w: T * 1.4, h: T, color: '#9b8258', z: 2, solid: true })
+  }
+  return {
+    stationSlots: [],
+    props,
+    zones: [],
+    decor: [
+      ...racks,
+      { sprite: 'f_pallet', x: w / 2 - 120, y: h - 200, w: T, h: T, color: '#b58d55', z: 2, solid: true },
+      { sprite: 'f_pallet', x: w / 2 + 120, y: h - 200, w: T, h: T, color: '#b58d55', z: 2, solid: true },
+    ],
+    posts: {
+      courier: { x: w / 2, y: h - 380 },
+    },
+  }
+}
+
+const FURNISH = {
+  assembly:  furnishAssembly,
+  lab:       furnishLab,
+  contracts: furnishContracts,
+  flight:    furnishFlight,
+  storage:   furnishStorage,
+}
 
 // Кімната невідомого типу лишається порожньою підлогою, а не падає: розкладка
 // не те місце, де гра має право зупинитись. Тип без меблів видно одразу.
@@ -429,15 +579,27 @@ export function buildFactoryLayout(hallIds) {
       addPartition({ axis: 'v', at: row.w, from: row.y0, to: row.y0 + row.h, gaps: [] })
     }
 
-    // Проріз між рядами — за тим самим правилом, що й між цехами (V1.3):
-    // діра не вужча за HALL_GAP_H, і стоїть там, де обидва ряди є підлогою.
+    // Прорізи між рядами — за тим самим правилом, що й між цехами (V1.3):
+    // діра не вужча за HALL_GAP_H і стоїть там, де обидва ряди є підлогою.
+    //
+    // Проріз НА КОЖНУ кімнату верхнього ряду, а не один спільний. Один спільний
+    // працює — і робить рівно те, від чого Стадія 12 позбавлялась: продавець із
+    // цеху 3 йшов би через усю фабрику до єдиних сходів. Кімната має свій вихід
+    // униз, і маршрут догори стає таким же коротким, як маршрут убік.
     if (row.y0 > 0) {
-      const above = rows[rows.indexOf(row) + 1]
+      const above  = rows[rows.indexOf(row) + 1]
       const shared = Math.min(row.w, above.w)
-      addPartition({
-        axis: 'h', at: row.y0 - WALL_HORIZ / 2, from: 0, to: worldW,
-        gaps: [{ at: Math.min(shared - ROW_GAP_W, Math.max(ROW_GAP_W, shared / 2)), size: ROW_GAP_W }],
-      })
+      const gaps = []
+      let cursor = 0
+      for (const hall of above.halls) {
+        const at = cursor + hallW(hall) / 2
+        cursor += hallW(hall)
+        if (at - ROW_GAP_W / 2 < 0 || at + ROW_GAP_W / 2 > shared) continue
+        gaps.push({ at, size: ROW_GAP_W })
+      }
+      if (!gaps.length)
+        gaps.push({ at: Math.min(shared - ROW_GAP_W, Math.max(ROW_GAP_W, shared / 2)), size: ROW_GAP_W })
+      addPartition({ axis: 'h', at: row.y0 - WALL_HORIZ / 2, from: 0, to: worldW, gaps })
     }
   }
 

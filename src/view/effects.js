@@ -12,6 +12,7 @@ import { playSfx } from '../audio/sfx.js'
 export function createEffects({
   getRefs, haptic, onStateDirty, onColdSolder,
   onSaleMade, onMinigame, onPanel, onQuestDone, onPurchase, onMarkUpgraded, onResearchDone,
+  onContractFilled, onContractFailed,
 }) {
   // Each station draws its own progress card (C3).
   const progressOf = (stationId) =>
@@ -86,6 +87,12 @@ export function createEffects({
     // Дослідження звучить як покупка, бо ним і є: очко — це валюта, яку щойно
     // поклали в банк (Стадія 14 / К2).
     [EV.RESEARCH_DONE]: (e) => { playSfx('upgrade'); onResearchDone?.(e) },
+
+    // Контракт (Стадія 14 / К3). Виконаний звучить як продаж — він ним і є,
+    // просто дорожчий. Зірваний НЕ звучить як помилка: штраф м'який (К3.4), і
+    // сигнал тривоги на м'якому штрафі вчив би боятись контрактів.
+    [EV.CONTRACT_FILLED]: (e) => { playSfx('hall'); haptic('medium'); onContractFilled?.(e) },
+    [EV.CONTRACT_FAILED]: (e) => { onContractFailed?.(e) },
 
     [EV.BENCH_CLEARED]: ({ reason }) => {
       if (reason === 'abandoned') { playSfx('sell'); haptic('medium') }

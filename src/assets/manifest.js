@@ -86,6 +86,7 @@ export const SPRITES = Object.freeze({
   badge_tech: { url: `${BASE}sprites/badge_tech.png`, anchors: {} },
   badge_seller: { url: `${BASE}sprites/badge_seller.png`, anchors: {} },
   badge_manager: { url: `${BASE}sprites/badge_manager.png`, anchors: {} },
+  badge_engineer: { url: `${BASE}sprites/badge_engineer.png`, anchors: {} },
 
   // ── Іконки комплектів і цифри (Стадія 13 / А3) ───────────────
   // Іконка — не зменшений повний спрайт, а своя фігура: 96×52, стиснуті до
@@ -95,6 +96,9 @@ export const SPRITES = Object.freeze({
   icon_racing_drone: { url: `${BASE}sprites/icon_racing_drone.png`, anchors: {} },
   icon_cinematic_drone: { url: `${BASE}sprites/icon_cinematic_drone.png`, anchors: {} },
   icon_longrange_drone: { url: `${BASE}sprites/icon_longrange_drone.png`, anchors: {} },
+  icon_fixedwing_drone: { url: `${BASE}sprites/icon_fixedwing_drone.png`, anchors: {} },
+  icon_heavy_drone: { url: `${BASE}sprites/icon_heavy_drone.png`, anchors: {} },
+  icon_proto_drone: { url: `${BASE}sprites/icon_proto_drone.png`, anchors: {} },
   digit_0: { url: `${BASE}sprites/digit_0.png`, anchors: {} },
   digit_1: { url: `${BASE}sprites/digit_1.png`, anchors: {} },
   digit_2: { url: `${BASE}sprites/digit_2.png`, anchors: {} },
@@ -149,6 +153,22 @@ export const SPRITES = Object.freeze({
 
   longrange_drone: {
     url: `${BASE}sprites/longrange_drone.png`,
+    anchors: {},
+  },
+
+  // Стадія 14 / К5 — типи, що входять у гру через кімнату.
+  fixedwing_drone: {
+    url: `${BASE}sprites/fixedwing_drone.png`,
+    anchors: {},
+  },
+
+  heavy_drone: {
+    url: `${BASE}sprites/heavy_drone.png`,
+    anchors: {},
+  },
+
+  proto_drone: {
+    url: `${BASE}sprites/proto_drone.png`,
     anchors: {},
   },
 
