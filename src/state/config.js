@@ -130,7 +130,21 @@ export const CAMERA_FRICTION   = 0.28
 // owner tried the Kenney characters against the Kenney furniture and preferred
 // ours, so this is the switch rather than a deletion — the tiles and the credits
 // stay in the repo.
-export const CHARACTER_ART = 'generated'
+//   'ai'        — аркуші, згенеровані ШІ та внесені scripts/import-ai-sheet.js:
+//                 окремі цикли для ходи вгору й вниз, плюс айдл
+export const CHARACTER_ART = 'ai'
+
+// Сітка ШІ-аркушів і темп їхніх циклів (Стадія 16). Числа мусять збігатися з
+// тим, чим імпортували аркуш: сітку зашито в його ім'я на експорті
+// (`frames-36-rows-6-cols-6`), і розійтися їй з грою — значить порізати
+// персонажа навпіл.
+export const AI_SHEET_ROWS   = 6
+export const AI_SHEET_COLS   = 6
+export const AI_SHEET_FRAMES = 36
+// 36 кадрів на цикл — це майже півтори секунди на крок при 40 мс. Ходу видно
+// як ходу приблизно від 24 кадрів за секунду.
+export const AI_FRAME_MS_WALK = 42
+export const AI_FRAME_MS_IDLE = 90
 
 // ── Scale (V1) ───────────────────────────────────────────
 // The character is the ruler. Every size in the game is written as a fraction

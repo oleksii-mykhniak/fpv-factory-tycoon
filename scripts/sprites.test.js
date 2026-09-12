@@ -20,11 +20,18 @@ import { P, ACCENT, SPEC, UNITS_PER_PX, hex } from './palette.js'
 import { quantize, trim } from './gen-sprites.js'
 import { PRODUCT, LIVERY, CAT, PROP, SIGNAL, fullPalette, roleColors } from './palette.js'
 import { ROLES } from '../src/defs/roles.js'
+import { IMPORTED_SPRITES } from './imported-art.js'
 import { KIT_TYPES } from '../src/state/kits.js'
 import { CHARACTER_U } from '../src/state/config.js'
 
 const ROOT   = new URL('..', import.meta.url).pathname
 const PUBLIC = join(ROOT, 'public/sprites')
+
+// Набір, за який відповідає генератор: усе з public/sprites, крім внесеного
+// ззовні (див. imported-art.js).
+const generated = () => readdirSync(PUBLIC)
+  .filter(f => f.endsWith('.png') && !IMPORTED_SPRITES.includes(f))
+  .sort()
 
 describe('Стадія 13 / А5.4 — генератор відтворює набір', () => {
   let out
@@ -35,7 +42,7 @@ describe('Стадія 13 / А5.4 — генератор відтворює на
 
   it('малює рівно ті самі файли, що лежать у public/sprites', () => {
     const made = readdirSync(out).sort()
-    const have = readdirSync(PUBLIC).filter(f => f.endsWith('.png')).sort()
+    const have = generated()
     expect(made).toEqual(have)
   })
 
@@ -153,7 +160,7 @@ describe('Стадія 15 / П4 — колір тільки з палітри', 
   it('кожен піксель кожного спрайта — колір із палітри', () => {
     const PAL = new Set(fullPalette(roleColors(ROLES)).map(c => c.join(',')))
     const offenders = []
-    for (const name of readdirSync(PUBLIC).filter(f => f.endsWith('.png'))) {
+    for (const name of generated()) {
       const { px } = decodePng(readFileSync(join(PUBLIC, name)))
       const bad = new Set()
       for (let i = 0; i < px.length; i += 4) {

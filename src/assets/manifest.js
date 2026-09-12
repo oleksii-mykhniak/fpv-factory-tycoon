@@ -141,6 +141,23 @@ export const SPRITES = Object.freeze({
     anchors: {},
   },
 
+  // Гравець, арт із ШІ (Стадія 16): сітка 6×6, окремий аркуш на напрямок.
+  // Внесені scripts/import-ai-sheet.js; вмикає їх CHARACTER_ART === 'ai'.
+  player_idle: {
+    url: `${BASE}sprites/player_idle.png`,
+    anchors: {},
+  },
+
+  player_walk_down: {
+    url: `${BASE}sprites/player_walk_down.png`,
+    anchors: {},
+  },
+
+  player_walk_up: {
+    url: `${BASE}sprites/player_walk_up.png`,
+    anchors: {},
+  },
+
   racing_drone: {
     url: `${BASE}sprites/racing_drone.png`,
     anchors: {},

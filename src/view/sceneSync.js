@@ -164,7 +164,10 @@ export function syncScene(refs, world) {
   // The sim owns the position; the actor is told where it ended up.
   if (player && refs.player) {
     follow(refs.player, player.x, player.y)
-    refs.playerRig?.setMoving(player.moving, player.facing > 0)
+    // Напрямок ходу, а не лише «вліво/вправо»: ригу з ШІ-аркушами (Стадія 16)
+    // потрібна вертикальна швидкість, щоб вибрати вид ззаду чи спереду.
+    // Старі риги зайві аргументи ігнорують.
+    refs.playerRig?.setMoving(player.moving, player.facing > 0, player.vy ?? 0, player.vx ?? 0)
     syncCarryStack(refs.carrySlotActors, refs.player, player)
     syncDwell(refs, world, player)
     syncArrow(refs, world, player)
