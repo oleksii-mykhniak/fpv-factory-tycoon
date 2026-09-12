@@ -14,4 +14,5 @@ export const IMPORTED_SPRITES = Object.freeze([
   'player_idle.png',
   'player_walk_down.png',
   'player_walk_up.png',
+  'player_walk_side.png',
 ])

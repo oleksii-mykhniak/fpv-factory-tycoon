@@ -2,7 +2,14 @@
 //
 // Запуск:
 //   node scripts/import-ai-sheet.js <вхід.png> <ім'я> [--rows=6] [--cols=6]
-//                                   [--height=128] [--frames=N] [--bg=RRGGBB]
+//                                   [--height=128] [--skip=N] [--frames=N]
+//                                   [--bg=RRGGBB]
+//
+// --rows/--cols описують ВХІД (сітку експорту, вона є в імені файлу), --skip і
+// --frames вирізають із неї корисний діапазон. Генератор любить починати цикл
+// із розгону — кілька кадрів, де персонаж нахиляється й розпрямляється; у грі
+// цикл крутиться нескінченно, і цей розгін виглядає як судома. --skip=12 його
+// відрізає.
 //
 // Що робить, по кроках:
 //   1. читає PNG (png-decode.js);
@@ -11,7 +18,11 @@
 //   3. рахує ОДНУ рамку вмісту на всі кадри, тому персонаж не стрибає
 //      між кадрами: рух лишається рухом, а не тремтінням обрізки;
 //   4. зменшує боксфільтром по попередньо помноженій альфі;
-//   5. пише сітку rows×cols у public/sprites/<ім'я>.png.
+//   5. пише ОДИН рядок кадрів у public/sprites/<ім'я>.png.
+//
+// Вихід саме рядком, а не сіткою: тоді ширина кадру = ширина файлу / кількість
+// кадрів, і грі досить знати ОДНЕ число замість трьох. Три числа, які мусять
+// збігатися з файлом, — це три способи порізати персонажа навпіл.
 //
 // Крок 3 — причина, чому це скрипт, а не разова команда: обрізати кожен кадр
 // по його власному вмісту здається правильним рівно доти, доки персонаж не
@@ -37,15 +48,19 @@ const flag = (name, dflt) => {
 const positional = args.filter(a => !a.startsWith('--'))
 const [inputPath, outName] = positional
 if (!inputPath || !outName) {
-  console.error('usage: node scripts/import-ai-sheet.js <вхід.png> <ім\'я> [--rows=6] [--cols=6] [--height=128]')
+  console.error('usage: node scripts/import-ai-sheet.js <вхід.png> <ім\'я> [--rows=6] [--cols=6] [--height=128] [--skip=0] [--frames=N]')
   process.exit(1)
 }
 
 const rows     = Number(flag('rows', 6))
 const cols     = Number(flag('cols', 6))
 const outH     = Number(flag('height', 128))
-const frames   = Number(flag('frames', rows * cols))
+const skip     = Number(flag('skip', 0))
+const frames   = Number(flag('frames', rows * cols - skip))
 const bgFlag   = flag('bg', null)
+
+// Індекси кадрів у ВХІДНІЙ сітці, які потраплять у вихід.
+const picked = [...Array(frames).keys()].map(i => skip + i).filter(f => f < rows * cols)
 
 const src = decodePng(readFileSync(inputPath))
 const fw = Math.floor(src.width / cols)
@@ -90,7 +105,7 @@ function clamp255(v) { return Math.max(0, Math.min(255, Math.round(v))) }
 
 // Спільна рамка вмісту на всі кадри — крок 3.
 let minX = fw, minY = fh, maxX = -1, maxY = -1
-for (let f = 0; f < frames; f++) {
+for (const f of picked) {
   const ox = (f % cols) * fw
   const oy = Math.floor(f / cols) * fh
   for (let y = 0; y < fh; y++) {
@@ -139,14 +154,12 @@ function sampleFrame(f, dst, dstW, dx0, dy0) {
   }
 }
 
-const sheetW = outW * cols
-const sheetH = outH * rows
+const sheetW = outW * picked.length
+const sheetH = outH
 const out = Buffer.alloc(sheetW * sheetH * 4)
-for (let f = 0; f < frames; f++) {
-  sampleFrame(f, out, sheetW, (f % cols) * outW, Math.floor(f / cols) * outH)
-}
+picked.forEach((f, i) => sampleFrame(f, out, sheetW, i * outW, 0))
 
 const outPath = `public/sprites/${outName}.png`
 writeFileSync(outPath, encodePng(sheetW, sheetH, out))
-console.log(`✓ ${outPath}  ${sheetW}×${sheetH}  (кадр ${outW}×${outH}, сітка ${cols}×${rows}, кадрів ${frames})`)
+console.log(`✓ ${outPath}  ${sheetW}×${sheetH}  (кадр ${outW}×${outH}, кадрів ${picked.length}, пропущено ${skip})`)
 console.log(`  фон #${[br, bg_, bb].map(v => v.toString(16).padStart(2, '0')).join('')}, рамка ${cropW}×${cropH} з ${fw}×${fh}`)

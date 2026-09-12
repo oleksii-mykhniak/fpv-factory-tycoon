@@ -134,17 +134,23 @@ export const CAMERA_FRICTION   = 0.28
 //                 окремі цикли для ходи вгору й вниз, плюс айдл
 export const CHARACTER_ART = 'ai'
 
-// Сітка ШІ-аркушів і темп їхніх циклів (Стадія 16). Числа мусять збігатися з
-// тим, чим імпортували аркуш: сітку зашито в його ім'я на експорті
-// (`frames-36-rows-6-cols-6`), і розійтися їй з грою — значить порізати
-// персонажа навпіл.
-export const AI_SHEET_ROWS   = 6
-export const AI_SHEET_COLS   = 6
-export const AI_SHEET_FRAMES = 36
-// 36 кадрів на цикл — це майже півтори секунди на крок при 40 мс. Ходу видно
-// як ходу приблизно від 24 кадрів за секунду.
-export const AI_FRAME_MS_WALK = 42
-export const AI_FRAME_MS_IDLE = 90
+// ШІ-аркуші гравця (Стадія 16). Кожен — ОДИН рядок кадрів, тому ширина кадру
+// виводиться з файлу, а звідси потрібне єдине число: скільки в ньому кадрів.
+// Воно мусить збігатися з тим, що надрукував import-ai-sheet.js.
+//
+// Виду збоку арт дає лише в ОДИН бік — протилежний рушій робить
+// віддзеркаленням. Це не економія на якості: два боки, намальовані окремо,
+// розійшлися б у зрості й довжині кроку, і персонаж мінявся б на повороті.
+export const AI_SHEETS = Object.freeze({
+  idle: { key: 'player_idle',      frames: 36, frameMs: 90 },
+  down: { key: 'player_walk_down', frames: 36, frameMs: 42 },
+  up:   { key: 'player_walk_up',   frames: 36, frameMs: 42 },
+  side: { key: 'player_walk_side', frames: 24, frameMs: 42 },
+})
+
+// У який бік дивиться персонаж на аркуші `side`. Наш іде ЛІВОРУЧ, тому
+// дзеркалити треба рух праворуч.
+export const AI_SIDE_FACES_RIGHT = false
 
 // ── Scale (V1) ───────────────────────────────────────────
 // The character is the ruler. Every size in the game is written as a fraction

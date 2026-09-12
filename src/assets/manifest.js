@@ -158,6 +158,12 @@ export const SPRITES = Object.freeze({
     anchors: {},
   },
 
+  // Бік намальований лише в один бік — протилежний рушій дзеркалить.
+  player_walk_side: {
+    url: `${BASE}sprites/player_walk_side.png`,
+    anchors: {},
+  },
+
   racing_drone: {
     url: `${BASE}sprites/racing_drone.png`,
     anchors: {},

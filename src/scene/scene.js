@@ -9,8 +9,7 @@ import {
   FLOAT_GAIN_JITTER_X, FLOAT_GAIN_JITTER_Y, FLOAT_GAIN_DRIFT_X,
   CHARACTER_U as TILE_U,
   CHARACTER_ART,
-  AI_SHEET_ROWS, AI_SHEET_COLS, AI_SHEET_FRAMES,
-  AI_FRAME_MS_WALK, AI_FRAME_MS_IDLE,
+  AI_SHEETS, AI_SIDE_FACES_RIGHT,
   INTAKE_CAPACITY,
   u,
 } from '../state/config.js'
@@ -1147,18 +1146,13 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     // Аркуші з ШІ поки є лише для гравця (Стадія 16) — решта людей лишається
     // на старому ригу, тому це перевірка «чи є арт саме для ЦІЄЇ ролі», а не
     // глобальний перемикач.
-    const aiSheets = CHARACTER_ART === 'ai' && tiles === 'player' && {
-      idle: getSprite('player_idle'),
-      down: getSprite('player_walk_down'),
-      up:   getSprite('player_walk_up'),
-    }
+    const aiSheets = CHARACTER_ART === 'ai' && tiles === 'player' &&
+      Object.fromEntries(Object.entries(AI_SHEETS)
+        .map(([dir, e]) => [dir, { ...e, image: getSprite(e.key) }]))
     const pair = CHARACTER_ART === 'kenney' && tiles && TILE_CHARACTER[tiles]
     const frontImg = pair && getSprite(pair[0])
-    const rig = (aiSheets && (aiSheets.down || aiSheets.idle))
-      ? createSheetCharacter(actor, aiSheets, {
-          rows: AI_SHEET_ROWS, cols: AI_SHEET_COLS, frames: AI_SHEET_FRAMES,
-          frameMsWalk: AI_FRAME_MS_WALK, frameMsIdle: AI_FRAME_MS_IDLE,
-        })
+    const rig = (aiSheets && aiSheets.down.image)
+      ? createSheetCharacter(actor, aiSheets, { sideFacesRight: AI_SIDE_FACES_RIGHT })
       : frontImg
       ? createTileCharacter(actor, frontImg, getSprite(pair[1]))
       : createCharacterSprite(actor, getSprite(spriteKey), tint ? color : null)
