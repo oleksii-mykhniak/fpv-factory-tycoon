@@ -148,6 +148,13 @@ export const SPRITES = Object.freeze({
     anchors: {},
   },
 
+  // Айдл спиною: коли гравець спинився, ідучи вгору, він НЕ розвертається до
+  // глядача — стоїть, як стояв.
+  player_idle_up: {
+    url: `${BASE}sprites/player_idle_up.png`,
+    anchors: {},
+  },
+
   player_walk_down: {
     url: `${BASE}sprites/player_walk_down.png`,
     anchors: {},

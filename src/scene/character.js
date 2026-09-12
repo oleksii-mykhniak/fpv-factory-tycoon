@@ -1,5 +1,6 @@
 import * as ex from 'excalibur'
 import { frameMs } from './frame.js'
+import { pickPose } from './pose.js'
 
 // Shared walk-cycle rig for every humanoid in the scene.
 //
@@ -118,7 +119,11 @@ export function createCharacterSprite(actor, imageSource, tintHex = null) {
 // по ВИСОТІ актора, а ширина виводиться з пропорції кадру. Розтягти його на
 // квадратний бокс актора означало б розплющити людину.
 //
-// `sheets` — { idle, down, up, side }, кожен: { image, frames, frameMs }.
+// Айдлів два — спереду й ззаду. Персонаж, що спинився дорогою вгору, стоїть
+// спиною: розворот до глядача на кожній зупинці — це рух, якого гравець не
+// наказував, і він щоразу перебиває напрямок, у якому гравець щойно йшов.
+//
+// `sheets` — { idle, idleUp, down, up, side }, кожен: { image, frames, frameMs }.
 export function createSheetCharacter(actor, sheets, { sideFacesRight = false } = {}) {
   const build = (entry) => {
     if (!entry?.image) return null
@@ -137,36 +142,43 @@ export function createSheetCharacter(actor, sheets, { sideFacesRight = false } =
     return anim
   }
 
-  const idle = build(sheets.idle)
-  const down = build(sheets.down) ?? idle
-  const up   = build(sheets.up)   ?? down
-  const side = build(sheets.side) ?? down
+  const idle   = build(sheets.idle)
+  const down   = build(sheets.down)   ?? idle
+  const up     = build(sheets.up)     ?? down
+  const side   = build(sheets.side)   ?? down
+  const idleUp = build(sheets.idleUp) ?? up
   if (!down) return { setMoving: () => {} }
 
-  actor.graphics.add('idle', idle ?? down)
-  actor.graphics.add('down', down)
-  actor.graphics.add('up',   up)
-  actor.graphics.add('side', side)
+  actor.graphics.add('idle',   idle ?? down)
+  actor.graphics.add('idleUp', idleUp ?? idle ?? down)
+  actor.graphics.add('down',   down)
+  actor.graphics.add('up',     up)
+  actor.graphics.add('side',   side)
   actor.graphics.use('idle')
 
   // Чи є бічний аркуш ОКРЕМИМ артом. Коли його немає, бік грає передній цикл, і
   // дзеркалити його за напрямком не можна: персонаж дивиться в кадр, і
   // віддзеркалений фас — це просто фас із проділом на інший бік.
   const hasSide = Boolean(sheets.side?.image)
+  // Без окремого аркуша спиною стояти спиною нема в чому: підстановка `up`
+  // крутила б крок на місці, і це гірше за розворот.
+  const hasIdleUp = Boolean(sheets.idleUp?.image)
+
+  // Куди персонаж дивився, коли востаннє рухався. Напрямок доводиться пам'ятати
+  // саме тут: у мить зупинки швидкість уже нульова й сама по собі не каже
+  // нічого про те, куди людина щойно йшла.
+  let facedAway = false
 
   return {
-    // vy > 0 — вниз по екрану (до глядача), vy < 0 — вгору (від глядача).
-    // Порівнюємо модулі, а не пороги: чистий горизонтальний хід не має
-    // перемикати на вид ззаду через дрібне розштовхування в натовпі.
+    // Саме рішення — у pose.js: воно чисте й тому перевірене тестами, тут
+    // лишається тільки те, заради чого потрібен excalibur.
     setMoving(moving, facingRight = true, vy = 0, vx = 0) {
-      if (!moving) { actor.graphics.use('idle'); actor.graphics.flipHorizontal = false; return }
-      if (Math.abs(vy) > Math.abs(vx)) {
-        actor.graphics.use(vy < 0 ? 'up' : 'down')
-        actor.graphics.flipHorizontal = false
-        return
-      }
-      actor.graphics.use(hasSide ? 'side' : 'down')
-      actor.graphics.flipHorizontal = hasSide && facingRight !== sideFacesRight
+      const pose = pickPose({
+        moving, vx, vy, facingRight, facedAway, hasSide, hasIdleUp, sideFacesRight,
+      })
+      facedAway = pose.facedAway
+      actor.graphics.use(pose.name)
+      actor.graphics.flipHorizontal = pose.flip
     },
   }
 }

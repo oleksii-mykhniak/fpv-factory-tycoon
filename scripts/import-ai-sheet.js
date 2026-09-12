@@ -3,7 +3,7 @@
 // Запуск:
 //   node scripts/import-ai-sheet.js <вхід.png> <ім'я> [--rows=6] [--cols=6]
 //                                   [--height=128] [--skip=N] [--frames=N]
-//                                   [--bg=RRGGBB]
+//                                   [--bg=RRGGBB|none] [--json=аркуш.json]
 //
 // --rows/--cols описують ВХІД (сітку експорту, вона є в імені файлу), --skip і
 // --frames вирізають із неї корисний діапазон. Генератор любить починати цикл
@@ -12,9 +12,11 @@
 // відрізає.
 //
 // Що робить, по кроках:
-//   1. читає PNG (png-decode.js);
+//   1. читає PNG (png-decode.js), а сітку кадрів бере з --json, якщо він є;
 //   2. вибиває фон-хромакей у прозорість — м'яко, з двома порогами, тому
-//      контур не отримує фіолетової облямівки;
+//      контур не отримує фіолетової облямівки. Аркуш, який уже прийшов із
+//      прозорістю, цей крок ПРОПУСКАЄ: там «фон» у кутах — нулі, і хромакей
+//      порівнював би все з чорним, з'їдаючи чорний контур персонажа;
 //   3. рахує ОДНУ рамку вмісту на всі кадри, тому персонаж не стрибає
 //      між кадрами: рух лишається рухом, а не тремтінням обрізки;
 //   4. зменшує боксфільтром по попередньо помноженій альфі;
@@ -48,7 +50,7 @@ const flag = (name, dflt) => {
 const positional = args.filter(a => !a.startsWith('--'))
 const [inputPath, outName] = positional
 if (!inputPath || !outName) {
-  console.error('usage: node scripts/import-ai-sheet.js <вхід.png> <ім\'я> [--rows=6] [--cols=6] [--height=128] [--skip=0] [--frames=N]')
+  console.error('usage: node scripts/import-ai-sheet.js <вхід.png> <ім\'я> [--rows=6] [--cols=6] [--height=128] [--skip=0] [--frames=N] [--bg=RRGGBB|none] [--json=аркуш.json]')
   process.exit(1)
 }
 
@@ -56,21 +58,55 @@ const rows     = Number(flag('rows', 6))
 const cols     = Number(flag('cols', 6))
 const outH     = Number(flag('height', 128))
 const skip     = Number(flag('skip', 0))
-const frames   = Number(flag('frames', rows * cols - skip))
+const framesFlag = flag('frames', null)
 const bgFlag   = flag('bg', null)
-
-// Індекси кадрів у ВХІДНІЙ сітці, які потраплять у вихід.
-const picked = [...Array(frames).keys()].map(i => skip + i).filter(f => f < rows * cols)
+const jsonPath = flag('json', null)
 
 const src = decodePng(readFileSync(inputPath))
-const fw = Math.floor(src.width / cols)
-const fh = Math.floor(src.height / rows)
+
+// Сітка кадрів. Ділення розміру на rows/cols — здогад, який збігається з
+// правдою рівно доти, доки генератор не лишить скраю зайвого пікселя. JSON
+// (його кладе в архів Ludo.ai) містить рамку КОЖНОГО кадру, тож коли він є —
+// віримо йому, а сітку з імені файлу використовуємо лише як перевірку.
+let rects
+if (jsonPath) {
+  const atlas = JSON.parse(readFileSync(jsonPath, 'utf8'))
+  rects = Object.values(atlas.frames ?? {}).map(f => f.frame)
+  if (!rects.length) { console.error(`${jsonPath}: немає frames`); process.exit(1) }
+  const odd = rects.find(r => r.w !== rects[0].w || r.h !== rects[0].h)
+  // Спільна рамка вмісту (крок 3) має сенс лише коли кадри однакові.
+  if (odd) { console.error('кадри різного розміру — такий аркуш скрипт не ріже'); process.exit(1) }
+} else {
+  const gw = Math.floor(src.width / cols), gh = Math.floor(src.height / rows)
+  rects = [...Array(rows * cols).keys()].map(f => ({
+    x: (f % cols) * gw, y: Math.floor(f / cols) * gh, w: gw, h: gh,
+  }))
+}
+const fw = rects[0].w
+const fh = rects[0].h
+if (!jsonPath && rows * cols !== rects.length) { console.error('сітка не збігається'); process.exit(1) }
+
+// Індекси кадрів у ВХІДНІЙ сітці, які потраплять у вихід. Який діапазон
+// вирізати, підказує scripts/analyze-ai-sheet.js: він шукає вікно, де останній
+// кадр переходить у перший так само м'яко, як кадри всередині вікна.
+const frames = Number(framesFlag ?? rects.length - skip)
+const picked = [...Array(frames).keys()].map(i => skip + i).filter(f => f < rects.length)
+if (!picked.length) { console.error('порожній діапазон: перевір --skip/--frames'); process.exit(1) }
+
+// Чи прийшов аркуш уже з прозорістю. Кути — гарантований фон; якщо вони
+// прозорі, генератор віддав альфу сам, і вибивати нічого не треба.
+function alphaNative() {
+  if (bgFlag === 'none') return true
+  if (bgFlag) return false
+  return [[1, 1], [src.width - 2, 1], [1, src.height - 2], [src.width - 2, src.height - 2]]
+    .every(([x, y]) => src.pixels[(y * src.width + x) * 4 + 3] < 8)
+}
 
 // Фон беремо з кутів: генератор кладе персонажа в центр кадру, тож усі чотири
 // кути — це гарантовано фон. Медіана трьох каналів захищає від одного кута,
 // що випадково зачепив вміст.
 function bgColor() {
-  if (bgFlag) return [0, 2, 4].map(i => parseInt(bgFlag.slice(i, i + 2), 16))
+  if (bgFlag && bgFlag !== 'none') return [0, 2, 4].map(i => parseInt(bgFlag.slice(i, i + 2), 16))
   const pick = []
   for (const [x, y] of [[1, 1], [src.width - 2, 1], [1, src.height - 2], [src.width - 2, src.height - 2]]) {
     const i = (y * src.width + x) * 4
@@ -81,11 +117,13 @@ function bgColor() {
     return Math.round((v[1] + v[2]) / 2)
   })
 }
-const [br, bg_, bb] = bgColor()
+const keyless = alphaNative()
+const [br, bg_, bb] = keyless ? [0, 0, 0] : bgColor()
 
 // Хромакей + деспіл в один прохід: RGBA-буфер того самого розміру, що й вхід.
 const keyed = Buffer.alloc(src.width * src.height * 4)
-for (let i = 0; i < src.width * src.height; i++) {
+if (keyless) src.pixels.copy(keyed)
+else for (let i = 0; i < src.width * src.height; i++) {
   const p = i * 4
   const r = src.pixels[p], g = src.pixels[p + 1], b = src.pixels[p + 2]
   const d = Math.hypot(r - br, g - bg_, b - bb)
@@ -106,8 +144,8 @@ function clamp255(v) { return Math.max(0, Math.min(255, Math.round(v))) }
 // Спільна рамка вмісту на всі кадри — крок 3.
 let minX = fw, minY = fh, maxX = -1, maxY = -1
 for (const f of picked) {
-  const ox = (f % cols) * fw
-  const oy = Math.floor(f / cols) * fh
+  const ox = rects[f].x
+  const oy = rects[f].y
   for (let y = 0; y < fh; y++) {
     for (let x = 0; x < fw; x++) {
       if (keyed[((oy + y) * src.width + ox + x) * 4 + 3] < 24) continue
@@ -118,7 +156,7 @@ for (const f of picked) {
     }
   }
 }
-if (maxX < 0) { console.error('порожньо: хромакей вибив усе — перевір --bg'); process.exit(1) }
+if (maxX < 0) { console.error('порожньо: у вибраних кадрах нема непрозорих пікселів — перевір --bg/--skip'); process.exit(1) }
 
 minX = Math.max(0, minX - PAD); minY = Math.max(0, minY - PAD)
 maxX = Math.min(fw - 1, maxX + PAD); maxY = Math.min(fh - 1, maxY + PAD)
@@ -129,8 +167,8 @@ const outW  = Math.max(1, Math.round(outH * cropW / cropH))
 // Боксфільтр по попередньо помноженій альфі: множити треба ДО усереднення,
 // інакше колір прозорих пікселів (а він довільний) підмішується в контур.
 function sampleFrame(f, dst, dstW, dx0, dy0) {
-  const ox = (f % cols) * fw + minX
-  const oy = Math.floor(f / cols) * fh + minY
+  const ox = rects[f].x + minX
+  const oy = rects[f].y + minY
   for (let y = 0; y < outH; y++) {
     const y0 = Math.floor(y * cropH / outH), y1 = Math.max(y0 + 1, Math.floor((y + 1) * cropH / outH))
     for (let x = 0; x < outW; x++) {
@@ -162,4 +200,6 @@ picked.forEach((f, i) => sampleFrame(f, out, sheetW, i * outW, 0))
 const outPath = `public/sprites/${outName}.png`
 writeFileSync(outPath, encodePng(sheetW, sheetH, out))
 console.log(`✓ ${outPath}  ${sheetW}×${sheetH}  (кадр ${outW}×${outH}, кадрів ${picked.length}, пропущено ${skip})`)
-console.log(`  фон #${[br, bg_, bb].map(v => v.toString(16).padStart(2, '0')).join('')}, рамка ${cropW}×${cropH} з ${fw}×${fh}`)
+console.log(keyless
+  ? `  прозорість із файлу (хромакей не потрібен), рамка ${cropW}×${cropH} з ${fw}×${fh}`
+  : `  фон #${[br, bg_, bb].map(v => v.toString(16).padStart(2, '0')).join('')}, рамка ${cropW}×${cropH} з ${fw}×${fh}`)
