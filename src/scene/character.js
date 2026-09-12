@@ -123,7 +123,8 @@ export function createCharacterSprite(actor, imageSource, tintHex = null) {
 // спиною: розворот до глядача на кожній зупинці — це рух, якого гравець не
 // наказував, і він щоразу перебиває напрямок, у якому гравець щойно йшов.
 //
-// `sheets` — { idle, idleUp, down, up, side }, кожен: { image, frames, frameMs }.
+// `sheets` — { idle, idleUp, down, up, side, upCarry }, кожен:
+// { image, frames, frameMs }.
 export function createSheetCharacter(actor, sheets, { sideFacesRight = false } = {}) {
   const build = (entry) => {
     if (!entry?.image) return null
@@ -146,14 +147,16 @@ export function createSheetCharacter(actor, sheets, { sideFacesRight = false } =
   const down   = build(sheets.down)   ?? idle
   const up     = build(sheets.up)     ?? down
   const side   = build(sheets.side)   ?? down
-  const idleUp = build(sheets.idleUp) ?? up
+  const idleUp  = build(sheets.idleUp)  ?? up
+  const upCarry = build(sheets.upCarry) ?? up
   if (!down) return { setMoving: () => {} }
 
   actor.graphics.add('idle',   idle ?? down)
   actor.graphics.add('idleUp', idleUp ?? idle ?? down)
   actor.graphics.add('down',   down)
   actor.graphics.add('up',     up)
-  actor.graphics.add('side',   side)
+  actor.graphics.add('side',    side)
+  actor.graphics.add('upCarry', upCarry)
   actor.graphics.use('idle')
 
   // Чи є бічний аркуш ОКРЕМИМ артом. Коли його немає, бік грає передній цикл, і
@@ -163,6 +166,7 @@ export function createSheetCharacter(actor, sheets, { sideFacesRight = false } =
   // Без окремого аркуша спиною стояти спиною нема в чому: підстановка `up`
   // крутила б крок на місці, і це гірше за розворот.
   const hasIdleUp = Boolean(sheets.idleUp?.image)
+  const hasUpCarry = Boolean(sheets.upCarry?.image)
 
   // Куди персонаж дивився, коли востаннє рухався. Напрямок доводиться пам'ятати
   // саме тут: у мить зупинки швидкість уже нульова й сама по собі не каже
@@ -172,13 +176,17 @@ export function createSheetCharacter(actor, sheets, { sideFacesRight = false } =
   return {
     // Саме рішення — у pose.js: воно чисте й тому перевірене тестами, тут
     // лишається тільки те, заради чого потрібен excalibur.
-    setMoving(moving, facingRight = true, vy = 0, vx = 0) {
+    setMoving(moving, facingRight = true, vy = 0, vx = 0, carrying = false) {
       const pose = pickPose({
-        moving, vx, vy, facingRight, facedAway, hasSide, hasIdleUp, sideFacesRight,
+        moving, vx, vy, facingRight, facedAway, carrying,
+        hasSide, hasIdleUp, hasUpCarry, sideFacesRight,
       })
       facedAway = pose.facedAway
       actor.graphics.use(pose.name)
       actor.graphics.flipHorizontal = pose.flip
+      // Сцені треба знати, чи предмет зараз у руках, чи над головою: місце
+      // предмета визначає поза, а не навпаки.
+      return pose.name
     },
   }
 }

@@ -23,7 +23,8 @@ import { INTERACTIONS, carrySpriteKey, zoneWantsAttention } from '../defs/intera
 import { dwellProgress } from '../sim/systems/zone.js'
 import { piggyShouldShow, nextObjective } from '../sim/derive.js'
 import { ruleAt } from '../state/locations.js'
-import { CARRY_STACK_OFFSET_Y, VIEW_SMOOTHING, SALVAGE_RATE } from '../state/config.js'
+import { CARRY_STACK_OFFSET_Y, VIEW_SMOOTHING, SALVAGE_RATE,
+         CARRY_IN_HANDS_Y } from '../state/config.js'
 import * as ex from 'excalibur'
 
 // Purely presentational memo: which sprite is on the drone actor right now, and
@@ -167,8 +168,14 @@ export function syncScene(refs, world) {
     // Напрямок ходу, а не лише «вліво/вправо»: ригу з ШІ-аркушами (Стадія 16)
     // потрібна вертикальна швидкість, щоб вибрати вид ззаду чи спереду.
     // Старі риги зайві аргументи ігнорують.
-    refs.playerRig?.setMoving(player.moving, player.facing > 0, player.vy ?? 0, player.vx ?? 0)
-    syncCarryStack(refs.carrySlotActors, refs.player, player)
+    // П'ятий аргумент — чи є що нести: від нього залежить поза (руки вперед),
+    // а від пози — де опиниться предмет. Старі риги зайві аргументи ігнорують
+    // і повертають undefined, тому стек лишається над головою, як і був.
+    const pose = refs.playerRig?.setMoving(
+      player.moving, player.facing > 0, player.vy ?? 0, player.vx ?? 0,
+      (player.carrying?.length ?? 0) > 0,
+    )
+    syncCarryStack(refs.carrySlotActors, refs.player, player, pose === 'upCarry')
     syncDwell(refs, world, player)
     syncArrow(refs, world, player)
   }
@@ -278,8 +285,14 @@ function syncWorkers(refs, world) {
 
 // Items float above the head, stacked upward in pickup order. Shared by the
 // player and every hired worker.
-function syncCarryStack(slots, bodyActor, agent) {
+// `inHands` — персонаж у позі з руками вперед (йде від глядача). Тоді предмет
+// сидить на рівні пояса ЗА фігурою, і назовні видно самі його краї. У решті
+// випадків стек висить над головою, як і раніше.
+function syncCarryStack(slots, bodyActor, agent, inHands = false) {
   const items = agent.carrying ?? []
+  const baseY = inHands
+    ? bodyActor.pos.y + bodyActor.height * CARRY_IN_HANDS_Y
+    : bodyActor.pos.y - bodyActor.height * 0.55
 
   ;(slots ?? []).forEach((actor, i) => {
     const item = items[i]
@@ -295,8 +308,18 @@ function syncCarryStack(slots, bodyActor, agent) {
       actor._carryKey = key
     }
     actor.pos.x = bodyActor.pos.x
-    actor.pos.y = bodyActor.pos.y - bodyActor.height * 0.55 - i * CARRY_STACK_OFFSET_Y
-    actor.z = bodyActor.pos.y * 0.01 + 1 + i * 0.01
+    // Другий і третій предмети стають НА перший — і в руках, і над головою це
+    // та сама стопка, лише з різною точкою опори. Сьогодні це недосяжна гілка:
+    // CARRY_CAPACITY === 1. Якщо місткість колись виросте, стопку В РУКАХ
+    // доведеться переглянути: три коробки заввишки третину людини кожна
+    // ховають голову, і над головою вони читаються краще, ніж у руках.
+    actor.pos.y = baseY - i * CARRY_STACK_OFFSET_Y
+    // У руках предмет ЗА фігурою: він далі від камери, ніж спина того, хто
+    // його несе. Тому персонаж перекриває його, а з боків видно краї — саме це
+    // й читається як «несе перед собою», а не «тримає замість тулуба».
+    actor.z = inHands
+      ? bodyActor.pos.y * 0.01 - 0.5 + i * 0.01
+      : bodyActor.pos.y * 0.01 + 1 + i * 0.01
     actor.graphics.visible = true
   })
 }

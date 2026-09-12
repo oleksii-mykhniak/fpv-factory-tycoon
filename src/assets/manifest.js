@@ -165,6 +165,13 @@ export const SPRITES = Object.freeze({
     anchors: {},
   },
 
+  // Хода від глядача з предметом у руках. Руки в аркуші ПОРОЖНІ: коробку (або
+  // дрон — носять і його) кладе сцена, бо предмет у руках буває різний.
+  player_walk_up_carry: {
+    url: `${BASE}sprites/player_walk_up_carry.png`,
+    anchors: {},
+  },
+
   // Бік намальований лише в один бік — протилежний рушій дзеркалить.
   player_walk_side: {
     url: `${BASE}sprites/player_walk_side.png`,

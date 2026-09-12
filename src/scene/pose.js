@@ -11,9 +11,14 @@
 // нести ззовні; функція його не зберігає, а повертає новий.
 //
 // vy > 0 — вниз по екрану (до глядача), vy < 0 — вгору (від глядача).
+//
+// `carrying` вмикає позу з руками вперед. Сама коробка в аркуші НЕ намальована —
+// у грі в руках буває і коробка, і готовий дрон, і згорілий (`carrySpriteKey`),
+// тож предмет кладе згори сцена. Запечений в арт ящик брехав би в двох випадках
+// із трьох.
 export function pickPose({
-  moving, vx = 0, vy = 0, facingRight = true, facedAway = false,
-  hasSide = false, hasIdleUp = false, sideFacesRight = false,
+  moving, vx = 0, vy = 0, facingRight = true, facedAway = false, carrying = false,
+  hasSide = false, hasIdleUp = false, hasUpCarry = false, sideFacesRight = false,
 }) {
   if (!moving) {
     // Спиною стоїмо лише коли є чим: без окремого аркуша підстановка ходи
@@ -24,7 +29,12 @@ export function pickPose({
   // перемикати на вид ззаду через дрібне розштовхування в натовпі.
   if (Math.abs(vy) > Math.abs(vx)) {
     const away = vy < 0
-    return { name: away ? 'up' : 'down', flip: false, facedAway: away }
+    // Нести-поза намальована ЛИШЕ для ходи від глядача: там руки виставлені
+    // вперед і порожні, тобто предмет у них кладе гра, а не аркуш. У решті
+    // напрямків предмет лишається над головою — інакше його довелося б чіпляти
+    // до фігури з опущеними руками.
+    const carryAway = away && carrying && hasUpCarry
+    return { name: carryAway ? 'upCarry' : away ? 'up' : 'down', flip: false, facedAway: away }
   }
   // Бічний хід — профіль, а не спина: спинившись після нього, персонаж
   // стоїть обличчям.

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { pickPose } from './pose.js'
 
 // Риг із ШІ-аркушів: що показуємо і куди дивимось.
-const full = { hasSide: true, hasIdleUp: true, sideFacesRight: false }
+const full = { hasSide: true, hasIdleUp: true, hasUpCarry: true, sideFacesRight: false }
 const walk = (o) => pickPose({ moving: true, ...full, ...o })
 const stop = (facedAway) => pickPose({ moving: false, facedAway, ...full })
 
@@ -57,5 +57,34 @@ describe('pickPose — зупинка', () => {
   it('стоячи ніколи не дзеркалимо — інакше проділ стрибав би на зупинці', () => {
     expect(stop(true).flip).toBe(false)
     expect(stop(false).flip).toBe(false)
+  })
+})
+
+describe('pickPose — предмет у руках', () => {
+  it('несучи вгору — поза з руками вперед', () => {
+    expect(walk({ vy: -40, carrying: true }).name).toBe('upCarry')
+  })
+
+  it('несучи вниз — звичайний передній цикл, предмет лишається над головою', () => {
+    expect(walk({ vy: 40, carrying: true }).name).toBe('down')
+  })
+
+  it('несучи вбік — звичайний бічний цикл', () => {
+    expect(walk({ vx: 40, carrying: true }).name).toBe('side')
+  })
+
+  it('вгору з порожніми руками — звичайний вид ззаду', () => {
+    expect(walk({ vy: -40, carrying: false }).name).toBe('up')
+  })
+
+  it('без аркуша нести-пози вгору з вантажем грає звичайний вид ззаду', () => {
+    const p = pickPose({ moving: true, vy: -40, carrying: true, hasUpCarry: false })
+    expect(p.name).toBe('up')
+  })
+
+  it('спинившись із вантажем, стоїмо спиною — нести-поза не для стояння', () => {
+    const w = walk({ vy: -40, carrying: true })
+    expect(w.facedAway).toBe(true)
+    expect(stop(true).name).toBe('idleUp')
   })
 })
