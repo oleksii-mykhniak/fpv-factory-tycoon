@@ -226,4 +226,31 @@ describe('C7 — locations are floor plans, not palettes', () => {
       }
     }
   })
+
+  // Стадія 17 / двір. Паркан має бути СУЦІЛЬНИМ по нижній межі — це єдина
+  // сторона, де немає ні стіни будинку, ні краю світу впритул, тобто єдина, де
+  // «вийти за локацію» справді означало б вийти в порожнечу.
+  //
+  // Перевіряється саме нижній прогін разом із хвіртками: вони вирізають у
+  // ньому проріз, і якщо проріз і стулки розійдуться хоч на піксель, дірка
+  // буде рівно там, куди гравець і йде.
+  it('двір замкнений: у нижньому прогоні паркана немає щілин', () => {
+    for (const extra of [{}, GARAGE]) {
+      const w = boot('apartment', extra)
+      const run = w.obstacles
+        .filter(o => Math.abs(o.y + o.h / 2 - (w.bounds.h - 24)) < 1)
+        .sort((a, b) => a.x - b.x)
+      expect(run.length, 'нижнього прогону взагалі немає').toBeGreaterThan(5)
+
+      let covered = 0
+      for (const box of run) {
+        expect(box.x, `щілина в паркані на x≈${Math.round(covered)}`)
+          .toBeLessThanOrEqual(covered + 0.01)
+        covered = Math.max(covered, box.x + box.w)
+      }
+      expect(covered, 'паркан не доходить до правого краю світу')
+        .toBeGreaterThanOrEqual(w.bounds.w - 0.01)
+    }
+  })
+
 })

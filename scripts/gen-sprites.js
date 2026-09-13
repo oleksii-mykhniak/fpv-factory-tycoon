@@ -890,6 +890,114 @@ function asphaltVariant(seed) {
   }
 }
 
+// Газон. Дворик перед будинком лежав на асфальті — вулиця була суцільною
+// проїжджою частиною, і зелень на ній зводилась до трьох кущів. Тепер асфальт
+// лишається там, де стоїть машина, а решта двору — трава.
+//
+// Пучок — це три пікселі стовпчиком, а не крапка: крапки на такій щільності
+// читаються як шум сканера, а вертикальний штрих читається як трава навіть
+// коли він завширшки в піксель. Основа темна, пучки світлі: газон, у якого
+// світла основа, на екрані стає салатовою плямою й перетягує на себе погляд,
+// якого заслуговує персонаж.
+function grassVariant(seed) {
+  return (px, w, h) => {
+    box(px, w, 0, 0, w, h, P.leafLo, null, null)
+    for (let i = 0; i < 26; i++) {
+      const x = ((i * 17 + seed * 11) % w)
+      const y = ((i * 23 + seed * 29) % (h - 3))
+      const col = (i + seed) % 4 === 0 ? P.leafHi : P.leaf
+      fillRect(px, w, x, y, x, y + 2, ...col)
+    }
+    // Кілька темних прогалин, щоб трава не була рівною щіткою.
+    for (let i = 0; i < 5; i++) {
+      const x = ((i * 31 + seed * 7) % (w - 2))
+      const y = ((i * 13 + seed * 19) % (h - 1))
+      fillRect(px, w, x, y, x + 1, y, ...P.leafLo)
+    }
+  }
+}
+
+// Тротуарна плитка двору. Окрема від `tile_concrete`, і не з примхи: бетон
+// цеху має світлий шов на темній основі, тобто на великій площі дає яскраву
+// сітку 74×74 — у цеху вона читається як розмітка підлоги, у дворі як кахель у
+// ванній. Тут навпаки: світла основа, шов темніший на крок, чотири плити на
+// клітинку замість однієї. І жодних тріщин: тріщина, повторена сотню разів,
+// перестає бути тріщиною й стає візерунком.
+function pavingVariant(seed) {
+  return (px, w, h) => {
+    box(px, w, 0, 0, w, h, P.metal, null, null)
+    const half = Math.round(w / 2)
+    fillRect(px, w, 0, 0, w - 1, 0, ...P.metalLo)
+    fillRect(px, w, 0, 0, 0, h - 1, ...P.metalLo)
+    fillRect(px, w, 0, half, w - 1, half, ...P.metalLo)
+    fillRect(px, w, half, 0, half, h - 1, ...P.metalLo)
+    // Ледь помітна різниця у відтінку плит — щоб чотири квадрати не читались
+    // як один, розкреслений навхрест. Світліша плита рівно в двох варіантах із
+    // трьох і по одній на клітинку: коли світлішала кожна клітинка, доріжка
+    // читалась як шахівниця, тобто як візерунок, якого ніхто не клав.
+    for (let i = 0; i < 4; i++) {
+      if (i !== seed) continue
+      const x = (i % 2) * half + 1
+      const y = Math.floor(i / 2) * half + 1
+      fillRect(px, w, x, y, x + half - 2, y + half - 2, ...P.metalHi)
+    }
+    for (let i = 0; i < 6; i++) {
+      const x = ((i * 23 + seed * 17) % (w - 2)) + 1
+      const y = ((i * 31 + seed * 11) % (h - 2)) + 1
+      fillRect(px, w, x, y, x, y, ...P.metalLo)
+    }
+  }
+}
+
+// ── Паркан ──────────────────────────────────────────────────────────────────
+//
+// Двір мусить мати межу, інакше «вийти за локацію» — це просто впертись у
+// невидиму стінку, і гравець бачить не двір, а край даних.
+//
+// Дві орієнтації, бо камера дивиться згори: паркан ПОПЕРЕК погляду показує
+// штахетник фасадом, паркан УЗДОВЖ — лише свою товщину зверху. Одним спрайтом,
+// повернутим на 90°, це не робиться: у другому випадку штахетини лягли б
+// плазом і читались як драбина на землі.
+function drawFenceH(px, w, h) {
+  const top = Math.round(h * 0.20)
+  // Дві поперечини за штахетинами.
+  fillRect(px, w, 0, top + Math.round(h * 0.18), w - 1, top + Math.round(h * 0.28), ...P.woodLo)
+  fillRect(px, w, 0, top + Math.round(h * 0.52), w - 1, top + Math.round(h * 0.62), ...P.woodLo)
+  for (let x = 1; x < w - 2; x += 8) {
+    box(px, w, x, top, 5, h - top - 1, P.wood, P.woodHi, P.woodLo)
+    // Загострена верхівка — те, за чим паркан упізнається силуетом.
+    fillRect(px, w, x, top, x, top + 1, ...P.woodLo)
+    fillRect(px, w, x + 4, top, x + 4, top + 1, ...P.woodLo)
+  }
+}
+
+function drawFenceV(px, w, h) {
+  box(px, w, Math.round(w * 0.22), 0, Math.round(w * 0.56), h, P.wood, null, null)
+  fillRect(px, w, Math.round(w * 0.22), 0, Math.round(w * 0.34), h - 1, ...P.woodHi)
+  fillRect(px, w, Math.round(w * 0.66), 0, Math.round(w * 0.78), h - 1, ...P.woodLo)
+  // Стовпчики через рівні проміжки: без них смуга читається як дошка на землі.
+  // Рідше й тонші за перший захід — на кожні 12 px по п'ять вони склались у
+  // драбину, а драбина, покладена на землю, це не паркан.
+  for (let y = 3; y < h - 3; y += 16)
+    box(px, w, Math.round(w * 0.06), y, Math.round(w * 0.88), 3, P.woodLo, P.wood, null)
+}
+
+// Хвіртка. Не отвір: двір закритий, і вона це показує — стулки на місці, але
+// малюнок інший, тож видно, ДЕ звідси виходять.
+function drawGate(px, w, h) {
+  const top = Math.round(h * 0.14)
+  const mid = Math.round(w / 2)
+  for (const [x0, x1] of [[1, mid - 3], [mid + 2, w - 2]]) {
+    box(px, w, x0, top, x1 - x0, h - top - 1, P.wood, P.woodHi, P.woodLo)
+    fillRect(px, w, x0, top + Math.round(h * 0.30), x1, top + Math.round(h * 0.36), ...P.woodLo)
+    drawLine(px, w, x0 + 1, h - 3, x1 - 1, top + 2, ...P.woodLo, 2)
+  }
+  // Стовпи обабіч і клямка посередині.
+  box(px, w, 0, top - 2, 4, h - top + 1, P.woodLo, P.wood, null)
+  box(px, w, w - 5, top - 2, 4, h - top + 1, P.woodLo, P.wood, null)
+  fillRect(px, w, mid - 2, Math.round(h * 0.46), mid + 1, Math.round(h * 0.54), ...P.metal)
+}
+
 // ── Walls ───────────────────────────────────────────────────────────────────
 // Painted flat until now, in a colour picked by hand per location — which is
 // exactly why they never matched the floor. Same palette, same light: a body,
@@ -1319,6 +1427,22 @@ sprites.push(
   { name: 'tile_asphalt_0',  wu: T, hu: T, draw: asphaltVariant(0) },
   { name: 'tile_asphalt_1',  wu: T, hu: T, draw: asphaltVariant(1) },
   { name: 'tile_asphalt_2',  wu: T, hu: T, draw: asphaltVariant(2) },
+
+  { name: 'tile_paving',     wu: T, hu: T, draw: pavingVariant(0) },
+  { name: 'tile_paving_0',   wu: T, hu: T, draw: pavingVariant(0) },
+  { name: 'tile_paving_1',   wu: T, hu: T, draw: pavingVariant(1) },
+  { name: 'tile_paving_2',   wu: T, hu: T, draw: pavingVariant(2) },
+
+  { name: 'tile_grass',      wu: T, hu: T, draw: grassVariant(0) },
+  { name: 'tile_grass_0',    wu: T, hu: T, draw: grassVariant(0) },
+  { name: 'tile_grass_1',    wu: T, hu: T, draw: grassVariant(1) },
+  { name: 'tile_grass_2',    wu: T, hu: T, draw: grassVariant(2) },
+
+  // Паркан двору. Секція завширшки в зріст персонажа, щоб довгий прогін
+  // складався цілим числом секцій, а не половинкою в кінці.
+  { name: 'o_fence_h', wu: T * 1.0,  hu: T * 0.55, draw: drawFenceH },
+  { name: 'o_fence_v', wu: T * 0.34, hu: T * 1.0,  draw: drawFenceV },
+  { name: 'o_gate',    wu: T * 2.0,  hu: T * 0.55, draw: drawGate   },
 
   { name: 'wall_tile', wu: T, hu: T, draw: wallTile },
   { name: 'door_tile', wu: T, hu: T, draw: doorTile },

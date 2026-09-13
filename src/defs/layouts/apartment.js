@@ -17,8 +17,80 @@ const T = u(1)
 
 const FLAT_W  = 1000
 const ROOM_H  = 950
-const WORLD_H = 1350
+// Двір глибший, ніж був (400 → 600). Причина не в красі: на 400 одиницях
+// парковка, доріжка й газон стояли б упритул один до одного, і двір читався б
+// як три смуги, а не як подвір'я. Плюс паркан з'їдає нижні 40.
+const WORLD_H = 1550
 const GARAGE_W = 900
+
+// ── Двір ────────────────────────────────────────────────────────────────────
+//
+// Раніше «вулиця» була суцільним асфальтом на всю ширину світу з розкиданими
+// по ньому деревами — тобто проїжджою частиною, на якій чомусь ростуть кущі, і
+// краєм світу замість межі ділянки.
+//
+// Тепер це ділянка: газон за замовчуванням, а тверде покриття лежить рівно
+// там, де воно навіщось потрібне — майданчик перед дверима (туди приїжджають
+// коробки), доріжка від дверей до хвіртки і парковка збоку. Порядок такий
+// самий, як у справжньому дворі: спершу питання «де тут ходять і де стоїть
+// машина», і лише тоді асфальт.
+const YARD_Y = ROOM_H                    // де починається двір
+const FENCE_INSET = 24                   // наскільки паркан відступає від краю світу
+const FENCE_Y = WORLD_H - FENCE_INSET    // вісь нижнього прогону
+
+// Майданчик перед дверима: сюди привозять коробки, тому він і бетонний.
+const APRON = { x: 396, y: YARD_Y, w: 566, h: 172 }
+// Доріжка від дверей до хвіртки. Ширина — рівно дверний проріз (180), щоб вона
+// читалась як продовження дверей, а не як другий об'єкт поруч.
+const PATH  = { x: 414, y: APRON.y + APRON.h, w: 172, h: 390 }
+// Парковка. Впритул до доріжки лівим боком: майданчик, з якого нікуди не
+// виїхати, читається як пляма фарби на траві.
+const PARK  = { x: 110, y: 1150, w: 304, h: 340 }
+// Під'їзд до гаражних воріт — та сама роль, що в доріжки, тільки для машини.
+const DRIVE_W = 280
+
+// Прогін паркана як список секцій. Одна секція — один спрайт, бо сцена малює
+// декор посекційно; ділити довгу сторону на секції ЗАВШИРШКИ В ЗРІСТ
+// ПЕРСОНАЖА, а не розтягувати один спрайт, — те саме правило щільності
+// пікселя, що й для плитки.
+//
+// `solid: true` на кожній: паркан і є те, що не дає вийти за локацію, і робить
+// це через ті самі перешкоди, що й стіни, а не через окрему перевірку.
+//
+// Проріз під хвіртку рахує `gateSlot` — і рахує його ОДИН раз на обох
+// клієнтів. Перший захід ставив хвіртку на осі дверей, а проріз вирізав
+// найближчими секціями, і між ними лишалась смуга газону завширшки в півсекції:
+// паркан виглядав суцільним, а пройти крізь нього було можна.
+function fenceRun({ axis, at, from, to, gaps = [] }) {
+  const step = T
+  const out  = []
+  const inGap = (c) => gaps.some(g => c > g.at - g.size / 2 && c < g.at + g.size / 2)
+  const section = (centre) => axis === 'h'
+    ? { sprite: 'o_fence_h', x: centre, y: at, w: T, h: T * 0.55, z: 2, solid: true }
+    : { sprite: 'o_fence_v', x: at, y: centre, w: T * 0.34, h: T, z: 2, solid: true }
+
+  let p = from
+  for (; p + step <= to + 1; p += step) {
+    const centre = p + step / 2
+    if (!inGap(centre)) out.push(section(centre))
+  }
+  // Хвіст. Сторона рідко ділиться на секції націло, і без цього рядка в кінці
+  // кожного прогону лишалась дірка завширшки до цілої секції — рівно в кутку,
+  // де її найважче помітити й найлегше в неї вийти. Остання секція
+  // ПРИСУВАЄТЬСЯ до кінця й перекриває попередню: перекриття видно лише як
+  // зайву штахетину, дірку — як помилку.
+  if (p < to - 1 && !inGap(to - step / 2)) out.push(section(to - step / 2))
+
+  return out
+}
+
+// Проріз під хвіртку, вирівняний по сітці секцій: завжди ціле їх число,
+// починаючи від краю світу. Повертає центр і ширину — те саме, що йде і в
+// `gap` прогону, і в спрайт хвіртки, тож ці двоє не можуть розійтись.
+function gateSlot(nearX, sections = 2) {
+  const first = Math.max(0, Math.round((nearX - sections * T / 2) / T))
+  return { at: first * T + sections * T / 2, size: sections * T }
+}
 
 // Lighter than it was (V4 polish): the whole game read as a night scene, and
 // a home should not. Wall, street and pavement live here too — they were
@@ -27,7 +99,10 @@ const GARAGE_W = 900
 const THEME = {
   bgColor:       '#242236',
   floorColor:    '#4b4260',
-  streetColor:   '#2a2a3c',
+  // Двір — газон, а не проїжджа частина. Колір під плиткою трави, а не сірий:
+  // плитка кладеться цілими клітинками, і на краях світу з-під неї видно рівно
+  // цю заливку.
+  streetColor:   '#3c703c',
   pavementColor: '#3d3d54',
   // Wooden boards indoors, asphalt outside. Tinted rather than redrawn, so
   // one tile serves every location and they still read as different places.
@@ -38,7 +113,14 @@ const THEME = {
   wallShadow:    '#242232',
   doorColor:     '#7a5533',
   floorTile:     'tile_wood',
-  streetTile:    'tile_asphalt',
+  streetTile:    'tile_grass',
+  // Тверде покриття двору. Бетон там, де ходять, асфальт там, де стоїть
+  // машина: одного покриття на все досить, щоб доріжка й парковка злились в
+  // одну сіру пляму, а вони мають різні ролі.
+  pathTile:      'tile_paving',
+  pathColor:     '#9aa2b4',
+  parkTile:      'tile_asphalt',
+  parkColor:     '#3a384c',
 }
 
 export function buildApartmentLayout(roomIds) {
@@ -46,6 +128,9 @@ export function buildApartmentLayout(roomIds) {
   const garage = rooms.some(r => r.id === 'garage')
   const worldW = FLAT_W + (garage ? GARAGE_W : 0)
   const X0     = FLAT_W   // where the garage starts
+  // Хвіртка перед входом і в'їзд до гаража — обидва по сітці секцій паркана.
+  const frontGate = gateSlot(500)
+  const driveGate = gateSlot(X0 + 450)
 
   return buildLayout({
     id:    'apartment',
@@ -87,9 +172,12 @@ export function buildApartmentLayout(roomIds) {
       // The laptop lives on the kitchen table — this is a shop run from home.
       desk:     { x: 820, y: 300, w: T*1.3,  h: T,      sprite: 'desk',        color: '#5a4a7a' },
       piggy:    { x: 120, y: 790, w: T*0.7,  h: T*0.7,  sprite: 'piggy',       color: '#d4607a' },
-      // Post box and bin are outside the front door, like anybody's.
-      mailbox:  { x: 250, y: 1180, w: T*0.8, h: T,      sprite: 'o_postbox',   color: '#3a5db8' },
-      trashbin: { x: 780, y: 1180, w: T*0.8, h: T*0.9,  sprite: 'o_bin',       color: '#4a6a3a' },
+      // Скринька й бак стоять на газоні обабіч майданчика, а не посеред двору.
+      // Обидва — те, до чого ходять щоцикл, тому вони при дверях: скринька
+      // ліворуч від виходу, бак праворуч, і жоден не стоїть на доріжці, якою
+      // носять коробки.
+      mailbox:  { x: 330, y: 1010, w: T*0.8, h: T,      sprite: 'o_postbox',   color: '#3a5db8' },
+      trashbin: { x: 760, y: 1200, w: T*0.8, h: T*0.9,  sprite: 'o_bin',       color: '#4a6a3a' },
       // Дошка найму фізично живе в гаражі: наймати можна рівно там, де для
       // людей є місце, і панель не існує раніше за це.
       ...(garage
@@ -144,33 +232,80 @@ export function buildApartmentLayout(roomIds) {
         { sprite: 'f_rug',      x: X0 + 300, y: 470, w: T*2.4, h: T*1.6, z: 0.6 },
       ] : []),
     ],
+    // Тверді покриття двору. Порядок у списку — порядок малювання, тож
+    // під'їзд лягає поверх газону, а не навпаки.
+    groundPatches: [
+      { ...APRON, tile: THEME.pathTile, color: THEME.pathColor },
+      { ...PATH,  tile: THEME.pathTile, color: THEME.pathColor },
+      { ...PARK,  tile: THEME.parkTile, color: THEME.parkColor },
+      ...(garage ? [{
+        x: X0 + 450 - DRIVE_W / 2, y: YARD_Y, w: DRIVE_W, h: FENCE_Y - YARD_Y - 20,
+        tile: THEME.parkTile, color: THEME.parkColor,
+      }, {
+        x: X0 + 610, y: 1180, w: 270, h: 320,
+        tile: THEME.parkTile, color: THEME.parkColor,
+      }] : []),
+    ],
     street: [
-      { sprite: 'o_tree',     x: 90,  y: 1250, w: T*1.2, h: T*1.4 },
-      { sprite: 'o_tree',     x: 930, y: 1250, w: T*1.2, h: T*1.4 },
-      { sprite: 'o_bush',     x: 200, y: 1310, w: T*0.9, h: T*0.8 },
-      { sprite: 'o_hedge',    x: 640, y: 1310, w: T*1.4, h: T*0.6 },
-      { sprite: 'o_bench',    x: 360, y: 1290, w: T*1.2, h: T*0.7 },
-      { sprite: 'o_bicycle',  x: 540, y: 1230, w: T,     h: T*0.7 },
-      { sprite: 'o_lamppost', x: 120, y: 1030, w: T*0.6, h: T*1.5 },
-      { sprite: 'o_lamppost', x: 890, y: 1030, w: T*0.6, h: T*1.5 },
-      { sprite: 'o_hydrant',  x: 690, y: 1050, w: T*0.5, h: T*0.7 },
-      { sprite: 'o_bin',      x: 830, y: 1250, w: T*0.7, h: T*0.9 },
-      // Не навпроти скриньки: машина стояла в (260, 1180), а скринька — в
-      // (250, 1180), тобто рівно за нею. Тепер паркується збоку, між лавкою і
-      // велосипедом, де нічого не затуляє.
-      { sprite: 'o_car',      x: 460, y: 1270, w: T,     h: T*1.8 },
-      // Під'їзд до гаража — щоб ворота читались як ворота.
+      // Машина стоїть на парковці, а не «десь на асфальті»: місце під неї і є
+      // те, заради чого парковка існує. Завезений арт (`car_blue`) — вид
+      // строго згори, носом донизу, тому вона й розвернута до хвіртки.
+      { sprite: 'car_blue',   x: 262, y: 1330, w: T*1.09, h: T*1.8 },
+
+      // Сад праворуч від доріжки. Дерева стоять глибоко у дворі, а не при
+      // самому будинку: крона заввишки в півтора персонажа біля стіни закриває
+      // двері, і гравець не бачить, звідки вийшов.
+      { sprite: 'o_tree',     x: 850, y: 1270, w: T*1.2, h: T*1.4 },
+      { sprite: 'o_tree',     x: 950, y: 1430, w: T*1.2, h: T*1.4 },
+      { sprite: 'o_bush',     x: 660, y: 1400, w: T*0.9, h: T*0.8 },
+      { sprite: 'o_hedge',    x: 790, y: 1470, w: T*1.4, h: T*0.6 },
+      { sprite: 'o_bench',    x: 690, y: 1250, w: T*1.2, h: T*0.7 },
+      { sprite: 'o_bicycle',  x: 640, y: 1340, w: T,     h: T*0.7 },
+      { sprite: 'o_bin',      x: 900, y: 1160, w: T*0.7, h: T*0.9 },
+
+      // Ліворуч: ліхтар при вході, гідрант і кущі попід парканом.
+      { sprite: 'o_lamppost', x: 62,  y: 1010, w: T*0.6, h: T*1.5 },
+      { sprite: 'o_lamppost', x: 620, y: 1440, w: T*0.6, h: T*1.5 },
+      { sprite: 'o_hydrant',  x: 70,  y: 1120, w: T*0.5, h: T*0.7 },
+      { sprite: 'o_bush',     x: 150, y: 1050, w: T*0.9, h: T*0.8 },
+      { sprite: 'o_bush',     x: 300, y: 1075, w: T*0.9, h: T*0.8 },
+
+      // Хвіртка. Стулки закриті — двір замкнений, і паркан тримає це не
+      // виглядом, а тим, що хвіртка теж перешкода. Отвір у прогоні пробитий
+      // рівно під неї (`gap` у fenceRun), щоб ці два малюнки не наклались.
+      { sprite: 'o_gate', x: frontGate.at, y: FENCE_Y, w: frontGate.size, h: T*0.55, z: 2, solid: true },
+      ...(garage
+        ? [{ sprite: 'o_gate', x: driveGate.at, y: FENCE_Y, w: driveGate.size, h: T*0.55, z: 2, solid: true }]
+        : []),
+
+      // Паркан по периметру ділянки.
+      ...fenceRun({ axis: 'h', at: FENCE_Y, from: 0, to: worldW, gaps: [frontGate, ...(garage ? [driveGate] : [])] }),
+      // Бічні прогони доходять до нижнього — кут закритий з обох боків.
+      //
+      // Тримається це на тому, що межа світу спиняє персонажа за ЦЕНТР
+      // (`bounds` у moveSystem), тобто півтулуба дістає до краю хай там що
+      // намальовано, і в кутку персонаж стоїть одразу в двох перешкодах. Доки
+      // розв'язувач зіткнень міг виштовхнути з коробки на її протилежний край,
+      // це означало телепорт у протилежний кут світу — див. `moveAxis`.
+      ...fenceRun({ axis: 'v', at: FENCE_INSET,          from: YARD_Y, to: FENCE_Y - T * 0.3 }),
+      ...fenceRun({ axis: 'v', at: worldW - FENCE_INSET, from: YARD_Y, to: FENCE_Y - T * 0.3 }),
+
+      // Двір гаража.
       ...(garage ? [
-        { sprite: 'o_car',      x: X0 + 700, y: 1200, w: T,     h: T*1.8 },
-        { sprite: 'o_lamppost', x: X0 + 860, y: 1030, w: T*0.6, h: T*1.5 },
-        { sprite: 'o_bush',     x: X0 + 120, y: 1300, w: T*0.9, h: T*0.8 },
-        { sprite: 'o_hedge',    x: X0 + 250, y: 1310, w: T*1.4, h: T*0.6 },
+        { sprite: 'car_blue',   x: X0 + 745, y: 1330, w: T*1.09, h: T*1.8 },
+        { sprite: 'o_lamppost', x: X0 + 830, y: 1010, w: T*0.6,  h: T*1.5 },
+        { sprite: 'o_bush',     x: X0 + 120, y: 1300, w: T*0.9,  h: T*0.8 },
+        { sprite: 'o_hedge',    x: X0 + 250, y: 1430, w: T*1.4,  h: T*0.6 },
+        { sprite: 'o_tree',     x: X0 + 130, y: 1120, w: T*1.2,  h: T*1.4 },
       ] : []),
     ],
+    // Коробки приїжджають на майданчик перед дверима — у ряд, праворуч від
+    // виходу. Раніше вони лежали посеред проїжджої частини; тепер під ними є
+    // покриття, і видно, ЧОМУ вони саме тут.
     deliverySlots: [
-      { x: 420, y: 1090 },
-      { x: 590, y: 1090 },
-      { x: 750, y: 1090 },
+      { x: 640, y: 1046 },
+      { x: 760, y: 1046 },
+      { x: 880, y: 1046 },
     ],
     spawns: {
       player:     { x: 500, y: 780 },

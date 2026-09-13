@@ -77,6 +77,10 @@ export const SPRITES = Object.freeze({
   o_shelf: { url: `${BASE}sprites/o_shelf.png`, anchors: {} },
   o_tree: { url: `${BASE}sprites/o_tree.png`, anchors: {} },
   o_vending: { url: `${BASE}sprites/o_vending.png`, anchors: {} },
+  // Паркан двору: секція поперек погляду, секція вздовж, хвіртка.
+  o_fence_h: { url: `${BASE}sprites/o_fence_h.png`, anchors: {} },
+  o_fence_v: { url: `${BASE}sprites/o_fence_v.png`, anchors: {} },
+  o_gate: { url: `${BASE}sprites/o_gate.png`, anchors: {} },
   tile_asphalt: { url: `${BASE}sprites/tile_asphalt.png`, anchors: {} },
   tile_asphalt_0: { url: `${BASE}sprites/tile_asphalt_0.png`, anchors: {} },
   tile_asphalt_1: { url: `${BASE}sprites/tile_asphalt_1.png`, anchors: {} },
@@ -89,6 +93,14 @@ export const SPRITES = Object.freeze({
   tile_wood_0: { url: `${BASE}sprites/tile_wood_0.png`, anchors: {} },
   tile_wood_1: { url: `${BASE}sprites/tile_wood_1.png`, anchors: {} },
   tile_wood_2: { url: `${BASE}sprites/tile_wood_2.png`, anchors: {} },
+  tile_paving: { url: `${BASE}sprites/tile_paving.png`, anchors: {} },
+  tile_paving_0: { url: `${BASE}sprites/tile_paving_0.png`, anchors: {} },
+  tile_paving_1: { url: `${BASE}sprites/tile_paving_1.png`, anchors: {} },
+  tile_paving_2: { url: `${BASE}sprites/tile_paving_2.png`, anchors: {} },
+  tile_grass: { url: `${BASE}sprites/tile_grass.png`, anchors: {} },
+  tile_grass_0: { url: `${BASE}sprites/tile_grass_0.png`, anchors: {} },
+  tile_grass_1: { url: `${BASE}sprites/tile_grass_1.png`, anchors: {} },
+  tile_grass_2: { url: `${BASE}sprites/tile_grass_2.png`, anchors: {} },
   wall_tile: { url: `${BASE}sprites/wall_tile.png`, anchors: {} },
 
   // ── Значки ролей (Стадія 13 / А2) ────────────────────────────
@@ -236,6 +248,13 @@ export const SPRITES = Object.freeze({
 
   piggy: {
     url: `${BASE}sprites/piggy.png`,
+    anchors: {},
+  },
+
+  // Машина на парковці — завезений арт, вид строго згори, носом донизу.
+  // Генераторна `o_car` лишається для фабрики; у дворі стоїть ця.
+  car_blue: {
+    url: `${BASE}sprites/car_blue.png`,
     anchors: {},
   },
 

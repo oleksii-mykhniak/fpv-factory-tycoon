@@ -176,11 +176,16 @@ function buildRoom(scene, layout) {
     x: world.w / 2, y: street.y + street.h / 2, w: world.w, h: street.h,
     hex: theme.streetColor ?? '#1c1c2c', z: 0,
   })
-  // Lighter sidewalk band just outside the door
-  colorRect(scene, {
-    x: world.w / 2, y: street.y + street.h * 0.10, w: world.w, h: street.h * 0.18,
-    hex: theme.pavementColor ?? '#33334a', z: 0,
-  })
+  // Lighter sidewalk band just outside the door. Skipped where the layout
+  // paves the yard itself (`groundPatches`): a band across the full width is a
+  // stand-in for a plan, and drawing both means the stand-in shows through the
+  // plan wherever the plan happens to leave grass.
+  if (!(layout.groundPatches ?? []).length) {
+    colorRect(scene, {
+      x: world.w / 2, y: street.y + street.h * 0.10, w: world.w, h: street.h * 0.18,
+      hex: theme.pavementColor ?? '#33334a', z: 0,
+    })
+  }
 
   // ── Room floor ─────────────────────────────────────────
   // The painted rectangle stays underneath as the backdrop: the tile grid can
@@ -196,6 +201,22 @@ function buildRoom(scene, layout) {
   // instead of the thirteen hundred that exist.
   tileFloor(scene, theme.floorTile, 0, 0, room.w, room.h, 0.2)
   tileFloor(scene, theme.streetTile, 0, street.y, world.w, street.h, 0.2)
+
+  // Patches of a different surface laid over the base one: the paved apron in
+  // front of the door, the path down the garden, the parking pad. Patches
+  // rather than a second base tile because a yard is not one material — and
+  // rather than props because you walk ON them, so they must sort below
+  // everything and never block a step.
+  //
+  // Drawn at z 0.3: above the base tiling (0.2), below the zone markings that
+  // say what a patch of floor is FOR.
+  for (const patch of layout.groundPatches ?? []) {
+    colorRect(scene, {
+      x: patch.x + patch.w / 2, y: patch.y + patch.h / 2, w: patch.w, h: patch.h,
+      hex: patch.color, z: 0.25,
+    })
+    tileFloor(scene, patch.tile, patch.x, patch.y, patch.w, patch.h, 0.3)
+  }
 
   // ── Walls + door opening ───────────────────────────────
   // Three strips, not one flat rectangle: body, a lit top edge and a shadow

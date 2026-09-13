@@ -89,6 +89,7 @@ export function buildLayout({
   partitions = [],// interior walls — see partitionRects
   decor = [],     // furniture that does nothing — see below
   street = [],    // the same thing, outside the front door
+  groundPatches = [], // ділянки іншого покриття поверх базової плитки двору
   stationSlots,   // [{ def, x, y }] where benches may stand
   props,          // { name: { x, y, w, h, sprite, color, z } }
   deliverySlots,  // [{ x, y }] street positions, indexed by delivery.slotIndex
@@ -189,6 +190,10 @@ export function buildLayout({
     ],
     stationSlots,
     props: propRects,
+    // Покриття двору. Це НЕ декор і не перешкоди: по них ходять. Проходять
+    // наскрізь до сцени рівно так, як приходять із розкладки — сцена сама
+    // знає, як покласти плитку прямокутником.
+    groundPatches,
     zones,
     spawns: {
       // Every role has a post to stand at (S1.5). Falling back to one shared
