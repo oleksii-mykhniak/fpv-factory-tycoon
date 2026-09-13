@@ -19,6 +19,7 @@ import { pathToFileURL } from 'url'
 // викинули три паки Kenney (CREDITS.md); а бейдж ролі, пофарбований власною
 // копією кольору, розійшовся б із кільцем під ногами тієї ж людини.
 import { u } from '../src/state/config.js'
+import { WALL_HORIZ, WALL_FACE_H } from '../src/defs/layouts/buildLayout.js'
 import { ROLES, ROLE_ORDER } from '../src/defs/roles.js'
 import {
   P, PRODUCT, LIVERY, PROP, SIGNAL, ACCENT,
@@ -847,19 +848,24 @@ function drawShopShelf(px, w, h) {
 function woodVariant(seed) {
   return (px, w, h) => {
     box(px, w, 0, 0, w, h, P.fWood, null, null)
-    const plank = Math.round(h / 3)
+    // Чотири дошки на плитку, по 16 px: дошка завширшки в чверть зросту
+    // персонажа читається дошкою. Було три по 21 px — на такій ширині підлога
+    // читалась як настил із брусу.
+    const plank = Math.round(h / 4)
     ribs(px, w, 0, 0, w, h, plank, P.fWoodLo)
-    // Staggered end-joints, moved by the seed so neighbours do not line up.
-    for (let i = 0; i < 3; i++) {
-      const x = Math.round(w * (0.2 + ((i * 7 + seed * 3) % 10) / 14))
-      const y = i * plank
-      fillRect(px, w, x, y + 1, x, y + plank - 1, ...P.fWoodLo)
-    }
-    // A few grain streaks.
+    // Торцевий стик — ОДИН на плитку, і в кожної варіації на своїй дошці.
+    // Чотири стики на плитку (по одному на дошку) складались у стовпчики: плитки
+    // кладуться сіткою, і підлога через це читалась цегляною кладкою, а не
+    // дошками.
+    const joint = seed % 4
+    fillRect(px, w, Math.round(w * (0.28 + seed * 0.18)), joint * plank + 1,
+             Math.round(w * (0.28 + seed * 0.18)), joint * plank + plank - 1, ...P.fWoodLo)
+    // Зерно — короткі штрихи ВЗДОВЖ дошки, по одному на дошку. Саме воно
+    // відрізняє варіації одну від одної.
     for (let i = 0; i < 4; i++) {
-      const x = ((i * 13 + seed * 5) % (w - 8)) + 4
-      const y = ((i * 9 + seed * 7) % h)
-      fillRect(px, w, x, y, x + 3, y, ...P.fWoodHi)
+      const x = ((i * 13 + seed * 17) % (w - 12)) + 4
+      const y = i * plank + 2 + ((i + seed) % (plank - 4))
+      fillRect(px, w, x, y, x + 7, y, ...(i % 2 ? P.fWoodHi : P.fWoodLo))
     }
   }
 }
@@ -1022,6 +1028,66 @@ function drawGarageDoor(px, w, h) {
 // Painted flat until now, in a colour picked by hand per location — which is
 // exactly why they never matched the floor. Same palette, same light: a body,
 // a lit top edge, a shadow where they meet the floor.
+// ── Стіна з видимою висотою (§4 art_redesign_brief) ─────────────────────────
+//
+// Стіна, що дивиться в камеру, показує свою висоту; решта лишається смугою
+// згори. Це рівно режим «стіни вниз» у The Sims, і малюється він трьома
+// горизонтальними смугами: зріз товщини зверху (`wall_cap`), фасад
+// (`wall_face_*`, тайлиться по X) і плінтус (`wall_base`) внизу.
+//
+// Усі три безшовні по X і НЕ мають обведення по краях: обведення на кожній
+// клітинці зібралося б у сітку впоперек стіни.
+
+function wallFace(seed) {
+  return (px, w, h) => {
+    fillRect(px, w, 0, 0, w - 1, h - 1, ...P.wall)
+    // Шпалерна смуга з періодом, що ділить ширину плитки націло — інакше
+    // ритм ламається на кожному стику. Період у пів-плитки, а не в чверть:
+    // на 16 px стіна читалась не шпалерами, а дверцятами шафи.
+    for (let x = 16; x < w; x += 32)
+      fillRect(px, w, x, 1, x, h - 4, ...P.wallHi)
+    // Світло згори: дві верхні смуги світліші, низ ближче до тіні. Два кроки
+    // рампи на всю висоту, не більше — стіна має сидіти ПІД меблями.
+    fillRect(px, w, 0, 0, w - 1, 1, ...P.wallHi)
+    fillRect(px, w, 0, h - 3, w - 1, h - 1, ...P.wallLo)
+    // Зерно. Єдине, чим відрізняються варіації: базовий колір у всіх трьох
+    // однаковий, інакше стіна розсипається на клаптики.
+    for (let i = 0; i < 4; i++) {
+      const x = (i * 17 + seed * 23) % w
+      const y = ((i * 29 + seed * 11) % (h - 8)) + 4
+      fillRect(px, w, x, y, x, y, ...P.wallHi)
+    }
+  }
+}
+
+// Верхній зріз товщини стіни — те, що видно згори. Світліший за фасад: це
+// горизонтальна грань, на неї світло падає прямо.
+function wallCap(px, w, h) {
+  fillRect(px, w, 0, 0, w - 1, h - 1, ...P.wallHi)
+  fillRect(px, w, 0, h - 2, w - 1, h - 1, ...P.wall)
+}
+
+// Плінтус — межа стіни й підлоги. Без нього фасад висить над дошками.
+function wallBase(px, w, h) {
+  fillRect(px, w, 0, 0, w - 1, h - 1, ...P.wallLo)
+  fillRect(px, w, 0, 0, w - 1, 0, ...P.wall)
+}
+
+// Вікно у фасаді. Ставиться поверх фасаду окремим декором, а не вплітається в
+// плитку: плитка повторюється, вікно — ні.
+function wallWindow(px, w, h) {
+  box(px, w, 0, 0, w, h, P.wallLo, null, null)
+  const f = 4
+  box(px, w, f, f, w - f * 2, h - f * 2, P.glass, null, null)
+  // Рама-хрестовина.
+  fillRect(px, w, Math.round(w / 2) - 1, f, Math.round(w / 2), h - f - 1, ...P.white)
+  fillRect(px, w, f, Math.round(h / 2) - 1, w - f - 1, Math.round(h / 2), ...P.white)
+  // Відблиск — одна діагональ, як на всьому склі набору.
+  drawLine(px, w, f + 3, h - f - 6, w - f - 6, f + 3, ...P.white, 1)
+  // Підвіконня.
+  fillRect(px, w, 1, h - 4, w - 2, h - 1, ...P.wallHi)
+}
+
 function wallTile(px, w, h) {
   box(px, w, 0, 0, w, h, P.darkHi, null, null)
   fillRect(px, w, 0, 0, w - 1, Math.max(1, Math.round(h * 0.14)), ...P.metalLo)
@@ -1468,6 +1534,15 @@ sprites.push(
 
   { name: 'wall_tile', wu: T, hu: T, draw: wallTile },
   { name: 'door_tile', wu: T, hu: T, draw: doorTile },
+
+  // Фасад стіни. Заввишки рівно в персонажа: стіна, вища за того, хто під нею
+  // стоїть, з'їдає верх кімнати, нижча — не читається стіною.
+  { name: 'wall_face_0', wu: T, hu: WALL_FACE_H, draw: wallFace(0) },
+  { name: 'wall_face_1', wu: T, hu: WALL_FACE_H, draw: wallFace(1) },
+  { name: 'wall_face_2', wu: T, hu: WALL_FACE_H, draw: wallFace(2) },
+  { name: 'wall_cap',    wu: T, hu: WALL_HORIZ,  draw: wallCap },
+  { name: 'wall_base',   wu: T, hu: u(0.09),     draw: wallBase },
+  { name: 'wall_window', wu: T, hu: WALL_FACE_H, draw: wallWindow },
 
   // Бейджі ролей (Стадія 13 / А2). Розмір — u(0.34): третина зросту персонажа.
   ...ROLE_ORDER.map(id => ({

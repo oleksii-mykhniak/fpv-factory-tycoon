@@ -20,6 +20,18 @@ export function rect(cx, cy, w, h) {
 export const WALL_SIDE  = u(0.32)
 export const WALL_HORIZ = u(0.38)
 
+// Висота намальованого фасаду верхньої стіни (§4 art_redesign_brief).
+//
+// Це ВИКЛЮЧНО малюнок: колізія і nav-сітка лишаються тією самою смугою
+// завтовшки WALL_HORIZ, і фасад просто вилазить за неї в кімнату, як уже
+// вилазить високий стелаж. Інакше кімната фізично стиснулась би на зріст
+// персонажа.
+//
+// Рівно u(1): стіна, вища за того, хто під нею стоїть, з'їдає верх кімнати;
+// нижча — не читається стіною, а читається бордюром. Побічно це дає плитку
+// фасаду 64×64 — той самий квадрат, що й уся решта плиток набору.
+export const WALL_FACE_H = u(1)
+
 // Sizes of the entities that live in a world, in character heights (V1).
 // Shared: a drone is a drone whichever room it is built in.
 // `box` — коробка, що СТОЇТЬ: фас і три чверті майже квадратні (67×64 і 61×64
@@ -109,8 +121,12 @@ export function buildLayout({
     gaps: [door, ...extraDoors].map(d => ({ at: d.x, size: d.w })),
   })
 
+  // `face: true` — стіна, яку камера бачить у фас, тобто та, що малюється з
+  // висотою. Це верхня: бічні показували б грань завтовшки в пів-персонажа
+  // вздовж усієї кімнати, а нижня накрила б фасадом півкімнати, бо вона між
+  // кімнатою і глядачем.
   const walls = [
-    rect(world.w / 2, WALL_HORIZ / 2, world.w, WALL_HORIZ),                     // top
+    { ...rect(world.w / 2, WALL_HORIZ / 2, world.w, WALL_HORIZ), face: true },  // top
     rect(WALL_SIDE / 2, roomH / 2, WALL_SIDE, roomH),                           // left
     rect(world.w - WALL_SIDE / 2, roomH / 2, WALL_SIDE, roomH),                 // right
     ...front.walls,
@@ -146,6 +162,7 @@ export function buildLayout({
       sprite: d.sprite,
       color:  d.color,
       z:      d.z ?? 2,
+      zFix:   d.zFix,
       // Малюється прямокутником спрайта, зупиняє — слідом. Це різні речі, і
       // саме тому вони тут різні поля.
       foot,

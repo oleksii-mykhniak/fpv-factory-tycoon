@@ -8,7 +8,7 @@
 // Гараж навмисно менший за старий (900×950 проти 1500×1700): він тепер стоїть
 // поруч із квартирою, а не замість неї, і мусить читатись як прибудова.
 
-import { buildLayout, WALL_SIDE, WALL_HORIZ } from './buildLayout.js'
+import { buildLayout, WALL_SIDE, WALL_HORIZ, WALL_FACE_H } from './buildLayout.js'
 import { openRooms } from './rooms.js'
 import { u } from '../../state/config.js'
 
@@ -104,7 +104,10 @@ function gateSlot(nearX, sections = 2) {
 // palette of its own.
 const THEME = {
   bgColor:       '#242236',
-  floorColor:    '#4b4260',
+  // Тепле дерево замість фіолетової заливки. Це колір ПІД плиткою: плитка
+  // кладеться цілими клітинками, і на краях кімнати видно рівно його — фіолет
+  // під дерев'яними дошками читався як щілина в підлозі.
+  floorColor:    '#7e664e',
   // Двір — газон, а не проїжджа частина. Колір під плиткою трави, а не сірий:
   // плитка кладеться цілими клітинками, і на краях світу з-під неї видно рівно
   // цю заливку.
@@ -114,9 +117,12 @@ const THEME = {
   // one tile serves every location and they still read as different places.
   // Wall and door come from the same palette as everything else, and are lit
   // the same way: body, lighter top edge, shadow where they meet the floor.
-  wallColor:     '#55526e',
-  wallEdge:      '#6b7284',
-  wallShadow:    '#242232',
+  // Стіни — тепла охра (P.wall / wallHi / wallLo генератора). Фіолетові
+  // #55526e робили квартиру нічною разом із фіолетовою підлогою; тепер це
+  // заливка ПІД плиткою фасаду, і вона має збігатися з нею, а не сперечатись.
+  wallColor:     '#b8a488',
+  wallEdge:      '#d0bc9c',
+  wallShadow:    '#6a5c48',
   doorColor:     '#7a5533',
   floorTile:     'tile_wood',
   streetTile:    'tile_grass',
@@ -208,11 +214,31 @@ export function buildApartmentLayout(roomIds) {
     // sprite to a different shape is what made the first pass look smeared.
     decor: [
       { sprite: 'f_rug',       x: 300, y: 430, w: T*2.4, h: T*1.6, z: 0.6 },
-      { sprite: 'f_bed',       x: 500, y: 150, w: T,     h: T*1.9, z: 2 },
+      // Верхній ряд меблів стоїть біля ОСНОВИ стіни, а не наполовину в ній:
+      // щойно верхня стіна отримала висоту, у неї впирається все, що стояло
+      // на старій смузі завтовшки 28 одиниць. Низ фасаду з плінтусом — 109.
+      { sprite: 'f_bed',       x: 500, y: 180, w: T,     h: T*1.9, z: 2 },
       { sprite: 'f_sofa',      x: 160, y: 690, w: T*1.9, h: T*0.9, z: 2 },
       { sprite: 'f_plant',     x: 560, y: 545, w: T*0.7, h: T*0.9, z: 2 },
-      { sprite: 'f_painting',  x: 210, y: 55,  w: T*0.9, h: T*0.7, z: 1 },
+      // Картина висить НА фасаді верхньої стіни — це її природне місце, щойно
+      // стіна має висоту. `zFix` вище за фасад (1.09), інакше вона сортується
+      // по власному низу й ховається за стіну, на якій висить.
+      { sprite: 'f_painting',  x: 210, y: 58,  w: T*0.9, h: T*0.7, zFix: 1.2 },
+      // Вікна. Заввишки рівно у фасад: вони і є те, чим порожня стіна
+      // перестає бути порожньою.
+      { sprite: 'wall_window', x: 120, y: 65,  w: T,     h: WALL_FACE_H, zFix: 1.15 },
+      { sprite: 'wall_window', x: 575, y: 65,  w: T,     h: WALL_FACE_H, zFix: 1.15 },
       // Kitchen nook
+      // Кухонний ряд лишається притиснутим до верхньої стіни й НЕ з'їжджає
+      // вниз разом із рештою верхнього ряду. Тумба, мийка, плита й холодильник
+      // стоять суцільною лінією через усю кухню: варто зсунути їх на висоту
+      // фасаду — і смуга між ними й стіною стає замкненим закапелком (ліворуч
+      // її замикає перегородка на x=620, праворуч — зовнішня стіна). Тест
+      // досяжності ловить це як недосяжну дошку найму, бо кут її зони
+      // притягується саме туди.
+      //
+      // Втрати від того, що вони затуляють низ фасаду, немає: меблі, які
+      // стоять біля стіни, її низ і мають затуляти.
       { sprite: 'f_counter',   x: 930, y: 100, w: T,     h: T*0.9, z: 2 },
       { sprite: 'f_sink',      x: 850, y: 100, w: T*0.9, h: T*0.9, z: 2 },
       { sprite: 'f_stove',     x: 770, y: 100, w: T*0.9, h: T*0.9, z: 2 },
@@ -231,12 +257,12 @@ export function buildApartmentLayout(roomIds) {
       { sprite: 'f_crate',     x: 380, y: 900, w: T*0.8, h: T*0.8, z: 2 },
       { sprite: 'f_crate',     x: 300, y: 880, w: T*0.8, h: T*0.8, z: 2 },
       { sprite: 'f_chair',     x: 250, y: 690, w: T*0.7, h: T*0.8, z: 2 },
-      { sprite: 'f_painting',  x: 430, y: 55,  w: T*0.9, h: T*0.7, z: 1 },
-      { sprite: 'f_plant',     x: 60,  y: 120, w: T*0.7, h: T*0.9, z: 2 },
+      { sprite: 'f_painting',  x: 430, y: 58,  w: T*0.9, h: T*0.7, zFix: 1.2 },
+      { sprite: 'f_plant',     x: 60,  y: 148, w: T*0.7, h: T*0.9, z: 2 },
       { sprite: 'f_rug',       x: 500, y: 800, w: T*2.4, h: T*1.6, z: 0.6 },
       // Гараж: те саме житло, тільки без житла — полиці, ящики, піддони.
       ...(garage ? [
-        { sprite: 'o_shelf',    x: X0 + 480, y: 70,  w: T*1.6, h: T,     z: 2 },
+        { sprite: 'o_shelf',    x: X0 + 480, y: 150, w: T*1.6, h: T,     z: 2 },
         { sprite: 'f_crate',    x: X0 + 810, y: 150, w: T*0.8, h: T*0.8, z: 2 },
         { sprite: 'f_crate',    x: X0 + 810, y: 240, w: T*0.8, h: T*0.8, z: 2 },
         { sprite: 'f_pallet',   x: X0 + 120, y: 620, w: T,     h: T*0.7, z: 2 },

@@ -22,6 +22,7 @@ const WALK_THROUGH = new Set([
   'f_chair',      // стілець відсовують
   'floor_mark',       // розмітка цеху
   'o_garage_door',    // намальована на стіні; сама стіна вже суцільна
+  'wall_window',      // вікно у фасаді; перешкода — сама стіна під ним
 ])
 
 const layouts = () => [

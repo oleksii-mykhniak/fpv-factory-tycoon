@@ -15,6 +15,7 @@ import {
   INTAKE_CAPACITY,
   u,
 } from '../state/config.js'
+import { WALL_FACE_H } from '../defs/layouts/buildLayout.js'
 import { loadSprites, getSprite } from './loader.js'
 import { followAxis, clampFocus } from './camera.js'
 import { createCharacterSprite, createTileCharacter, createSheetCharacter } from './character.js'
@@ -26,6 +27,12 @@ import { roleColor, roleBadge } from '../defs/roles.js'
 // How many carried items the stack can show at once. The gameplay limit is
 // CARRY_CAPACITY in config; this is only how many actors exist to draw.
 const CARRY_STACK_SLOTS = 3
+
+// Плінтус і тінь стіни — не налаштування гри, а пропорції одного малюнка, тож
+// живуть при ньому: плінтус рівно такий, яким його малює генератор
+// (`wall_base`), тінь — смуга під ним.
+const WALL_BASE_H   = u(0.09)
+const WALL_SHADOW_H = u(0.10)
 
 // Floor markings (S1.3): one colour per kind of trigger zone, so the room says
 // what each patch of floor is for. Dim by default, lit when the player could
@@ -239,6 +246,7 @@ function buildRoom(scene, layout) {
       colorRect(scene, { x: wall.cx, y: wall.y + lip / 2, w: wall.w, h: lip, hex: wallEdge, z: 1.01 })
       colorRect(scene, { x: wall.cx, y: wall.y + wall.h - lip / 2, w: wall.w, h: lip, hex: wallShadow, z: 1.01 })
     }
+    if (wall.face) wallFacade(scene, wall, theme)
   }
   for (const gap of doorVoids ?? []) {
     // A doorway is a hole, so it is painted with whatever is on the other side
@@ -255,7 +263,10 @@ function buildRoom(scene, layout) {
       pos:    ex.vec(d.cx, d.cy),
       width:  d.w,
       height: d.h,
-      z:      d.z <= 1 ? d.z : (d.cy + d.h / 2) * 0.01,
+      // `zFix` — «намальоване НА стіні», а не «стоїть на підлозі». Картина й
+      // вікно живуть на фасаді верхньої стіни, тобто вище за свій власний низ:
+      // сортування по ногах поклало б їх ЗА стіну, на якій вони висять.
+      z:      d.zFix ?? (d.z <= 1 ? d.z : (d.cy + d.h / 2) * 0.01),
       color:  ex.Color.fromHex(d.color ?? '#3a3a4a'),
     })
     scene.add(actor)
@@ -356,6 +367,67 @@ function tileFloor(scene, spriteKey, x, y, w, h, z) {
     const row = Math.floor(i / map.columns)
     tile.addGraphic(sprites[(col * 7 + row * 13) % sprites.length])
   })
+  scene.add(map)
+  track(map)
+  return map
+}
+
+// Стіна з видимою висотою (§4 art_redesign_brief) — те, що відрізняє кімнату
+// від креслення кімнати.
+//
+// Малюється ЗВЕРХУ ВНИЗ, як її й видно: зріз товщини по самій стіні, фасад під
+// ним у кімнату, плінтус, м'яка тінь на підлогу. Нічого з цього не існує для
+// фізики — колізія лишилась смугою завтовшки WALL_HORIZ, а фасад просто
+// вилазить у кімнату, як вилазить високий стелаж (пункт 1 §4.3).
+//
+// Сортування — за НИЗОМ фасаду, тим самим множником 0.01 на одиницю, яким
+// сортується решта сцени. Інакше персонаж, що стоїть під стіною, провалюється
+// за неї (пункт 2 §4.3).
+function wallFacade(scene, wall, theme) {
+  const top  = wall.y + wall.h          // де кінчається стіна згори — там фасад
+  const base = top + WALL_FACE_H
+  const z    = (base + WALL_BASE_H) * 0.01
+
+  tileStrip(scene, 'wall_cap',  wall.x, wall.y, wall.w, wall.h, 1.02)
+  const face = tileStrip(scene, 'wall_face', wall.x, top, wall.w, WALL_FACE_H, z)
+  // Плитки фасаду немає — лишається смуга згори, як було. Сцена має лишатись
+  // цілою картинкою без жодного спрайта (той самий контракт, що в tileFloor).
+  if (!face) return
+  tileStrip(scene, 'wall_base', wall.x, base, wall.w, WALL_BASE_H, z + 0.001)
+
+  // Тінь, яку стіна кидає на підлогу. Під усім, що в кімнаті стоїть: це
+  // підлога, а не предмет.
+  colorRect(scene, {
+    x: wall.cx, y: base + WALL_BASE_H + WALL_SHADOW_H / 2,
+    w: wall.w, h: WALL_SHADOW_H, hex: '#000000', z: 0.5, opacity: 0.18,
+  })
+}
+
+// Те саме, що tileFloor, але в ОДИН ряд заданої висоти: стіна тайлиться тільки
+// по горизонталі, і її смуги (зріз, фасад, плінтус) мають різну висоту, жодна
+// з яких не дорівнює клітинці підлоги.
+function tileStrip(scene, spriteKey, x, y, w, h, z) {
+  const variants = [0, 1, 2].map(i => getSprite(`${spriteKey}_${i}`)).filter(Boolean)
+  const sources = variants.length ? variants : [getSprite(spriteKey)].filter(Boolean)
+  if (!sources.length) return null
+
+  // Ceil, не floor: смуга має дійти до кінця стіни. Зайвий шматок останньої
+  // клітинки звисає за ріг — і там його накриває бічна стіна.
+  const columns = Math.max(1, Math.ceil(w / TILE_U))
+  const map = new ex.TileMap({
+    pos: ex.vec(x, y),
+    tileWidth: TILE_U, tileHeight: h,
+    columns, rows: 1,
+  })
+  map.z = z
+
+  const sprites = sources.map(src => {
+    const s = src.toSprite()
+    s.width = TILE_U
+    s.height = h
+    return s
+  })
+  map.tiles.forEach((tile, i) => tile.addGraphic(sprites[(i * 7) % sprites.length]))
   scene.add(map)
   track(map)
   return map

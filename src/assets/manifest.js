@@ -104,6 +104,16 @@ export const SPRITES = Object.freeze({
   tile_grass_2: { url: `${BASE}sprites/tile_grass_2.png`, anchors: {} },
   wall_tile: { url: `${BASE}sprites/wall_tile.png`, anchors: {} },
 
+  // Стіна з видимою висотою. Три смуги одного малюнка: зріз товщини згори,
+  // фасад (3 варіації зерна, тайлиться по X), плінтус унизу. Вікно ставиться
+  // поверх фасаду окремим декором.
+  wall_face_0: { url: `${BASE}sprites/wall_face_0.png`, anchors: {} },
+  wall_face_1: { url: `${BASE}sprites/wall_face_1.png`, anchors: {} },
+  wall_face_2: { url: `${BASE}sprites/wall_face_2.png`, anchors: {} },
+  wall_cap: { url: `${BASE}sprites/wall_cap.png`, anchors: {} },
+  wall_base: { url: `${BASE}sprites/wall_base.png`, anchors: {} },
+  wall_window: { url: `${BASE}sprites/wall_window.png`, anchors: {} },
+
   // ── Значки ролей (Стадія 13 / А2) ────────────────────────────
   // Читає лише сцена, над головою робітника. Імена мають збігатися з
   // `ROLES[*].badgeSprite`, і це перевіряє manifest.test.js.
