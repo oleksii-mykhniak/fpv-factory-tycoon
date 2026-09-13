@@ -239,7 +239,12 @@ export const SPRITES = Object.freeze({
     anchors: {},
   },
 
-  // Objective arrow (C7) — points down; the scene rotates it toward the target.
+  // Objective arrow (C7) — вістрям УГОРУ; сцена повертає її на ціль.
+  //
+  // Тут і в генераторі стояло «points down», і це було неправдою від початку:
+  // намальована стрілка завжди дивилась угору, а формула повороту
+  // (`atan2 + π/2`) саме під верхнє вістря й написана. Завезений арт теж
+  // дивиться вгору, тож не змінилось нічого, крім цього рядка.
   arrow: {
     url: `${BASE}sprites/arrow.png`,
     anchors: {},

@@ -228,6 +228,7 @@ top-down у наборі) — три кадри ходьби, сидить, сп
 кіт — не з генератора (завезений, див. `docs/ai_sheet_workflow.md`):
 `cat_walk_down` 12 кадрів, `cat_walk_up` 12, `cat_walk_side` 17, `cat_sit` 15,
 `cat_sleep` 8 — усі заввишки 48, ширина кадру в кожній позі своя.
+Стрілка цілі теж завезена: `arrow` 41×64, вістрям УГОРУ.
 
 *Дрони:* `mini_drone`, `racing_drone`, `cinematic_drone`, `longrange_drone`,
 `fixedwing_drone`, `heavy_drone`, `proto_drone` — усі 96×52.
@@ -258,7 +259,7 @@ top-down у наборі) — три кадри ходьби, сидить, сп
 *Плитка:* `tile_wood`, `tile_concrete`, `tile_asphalt` (по 3 варіації кожна),
 `wall_tile`, `door_tile` — усі 64×64.
 
-*Інтерфейс на сцені:* `arrow` 32×40, `digit_0`…`digit_9` 9×16,
+*Інтерфейс на сцені:* `digit_0`…`digit_9` 9×16,
 `digit_colon` 4×16, `state_done` 19×19, `state_overheat` 19×19.
 
 ---

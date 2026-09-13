@@ -30,4 +30,7 @@ export const IMPORTED_SPRITES = Object.freeze([
   'cat_walk_side.png',
   'cat_sit.png',
   'cat_sleep.png',
+  // Стрілка цілі. Малювалась шевроном, щоб не читатись як предмет над головою;
+  // завезена — суцільна, і читається як покажчик просто тому, що більша.
+  'arrow.png',
 ])

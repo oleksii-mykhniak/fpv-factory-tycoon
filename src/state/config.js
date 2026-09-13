@@ -377,6 +377,13 @@ export const CAT_SIDE_FACES_RIGHT = false
 // лапами на місці, стоячи боком.
 export const CAT_STILL_SPEED = 6
 
+// ── Стрілка цілі (C7.3) ──────────────────────────────────
+// Розмір завезеного арту (41×64) у пропорції, а не на око: розтягнута на чужий
+// прямокутник стрілка тупішає вістрям, і саме вістря — єдине, заради чого вона
+// на екрані. Висота — та сама, що була в намальованої.
+export const ARROW_H = u(0.57)
+export const ARROW_W = u(0.37)
+
 // ── Navigation (C4) ──────────────────────────────────────
 // Grid cell size. Smaller = more accurate paths and a more expensive search;
 // 24 is about a third of a character, which is enough to find doorways.

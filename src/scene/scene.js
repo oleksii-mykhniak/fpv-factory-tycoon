@@ -11,6 +11,7 @@ import {
   CHARACTER_ART,
   AI_SHEETS, AI_SIDE_FACES_RIGHT,
   CAT_SHEETS, CAT_SPEED, CAT_RUN_SPEED,
+  ARROW_W, ARROW_H,
   INTAKE_CAPACITY,
   u,
 } from '../state/config.js'
@@ -1260,7 +1261,7 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
   // ── Objective arrow (C7.3) ─────────────────────────────
   // Bobs above the player's head, pointing at the next useful zone.
   const arrow = new ex.Actor({
-    pos: ex.vec(-9999, -9999), width: 34, height: 42,
+    pos: ex.vec(-9999, -9999), width: ARROW_W, height: ARROW_H,
     z: 30, color: ex.Color.fromHex('#ffc83c'),
   })
   applySprite(arrow, 'arrow')

@@ -575,32 +575,6 @@ function drawWalkCycle(pixels, w, h, pal) {
   }
 }
 
-// Objective arrow — points down by default; the scene rotates it. Drawn as a
-// chevron rather than a solid block, which read as an item held over the head.
-function drawArrow(pixels, w, h) {
-  const cx = w / 2
-  for (let y = 0; y < h; y++) {
-    // Triangular head over the top 60%, tail below it.
-    const t = y / h
-    let halfW
-    if (t < 0.62) halfW = (t / 0.62) * (w / 2 - 2)
-    else          halfW = w * 0.16
-    for (let x = Math.round(cx - halfW); x <= Math.round(cx + halfW); x++) {
-      if (x < 0 || x >= w) continue
-      const edge = Math.abs(x - cx) > halfW - 2.2
-      if (edge) setPixel(pixels, w, x, y, ...SIGNAL.light)
-      else      setPixel(pixels, w, x, y, ...P.accent)
-    }
-  }
-  // Dark outline along the head's slopes so it reads on a light floor too.
-  for (let y = 0; y < h * 0.62; y++) {
-    const halfW = (y / (h * 0.62)) * (w / 2 - 2)
-    setPixel(pixels, w, Math.round(cx - halfW), y, ...P.woodLo)
-    setPixel(pixels, w, Math.round(cx + halfW), y, ...P.woodLo)
-  }
-}
-
-
 // Палітра, світло і щільність пікселя переїхали в `./palette.js` (А5.2): доти
 // кольори були розсипані по функціях і жоден не можна було змінити в одному
 // місці. `box()` нижче лишається тут — це не колір, а СВІТЛО: воно єдине
@@ -1283,7 +1257,6 @@ const sprites = [
   { name: 'mailbox',          wu: u(1.0),  hu: u(0.81), draw: drawMailbox         },
   { name: 'piggy',            wu: u(1.0),  hu: u(1.0),  draw: drawPiggy           },
   // Стрілка цілі — дивиться вниз; сцена повертає її на ціль.
-  { name: 'arrow',            wu: u(0.5),  hu: u(0.62), draw: drawArrow           },
 
   // Сім кадрів: чотири ходьби, далі сидить, спить, вмивається (V5).
 

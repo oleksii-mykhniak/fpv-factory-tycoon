@@ -435,6 +435,10 @@ function syncArrow(refs, world, player) {
   const bob = Math.sin(Date.now() / 260) * 4
   arrow.pos.x = refs.player.pos.x + (dx / d) * 76
   arrow.pos.y = refs.player.pos.y + (dy / d) * 76 - 30 + bob
+  // Стрілка намальована вістрям УГОРУ, тому +π/2: `atan2` міряє від осі X, а
+  // верхнє вістря дивиться на -π/2. Знак тут не косметика — з нього стрілка
+  // або веде до цілі, або рівно від неї, і на екрані це однаково схоже на
+  // «стрілка працює», поки не піти за нею.
   arrow.rotation = Math.atan2(dy, dx) + Math.PI / 2
   arrow.z = player.y * 0.01 + 5
   arrow.graphics.visible = true
