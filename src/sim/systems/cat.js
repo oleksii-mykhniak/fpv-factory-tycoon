@@ -23,7 +23,7 @@
 
 import {
   CAT_SPEED, CAT_RUN_SPEED, CAT_WANDER_RADIUS, CAT_ROAM_RADIUS,
-  CAT_MOOD_MS, CAT_MOODS,
+  CAT_MOOD_MS, CAT_MOODS, CAT_HALF_W, CAT_HALF_H,
 } from '../../state/config.js'
 import { createAgent } from '../world.js'
 import { stopPath } from './path.js'
@@ -66,8 +66,8 @@ export function syncCat(world) {
   const cat = createAgent({
     id: CAT_ID, kind: 'cat', x: home.x, y: home.y, speed: CAT_SPEED,
   })
-  cat.halfW = 12
-  cat.halfH = 8
+  cat.halfW = CAT_HALF_W
+  cat.halfH = CAT_HALF_H
   cat.mood = 'sit'
   cat.moodUntil = 0
   cat.rng = makeRng()

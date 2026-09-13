@@ -343,13 +343,30 @@ export const CAT_WALK_MOODS = Object.freeze(['stroll', 'run', 'follow'])
 //
 // Числа підібрані з пропорцій аркушів, а не зміряні в грі. Дивитись на них
 // треба знімком зі СПРАВЖНЬОЇ гри — той самий урок, що й з предметом у руках.
+//
+// `CAT_SCALE` множить УСІ пʼять одразу, і тільки заради цього він окремо. Кіт
+// у натуральний зріст анатомічно чесний і на екрані телефона губиться; гра
+// цінує «видно» вище за «точно». Робити його більшим правкою пʼяти чисел
+// означає щоразу заново вирішувати, наскільки сидячий кіт вищий за сплячого, —
+// а це вже вирішено нижче й мінятись не повинно.
+export const CAT_SCALE = 1.5
+const catH = (fraction) => u(fraction * CAT_SCALE)
+
 export const CAT_SHEETS = Object.freeze({
-  down:  { key: 'cat_walk_down', frames: 12, frameMs: 70,  h: u(0.34) },
-  up:    { key: 'cat_walk_up',   frames: 12, frameMs: 70,  h: u(0.34) },
-  side:  { key: 'cat_walk_side', frames: 17, frameMs: 60,  h: u(0.30) },
-  sit:   { key: 'cat_sit',       frames: 15, frameMs: 110, h: u(0.36) },
-  sleep: { key: 'cat_sleep',     frames: 8,  frameMs: 180, h: u(0.20) },
+  down:  { key: 'cat_walk_down', frames: 12, frameMs: 70,  h: catH(0.34) },
+  up:    { key: 'cat_walk_up',   frames: 12, frameMs: 70,  h: catH(0.34) },
+  side:  { key: 'cat_walk_side', frames: 17, frameMs: 60,  h: catH(0.30) },
+  sit:   { key: 'cat_sit',       frames: 15, frameMs: 110, h: catH(0.36) },
+  sleep: { key: 'cat_sleep',     frames: 8,  frameMs: 180, h: catH(0.20) },
 })
+
+// Тіло кота для стін і пошуку шляху. НЕ росте разом із `CAT_SCALE`, і це
+// навмисне: так само, як у людини (`PLAYER_HALF_W`), коробка зіткнення менша
+// за малюнок. Збільшити її за компанію означало б звузити котові квартиру —
+// він перестав би пролазити там, де пролазив, і замість «кіт побільшав» вийшло
+// б «кіт застряє». Якщо кіт помітно залазить у стіни — крутити саме ці два.
+export const CAT_HALF_W = 12
+export const CAT_HALF_H = 8
 
 // У який бік дивиться кіт на бічному аркуші — ЛІВОРУЧ, як і людина.
 export const CAT_SIDE_FACES_RIGHT = false
