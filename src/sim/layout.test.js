@@ -33,11 +33,16 @@ const plans  = () => [
 describe('C7 — locations are floor plans, not palettes', () => {
   it('each floor plan is a different sized room with its own bench slots', () => {
     const [flat, withGarage] = homes()
-    expect(new Set([flat, withGarage, layoutFor('factory')].map(l => l.world.w)).size).toBe(3)
+    expect(layoutFor('factory').world.w).not.toBe(flat.world.w)
     // The flat starts with one bench; the garage brings the second with it (П2).
     expect(flat.stationSlots).toHaveLength(1)
     expect(withGarage.stationSlots).toHaveLength(2)
-    expect(withGarage.world.w).toBeGreaterThan(flat.world.w)
+    // А от СВІТ від покупки більше не росте: гараж стоїть на ділянці з першої
+    // хвилини, зачинений і в тіні, і двір перед ним ходжений. Купівля вмикає
+    // в ньому світло й пробиває двері, а не добудовує його праворуч.
+    expect(withGarage.world.w).toBe(flat.world.w)
+    expect(flat.shade).toHaveLength(1)
+    expect(withGarage.shade).toHaveLength(0)
     // The factory opens with one hall; the rest are bought (F2).
     expect(layoutFor('factory').stationSlots).toHaveLength(2)
   })
@@ -104,7 +109,12 @@ describe('C7 — locations are floor plans, not palettes', () => {
     applyLayout(w, layoutFor('factory'))
 
     expect(w.bounds.w).toBe(layoutFor('factory').world.w)
-    expect(w.navGrid.cols).toBeGreaterThan(before.cols)
+    // Сітка перебудувалась ПІД НОВИЙ СВІТ — саме це й перевіряється. Було
+    // «стала ширшою за домашню», і це трималось на тому, що дім вужчий за
+    // фабрику; відколи двір розтягнувся на ділянку з гаражем, дім ширший за
+    // фабрику з одним цехом, а сітка від цього не менш перебудована.
+    expect(w.navGrid.cols).toBe(Math.ceil(layoutFor('factory').world.w / w.navGrid.cell))
+    expect(w.navGrid.cols).not.toBe(before.cols)
     expect(w.zones.some(z => z.kind === 'mailbox')).toBe(true)
   })
 

@@ -109,7 +109,11 @@ describe('sim/pathSystem — routes in the real apartment', () => {
   it('snaps a target buried in a wall to the nearest spot beside it', () => {
     const w = world()
     const p = player(w)
-    p.pathTarget = { x: apartment.world.w / 2, y: 2 }   // dead centre of the top wall
+    // Точно над вхідними дверима, у верхній стіні КВАРТИРИ. Було
+    // `world.w / 2`, і це збігалось із серединою квартири рівно доти, доки
+    // світ був квартирою: тепер у ньому ще й гараж, і середина світу — це
+    // глуха стіна між ними, за якою замкнене приміщення.
+    p.pathTarget = { x: apartment.door.x, y: 2 }
     run(w, 30_000)
 
     expect(insideObstacle(w, p)).toBe(false)

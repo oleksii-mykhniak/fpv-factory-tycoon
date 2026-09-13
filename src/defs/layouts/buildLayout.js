@@ -91,6 +91,7 @@ export function buildLayout({
   decor = [],     // furniture that does nothing — see below
   street = [],    // the same thing, outside the front door
   groundPatches = [], // ділянки іншого покриття поверх базової плитки двору
+  shade = [],     // затемнені ділянки — приміщення, яке видно, але яке ще не твоє
   stationSlots,   // [{ def, x, y }] where benches may stand
   props,          // { name: { x, y, w, h, sprite, color, z } }
   deliverySlots,  // [{ x, y }] street positions, indexed by delivery.slotIndex
@@ -211,6 +212,10 @@ export function buildLayout({
     // наскрізь до сцени рівно так, як приходять із розкладки — сцена сама
     // знає, як покласти плитку прямокутником.
     groundPatches,
+    // Тінь малюється поверх усього, що стоїть у затемненій ділянці, і ні на що
+    // не впливає, крім вигляду: приміщення за нею — звичайне приміщення, просто
+    // без світла.
+    shade,
     zones,
     spawns: {
       // Every role has a post to stand at (S1.5). Falling back to one shared

@@ -998,6 +998,26 @@ function drawGate(px, w, h) {
   fillRect(px, w, mid - 2, Math.round(h * 0.46), mid + 1, Math.round(h * 0.54), ...P.metal)
 }
 
+// Зачинені гаражні ворота.
+//
+// Гараж видно з першої хвилини, задовго до того, як його купують, і ворота —
+// єдине, що про це говорить. Тому вони НЕ отвір і не шматок стіни: секційна
+// брама з поперечними ребрами, яку видно як браму навіть смугою заввишки в
+// пів-персонажа.
+//
+// Ребра горизонтальні й часті: вертикальні на такій висоті зливаються з
+// цегляним ритмом стіни поруч, і ворота перестають читатись окремим об'єктом.
+function drawGarageDoor(px, w, h) {
+  box(px, w, 0, 0, w, h, P.metalLo, P.metal, P.darkLo)
+  ribs(px, w, 2, 2, w - 4, h - 4, 5, P.metal)
+  // Напрямні обабіч — те, що робить браму брамою, а не панеллю.
+  fillRect(px, w, 0, 0, 3, h - 1, ...P.dark)
+  fillRect(px, w, w - 4, 0, w - 1, h - 1, ...P.dark)
+  // Ручка посередині низу.
+  const mid = Math.round(w / 2)
+  fillRect(px, w, mid - 6, h - Math.max(3, Math.round(h * 0.28)), mid + 5, h - Math.max(2, Math.round(h * 0.18)), ...P.metalHi)
+}
+
 // ── Walls ───────────────────────────────────────────────────────────────────
 // Painted flat until now, in a colour picked by hand per location — which is
 // exactly why they never matched the floor. Same palette, same light: a body,
@@ -1443,6 +1463,8 @@ sprites.push(
   { name: 'o_fence_h', wu: T * 1.0,  hu: T * 0.55, draw: drawFenceH },
   { name: 'o_fence_v', wu: T * 0.34, hu: T * 1.0,  draw: drawFenceV },
   { name: 'o_gate',    wu: T * 2.0,  hu: T * 0.55, draw: drawGate   },
+  // Ширина — рівно проріз гаражних воріт у стіні (260 одиниць = T*3.51).
+  { name: 'o_garage_door', wu: T * 3.51, hu: T * 0.52, draw: drawGarageDoor },
 
   { name: 'wall_tile', wu: T, hu: T, draw: wallTile },
   { name: 'door_tile', wu: T, hu: T, draw: doorTile },

@@ -81,6 +81,7 @@ export const SPRITES = Object.freeze({
   o_fence_h: { url: `${BASE}sprites/o_fence_h.png`, anchors: {} },
   o_fence_v: { url: `${BASE}sprites/o_fence_v.png`, anchors: {} },
   o_gate: { url: `${BASE}sprites/o_gate.png`, anchors: {} },
+  o_garage_door: { url: `${BASE}sprites/o_garage_door.png`, anchors: {} },
   tile_asphalt: { url: `${BASE}sprites/tile_asphalt.png`, anchors: {} },
   tile_asphalt_0: { url: `${BASE}sprites/tile_asphalt_0.png`, anchors: {} },
   tile_asphalt_1: { url: `${BASE}sprites/tile_asphalt_1.png`, anchors: {} },

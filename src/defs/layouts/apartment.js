@@ -8,7 +8,7 @@
 // Гараж навмисно менший за старий (900×950 проти 1500×1700): він тепер стоїть
 // поруч із квартирою, а не замість неї, і мусить читатись як прибудова.
 
-import { buildLayout } from './buildLayout.js'
+import { buildLayout, WALL_SIDE, WALL_HORIZ } from './buildLayout.js'
 import { openRooms } from './rooms.js'
 import { u } from '../../state/config.js'
 
@@ -43,11 +43,17 @@ const APRON = { x: 396, y: YARD_Y, w: 566, h: 172 }
 // Доріжка від дверей до хвіртки. Ширина — рівно дверний проріз (180), щоб вона
 // читалась як продовження дверей, а не як другий об'єкт поруч.
 const PATH  = { x: 414, y: APRON.y + APRON.h, w: 172, h: 390 }
-// Парковка. Впритул до доріжки лівим боком: майданчик, з якого нікуди не
-// виїхати, читається як пляма фарби на траві.
-const PARK  = { x: 110, y: 1150, w: 304, h: 340 }
-// Під'їзд до гаражних воріт — та сама роль, що в доріжки, тільки для машини.
-const DRIVE_W = 280
+// Парковка — під'їзд до гаражних воріт. Окремого майданчика збоку від будинку
+// більше немає: машина стоїть НАПРОТИ гаража, бо саме туди її й ставлять, а
+// асфальт без машини на іншому кінці двору лишався плямою фарби на траві.
+const GARAGE_DOOR_X = FLAT_W + 450   // вісь воріт
+const GARAGE_DOOR_W = 260
+const DRIVE  = { x: GARAGE_DOOR_X - GARAGE_DOOR_W / 2, y: YARD_Y, w: GARAGE_DOOR_W, h: 556 }
+// Машина стоїть на під'їзді, але НЕ в гирлі воріт: між нею і стіною лишається
+// 142 одиниці, і ще по газону обабіч. Інакше, щойно гараж відкриють, вона
+// затулить єдиний вихід із нього — а це той сорт поломки, який видно не на
+// екрані, а через хвилину, коли кур'єр просто спинився.
+const CAR = { x: GARAGE_DOOR_X, y: 1193, w: T * 2.18, h: T * 3.6 }
 
 // Прогін паркана як список секцій. Одна секція — один спрайт, бо сцена малює
 // декор посекційно; ділити довгу сторону на секції ЗАВШИРШКИ В ЗРІСТ
@@ -126,19 +132,29 @@ const THEME = {
 export function buildApartmentLayout(roomIds) {
   const rooms  = openRooms(roomIds)
   const garage = rooms.some(r => r.id === 'garage')
-  const worldW = FLAT_W + (garage ? GARAGE_W : 0)
+  // Світ ЗАВЖДИ на всю ділянку — і поки гараж куплено, і поки ні.
+  //
+  // Досі він добудовувався вправо в момент покупки, і причина була записана в
+  // коментарі до стіни нижче: «затемнена кімната, у яку не можна зайти, — це
+  // або спойлер, або на вигляд поломка». Тепер вибрано протилежне, свідомо:
+  // гараж видно з першої хвилини, зачинений і в тіні, а двір перед ним —
+  // звичайна ходжена земля. Порожня стіна нічого не обіцяла; замкнені ворота
+  // обіцяють, і саме тому по них видно, за що платять $800.
+  const worldW = FLAT_W + GARAGE_W
   const X0     = FLAT_W   // where the garage starts
   // Хвіртка перед входом і в'їзд до гаража — обидва по сітці секцій паркана.
   const frontGate = gateSlot(500)
-  const driveGate = gateSlot(X0 + 450)
+  const driveGate = gateSlot(GARAGE_DOOR_X)
 
   return buildLayout({
     id:    'apartment',
     world: { w: worldW, h: WORLD_H },
     roomH: ROOM_H,
     door:  { x: 500, w: 180 },
-    // A garage has a garage door. Same wall, second hole — see extraDoors.
-    extraDoors: garage ? [{ x: X0 + 450, w: 260 }] : [],
+    // Ворота — отвір у стіні лише коли гараж КУПЛЕНО. Доти на цьому місці
+    // суцільна стіна, а поверх неї малюється зачинена брама (`o_garage_door`
+    // у декорі): те саме місце, той самий розмір, інший стан.
+    extraDoors: garage ? [{ x: GARAGE_DOOR_X, w: GARAGE_DOOR_W }] : [],
     partitions: [
       // Between the room and the kitchen, with a doorway in the middle.
       { axis: 'v', at: 620, from: 0, to: 600, gaps: [{ at: 300, size: 170 }] },
@@ -148,12 +164,11 @@ export function buildApartmentLayout(roomIds) {
         { at: 280, size: 190 },
         { at: 830, size: 190 },
       ] },
-      // The garage wall. Until it is bought this is the outer wall of the flat,
-      // built the same way — nothing behind it exists, which is the point: a
-      // darkened room you cannot enter is either a spoiler or a bug on sight.
-      ...(garage
-        ? [{ axis: 'v', at: X0, from: 0, to: ROOM_H, gaps: [{ at: 790, size: 200 }] }]
-        : []),
+      // Стіна між квартирою і гаражем. Стоїть ЗАВЖДИ — вона й до покупки була
+      // стіною, просто зовнішньою. Прохід у ній з'являється разом із гаражем:
+      // доти гараж — це кімната, повз яку ходять надворі, а не крізь яку.
+      { axis: 'v', at: X0, from: 0, to: ROOM_H,
+        gaps: garage ? [{ at: 790, size: 200 }] : [] },
     ],
     // Слоти верстаків: перший — у кімнаті, другий приходить із гаражем. Порядок
     // важить: станції розкладаються за індексом, тож station-0 лишається вдома.
@@ -235,27 +250,44 @@ export function buildApartmentLayout(roomIds) {
     // Тверді покриття двору. Порядок у списку — порядок малювання, тож
     // під'їзд лягає поверх газону, а не навпаки.
     groundPatches: [
+      // Підлога гаража — бетон, і лежить вона там ЗАВЖДИ. Гараж видно з
+      // першої хвилини, і видно його саме тим, що всередині інша підлога, а
+      // не тим, що там темно: сама лише тінь на дерев'яній підлозі читається
+      // як неосвітлена кімната квартири.
+      { x: X0 + WALL_SIDE, y: WALL_HORIZ,
+        w: GARAGE_W - WALL_SIDE * 2, h: ROOM_H - WALL_HORIZ * 2,
+        tile: 'tile_concrete', color: '#6b7284' },
+
       { ...APRON, tile: THEME.pathTile, color: THEME.pathColor },
       { ...PATH,  tile: THEME.pathTile, color: THEME.pathColor },
-      { ...PARK,  tile: THEME.parkTile, color: THEME.parkColor },
-      ...(garage ? [{
-        x: X0 + 450 - DRIVE_W / 2, y: YARD_Y, w: DRIVE_W, h: FENCE_Y - YARD_Y - 20,
-        tile: THEME.parkTile, color: THEME.parkColor,
-      }, {
-        x: X0 + 610, y: 1180, w: 270, h: 320,
-        tile: THEME.parkTile, color: THEME.parkColor,
-      }] : []),
+      // Під'їзд до воріт — теж завжди: по ньому ходять іще до покупки.
+      { ...DRIVE, tile: THEME.parkTile, color: THEME.parkColor },
     ],
+    // Тінь на гаражі, поки його не куплено. Не «чорний прямокутник замість
+    // кімнати»: під нею лежить справжня підлога й справжні стіни, тож
+    // зачинений гараж — це те саме приміщення при вимкненому світлі, а
+    // покупка його просто вмикає.
+    shade: garage ? [] : [{
+      x: X0 + WALL_SIDE, y: WALL_HORIZ,
+      w: GARAGE_W - WALL_SIDE * 2, h: ROOM_H - WALL_HORIZ * 2,
+      color: '#0a0a14', opacity: 0.72,
+    }],
     street: [
-      // Машина стоїть на парковці, а не «десь на асфальті»: місце під неї і є
-      // те, заради чого парковка існує. Завезений арт (`car_blue`) — вид
-      // строго згори, носом донизу, тому вона й розвернута до хвіртки.
+      // Машина стоїть НАПРОТИ гаража — там, де машину й ставлять. Завезений
+      // арт (`car_blue`) — вид строго згори, носом донизу, тобто до хвіртки;
+      // до воріт вона стоїть багажником, як і паркуються задом до гаража.
       //
-      // 2.18×3.6 зросту персонажа — удвічі більше за перший захід. Машина на
-      // півтора персонажа завдовжки читалась як іграшка на газоні; тепер вона
-      // заповнює свій майданчик, і майданчик через це читається як парковка,
-      // а не як пляма асфальту.
-      { sprite: 'car_blue',   x: 262, y: 1320, w: T*2.18, h: T*3.6 },
+      // 2.18×3.6 зросту персонажа. На півтора персонажа завдовжки вона
+      // читалась як іграшка на газоні; тепер заповнює під'їзд, і під'їзд через
+      // це читається як парковка, а не як пляма асфальту.
+      { sprite: 'car_blue', ...CAR },
+
+      // Зачинена брама. Її НЕМА, коли гараж куплено: там уже отвір у стіні, і
+      // намальовані стулки поверх проходу — це двері, крізь які ходять.
+      ...(garage ? [] : [{
+        sprite: 'o_garage_door', x: GARAGE_DOOR_X, y: ROOM_H - WALL_HORIZ / 2,
+        w: GARAGE_DOOR_W, h: T * 0.52, z: 2,
+      }]),
 
       // Сад праворуч від доріжки. Дерева стоять глибоко у дворі, а не при
       // самому будинку: крона заввишки в півтора персонажа біля стіни закриває
@@ -279,12 +311,10 @@ export function buildApartmentLayout(roomIds) {
       // виглядом, а тим, що хвіртка теж перешкода. Отвір у прогоні пробитий
       // рівно під неї (`gap` у fenceRun), щоб ці два малюнки не наклались.
       { sprite: 'o_gate', x: frontGate.at, y: FENCE_Y, w: frontGate.size, h: T*0.55, z: 2 },
-      ...(garage
-        ? [{ sprite: 'o_gate', x: driveGate.at, y: FENCE_Y, w: driveGate.size, h: T*0.55, z: 2 }]
-        : []),
+      { sprite: 'o_gate', x: driveGate.at, y: FENCE_Y, w: driveGate.size, h: T*0.55, z: 2 },
 
       // Паркан по периметру ділянки.
-      ...fenceRun({ axis: 'h', at: FENCE_Y, from: 0, to: worldW, gaps: [frontGate, ...(garage ? [driveGate] : [])] }),
+      ...fenceRun({ axis: 'h', at: FENCE_Y, from: 0, to: worldW, gaps: [frontGate, driveGate] }),
       // Бічні прогони доходять до нижнього — кут закритий з обох боків.
       //
       // Тримається це на тому, що межа світу спиняє персонажа за ЦЕНТР
@@ -295,14 +325,16 @@ export function buildApartmentLayout(roomIds) {
       ...fenceRun({ axis: 'v', at: FENCE_INSET,          from: YARD_Y, to: FENCE_Y - T * 0.3 }),
       ...fenceRun({ axis: 'v', at: worldW - FENCE_INSET, from: YARD_Y, to: FENCE_Y - T * 0.3 }),
 
-      // Двір гаража.
-      ...(garage ? [
-        { sprite: 'car_blue',   x: X0 + 745, y: 1320, w: T*2.18, h: T*3.6 },
-        { sprite: 'o_lamppost', x: X0 + 830, y: 1010, w: T*0.6,  h: T*1.5 },
-        { sprite: 'o_bush',     x: X0 + 120, y: 1300, w: T*0.9,  h: T*0.8 },
-        { sprite: 'o_hedge',    x: X0 + 250, y: 1430, w: T*1.4,  h: T*0.6 },
-        { sprite: 'o_tree',     x: X0 + 130, y: 1120, w: T*1.2,  h: T*1.4 },
-      ] : []),
+      // Двір перед гаражем. Не за прапорцем: земля перед гаражем ходжена з
+      // першої хвилини, і порожній газон обабіч під'їзду виглядав би не як
+      // «сюди ще не дійшли руки», а як недомальована половина світу.
+      { sprite: 'o_lamppost', x: X0 + 830, y: 1010, w: T*0.6,  h: T*1.5 },
+      { sprite: 'o_bush',     x: X0 + 120, y: 1300, w: T*0.9,  h: T*0.8 },
+      { sprite: 'o_hedge',    x: X0 + 250, y: 1430, w: T*1.4,  h: T*0.6 },
+      { sprite: 'o_tree',     x: X0 + 130, y: 1120, w: T*1.2,  h: T*1.4 },
+      { sprite: 'o_tree',     x: X0 + 700, y: 1430, w: T*1.2,  h: T*1.4 },
+      { sprite: 'o_bush',     x: X0 + 810, y: 1250, w: T*0.9,  h: T*0.8 },
+      { sprite: 'o_hedge',    x: X0 + 640, y: 1030, w: T*1.4,  h: T*0.6 },
     ],
     // Коробки приїжджають на майданчик перед дверима — у ряд, праворуч від
     // виходу. Раніше вони лежали посеред проїжджої частини; тепер під ними є

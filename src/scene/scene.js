@@ -131,7 +131,7 @@ function makeNumberRow(scene, track, len) {
   return { show, hide }
 }
 
-function colorRect(scene, { x, y, w, h, hex, z = 0 }) {
+function colorRect(scene, { x, y, w, h, hex, z = 0, opacity = 1 }) {
   const a = new ex.Actor({
     pos: ex.vec(x, y),
     width: w,
@@ -139,6 +139,7 @@ function colorRect(scene, { x, y, w, h, hex, z = 0 }) {
     z,
     color: ex.Color.fromHex(hex),
   })
+  if (opacity !== 1) a.graphics.opacity = opacity
   scene.add(a)
   return track(a)
 }
@@ -277,6 +278,23 @@ function buildRoom(scene, layout) {
     track(actor)
     applySprite(actor, p.sprite)
     actors[name] = actor
+  }
+
+  // Затемнені приміщення (гараж, поки його не куплено). Малюються ПІСЛЯ всього,
+  // що стоїть усередині, і саме тому це окремий крок, а не колір підлоги:
+  // темна підлога під освітленими меблями читається як брудна підлога, а не як
+  // кімната без світла.
+  //
+  // z відраховується від НИЗУ ділянки тим самим множником, яким сортується
+  // все інше (0.01 на одиницю): усе, що стоїть у ній, має низ не нижчий за її
+  // низ, тобто гарантовано опиняється під тінню. Персонаж надворі стоїть
+  // нижче — і лишається поверх, бо він і є ближче до глядача.
+  for (const patch of layout.shade ?? []) {
+    colorRect(scene, {
+      x: patch.x + patch.w / 2, y: patch.y + patch.h / 2, w: patch.w, h: patch.h,
+      hex: patch.color ?? '#0a0a14', z: (patch.y + patch.h) * 0.01 + 0.5,
+      opacity: patch.opacity ?? 0.7,
+    })
   }
 
   // Small hand-placed details that read better than a flat rectangle. Matched by
