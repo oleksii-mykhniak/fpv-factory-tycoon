@@ -157,11 +157,10 @@ export const LIVERY = {
   eyeWhite:  hex('#eeeeff'),
 }
 
-// Кіт (V5). Власна група, бо руда шерсть і зелені очі — це теж «хто це».
-export const CAT = {
-  fur:   hex('#d88a40'), furHi: hex('#f2ac5c'), furLo: hex('#a66228'),
-  eye:   hex('#3ae09a'), nose:  hex('#f09aaa'),
-}
+// Кота тут більше немає. Його шерсть була власною групою, поки кота МАЛЮВАВ
+// генератор; тепер він приходить аркушами ззовні (scripts/imported-art.js) і
+// палітрі не підпорядкований узагалі. Група, яку не вживає жоден спрайт, —
+// це не документація кольору, а порожнеча, яку тримає тест.
 
 // Світло й блиск. Те, що СВІТИТЬСЯ, не може бути притягнуте до матового
 // відтінку меблів — інакше розжарене жало паяльника читається як жовта фарба.
@@ -200,7 +199,7 @@ export function fullPalette(roles = []) {
     Array.isArray(v) ? [v] : Object.values(v).filter(Array.isArray))
   return [
     ...Object.values(P),
-    ...flat(PRODUCT), ...flat(LIVERY), ...Object.values(CAT), ...Object.values(PROP),
+    ...flat(PRODUCT), ...flat(LIVERY), ...Object.values(PROP),
     ...Object.values(SIGNAL), ...Object.values(ACCENT),
     ...roles,
   ]

@@ -21,7 +21,7 @@ import { pathToFileURL } from 'url'
 import { u } from '../src/state/config.js'
 import { ROLES, ROLE_ORDER } from '../src/defs/roles.js'
 import {
-  P, PRODUCT, LIVERY, CAT, PROP, SIGNAL, ACCENT,
+  P, PRODUCT, LIVERY, PROP, SIGNAL, ACCENT,
   UNITS_PER_PX, hex, fullPalette, roleColors,
 } from './palette.js'
 
@@ -1254,109 +1254,6 @@ function drawBadge(roleId) {
   }
 }
 
-// ── Cat (V5) ────────────────────────────────────────────────────────────────
-// Four frames: three walking, one sitting. Side-on, tiny, and the tail is the
-// part that has to read at 30 px — it is what says "cat" rather than "dog".
-// Ginger, not grey. The first pass made a dark cat on a dark floor: you could
-// not find it in a screenshot, let alone while playing. Everything alive in
-// this game has to read against #1a1a26.
-// Палітра кота — у `palette.js` (Стадія 15 / П1). Тут лишається тільки те,
-// чим вона була по суті: руда шерсть і зелені очі — це «хто це», а не
-// відтінок реквізиту, тому квантизація їх не чіпає.
-
-function drawCatFrame(pixels, w, ox, { legs, sitting }) {
-  const cx = ox + 16
-  const baseY = sitting ? 25 : 24
-
-  // Tail — a curve, drawn first so the body overlaps its root.
-  const tailPts = sitting
-    ? [[cx + 9, baseY], [cx + 13, baseY - 2], [cx + 15, baseY - 7]]
-    : [[cx + 9, baseY - 4], [cx + 14, baseY - 6], [cx + 16, baseY - 12]]
-  for (let i = 0; i < tailPts.length - 1; i++) {
-    const [x0, y0] = tailPts[i], [x1, y1] = tailPts[i + 1]
-    drawLine(pixels, w, x0, y0, x1, y1, ...CAT.furLo, 3)
-  }
-
-  if (sitting) {
-    // Haunches + upright chest.
-    fillCircle(pixels, w, cx + 3, baseY - 4, 6, ...CAT.fur)
-    fillRect(pixels, w, cx - 4, baseY - 12, cx + 2, baseY - 1, ...CAT.fur)
-  } else {
-    fillRect(pixels, w, cx - 6, baseY - 10, cx + 8, baseY - 3, ...CAT.fur)
-    fillRect(pixels, w, cx - 6, baseY - 10, cx + 8, baseY - 8, ...CAT.furHi)
-    // Legs swing between frames so the walk reads even this small.
-    for (const [lx, len] of legs) {
-      fillRect(pixels, w, cx + lx, baseY - 3, cx + lx + 1, baseY - 3 + len, ...CAT.furLo)
-    }
-  }
-
-  // Head + ears + face.
-  const hx = cx - 8, hy = sitting ? baseY - 16 : baseY - 12
-  fillCircle(pixels, w, hx, hy, 5, ...CAT.fur)
-  fillCircle(pixels, w, hx, hy - 2, 4, ...CAT.furHi)
-  drawLine(pixels, w, hx - 4, hy - 4, hx - 2, hy - 8, ...CAT.furLo, 2)
-  drawLine(pixels, w, hx + 2, hy - 4, hx + 4, hy - 8, ...CAT.furLo, 2)
-  setPixel(pixels, w, hx - 3, hy, ...CAT.eye)
-  setPixel(pixels, w, hx + 1, hy, ...CAT.eye)
-  setPixel(pixels, w, hx - 1, hy + 2, ...CAT.nose)
-}
-
-// Curled up asleep: an oval with the tail round it and the eyes shut. Read at
-// this size it is the silhouette that says "asleep", not the closed eyes.
-function drawCatSleep(px, w, ox) {
-  const cx = ox + 16, cy = 22
-  for (let a = 0; a < 360; a += 6) {
-    const r = 11
-    const x = cx + Math.round(Math.cos(a * Math.PI / 180) * (r + 2))
-    const y = cy + Math.round(Math.sin(a * Math.PI / 180) * (r * 0.55))
-    drawLine(px, w, x, y, x, y, ...CAT.furLo, 3)
-  }
-  for (let dy = -6; dy <= 6; dy++)
-    for (let dx = -11; dx <= 11; dx++)
-      if ((dx * dx) / 121 + (dy * dy) / 36 <= 1)
-        setPixel(px, w, cx + dx, cy + dy, ...CAT.fur)
-  for (let dy = -5; dy <= 1; dy++)
-    for (let dx = -9; dx <= 4; dx++)
-      if ((dx * dx) / 81 + (dy * dy) / 25 <= 1)
-        setPixel(px, w, cx + dx, cy + dy - 1, ...CAT.furHi)
-  // Head tucked in at the left, ears flat, eyes shut.
-  fillCircle(px, w, cx - 7, cy - 1, 5, ...CAT.fur)
-  drawLine(px, w, cx - 10, cy - 4, cx - 8, cy - 7, ...CAT.furLo, 2)
-  drawLine(px, w, cx - 5, cy - 5, cx - 3, cy - 7, ...CAT.furLo, 2)
-  drawLine(px, w, cx - 9, cy - 1, cx - 6, cy - 1, ...CAT.furLo, 1)
-  // Three little z's.
-  for (let i = 0; i < 3; i++) {
-    const zx = cx + 8 + i * 3, zy = 8 - i * 3
-    drawLine(px, w, zx, zy, zx + 2, zy, ...CAT.eye, 1)
-    drawLine(px, w, zx + 2, zy, zx, zy + 2, ...CAT.eye, 1)
-    drawLine(px, w, zx, zy + 2, zx + 2, zy + 2, ...CAT.eye, 1)
-  }
-}
-
-// Grooming: sitting, head down against a raised paw.
-function drawCatGroom(px, w, ox) {
-  drawCatFrame(px, w, ox, { legs: [], sitting: true })
-  const cx = ox + 16
-  fillCircle(px, w, cx - 8, 16, 5, ...CAT.fur)      // head, lowered
-  fillCircle(px, w, cx - 8, 14, 4, ...CAT.furHi)
-  drawLine(px, w, cx - 12, 12, cx - 10, 8, ...CAT.furLo, 2)
-  drawLine(px, w, cx - 6, 12, cx - 4, 8, ...CAT.furLo, 2)
-  fillCircle(px, w, cx - 4, 19, 3, ...CAT.furHi)    // raised paw
-}
-
-function drawCat(pixels, w) {
-  const frames = [
-    { legs: [[-5, 5], [5, 5]],  sitting: false },
-    { legs: [[-6, 6], [6, 4]],  sitting: false },
-    { legs: [[-5, 5], [5, 5]],  sitting: false },
-    { legs: [[-4, 4], [4, 6]],  sitting: false },
-  ]
-  frames.forEach((f, i) => drawCatFrame(pixels, w, i * 32, f))
-  drawCatFrame(pixels, w, 4 * 32, { legs: [], sitting: true })   // 4: sit
-  drawCatSleep(pixels, w, 5 * 32)                                 // 5: sleep
-  drawCatGroom(pixels, w, 6 * 32)                                 // 6: groom
-}
-
 const drawWorkerWalk = (pixels, w, h) => drawWalkCycle(pixels, w, h, WORKER_PALETTE)
 const drawPlayerWalk = (pixels, w, h) => drawWalkCycle(pixels, w, h, PLAYER_PALETTE)
 
@@ -1389,7 +1286,6 @@ const sprites = [
   { name: 'arrow',            wu: u(0.5),  hu: u(0.62), draw: drawArrow           },
 
   // Сім кадрів: чотири ходьби, далі сидить, спить, вмивається (V5).
-  { name: 'cat_walk',         wu: u(3.5),  hu: u(0.5),  draw: drawCat             },
 
   // Перемальовані зі спільної палітри (V6): перший захід на ці чотири мав
   // власні кольори й вибивався з усього, намальованого пізніше.

@@ -23,4 +23,11 @@ export const IMPORTED_SPRITES = Object.freeze([
   'delivery_box.png',
   'delivery_box_45.png',
   'delivery_box_open.png',
+  // Кіт: по аркушу на позу. Генератор малював його сам, аж поки не з'ясувалось,
+  // що з одного бічного циклу не видно, куди кіт іде.
+  'cat_walk_down.png',
+  'cat_walk_up.png',
+  'cat_walk_side.png',
+  'cat_sit.png',
+  'cat_sleep.png',
 ])

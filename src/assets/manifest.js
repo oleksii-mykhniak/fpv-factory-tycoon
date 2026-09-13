@@ -132,10 +132,13 @@ export const SPRITES = Object.freeze({
   jobboard: { url: `${BASE}sprites/jobboard.png`, anchors: {} },
   trashbin: { url: `${BASE}sprites/trashbin.png`, anchors: {} },
 
-  cat_walk: {
-    url: `${BASE}sprites/cat_walk.png`,
-    anchors: {},
-  },
+  // Кіт — п'ять завезених аркушів, по одному на позу (`CAT_SHEETS`). Був один
+  // `cat_walk` на сім клітинок, з якого кіт умів іти лише боком.
+  cat_walk_down: { url: `${BASE}sprites/cat_walk_down.png`, anchors: {} },
+  cat_walk_up:   { url: `${BASE}sprites/cat_walk_up.png`,   anchors: {} },
+  cat_walk_side: { url: `${BASE}sprites/cat_walk_side.png`, anchors: {} },
+  cat_sit:       { url: `${BASE}sprites/cat_sit.png`,       anchors: {} },
+  cat_sleep:     { url: `${BASE}sprites/cat_sleep.png`,     anchors: {} },
 
   soldering_iron: {
     url: `${BASE}sprites/soldering_iron.png`,

@@ -2,6 +2,7 @@
 //
 // Запуск:
 //   node scripts/analyze-ai-sheet.js <аркуш.png> [<аркуш.json>] [--rows=6] [--cols=6]
+//                                     [--min-frames=8] [--max-frames=N]
 //
 // Навіщо окремий крок перед імпортом. Генератор віддає 36 кадрів, і спокуса —
 // узяти всі. Але 36 кадрів НЕ є циклом: аркуш містить то два кроки, то два з
@@ -103,10 +104,20 @@ console.log(ramp > 0 ? `розгін: кадри 0..${ramp - 1} майже не�
 // Вікно мусить ще й РУХАТИСЯ. Без цієї умови перемагає шматок розгону: там
 // сусідні кадри майже однакові, тож будь-який стик здається малим — і скрипт
 // радить вирізати саме те місце, через яке все й затіялося.
-const MIN_FRAMES = 8
+//
+// Скільки кадрів шукати, вирішує виклик. Стеля (`--max-frames`) потрібна не
+// заради розміру файлу, а тому, що на АРКУШІ АЙДЛУ рахунок цього скрипта веде
+// не туди: сплячий кіт ворушиться на 1.7 при стику 2.6, тож «майже безшовним»
+// виходить вікно на 34 кадри — тобто ввесь аркуш. Формально це правда, по суті
+// — дві секунди дихання, які на екрані розміром із долоню не відрізнити від
+// восьми кадрів. Питання «а наскільки КОРОТКИМ може бути цикл» цей скрипт
+// ставити вмів, але відповідь ховав: сортування за стиком виносило її за
+// п'ятірку.
+const MIN_FRAMES = Number(flag('min-frames', 8))
+const MAX_FRAMES = Number(flag('max-frames', total))
 const cands = []
 for (let start = 0; start + MIN_FRAMES <= total; start++) {
-  for (let p = MIN_FRAMES; p <= total - start; p++) {
+  for (let p = MIN_FRAMES; p <= Math.min(MAX_FRAMES, total - start); p++) {
     const win = []
     for (let i = start; i < start + p - 1; i++) win.push(dist(sig[i], sig[i + 1]))
     const med = [...win].sort((a, b) => a - b)[Math.floor(win.length / 2)]
@@ -115,7 +126,10 @@ for (let start = 0; start + MIN_FRAMES <= total; start++) {
     cands.push({ start, p, seam, med, excess: seam - med })
   }
 }
-if (!cands.length) { console.error('жодного рухомого вікна: аркуш статичний?'); process.exit(1) }
+if (!cands.length) {
+  console.error(`жодного рухомого вікна в ${MIN_FRAMES}..${MAX_FRAMES} кадрів: аркуш статичний?`)
+  process.exit(1)
+}
 // За рівних стиків виграє коротше вікно: менше кадрів — менший файл.
 cands.sort((a, b) => a.excess - b.excess || a.p - b.p)
 

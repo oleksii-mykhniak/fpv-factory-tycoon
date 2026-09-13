@@ -225,7 +225,9 @@ top-down у наборі) — три кадри ходьби, сидить, сп
 ## 8. Наявні спрайти (повний реєстр із розмірами)
 
 *Персонажі й тварини:* `player_walk` 256×64, `worker_walk` 256×64,
-`cat_walk` 224×32.
+кіт — не з генератора (завезений, див. `docs/ai_sheet_workflow.md`):
+`cat_walk_down` 12 кадрів, `cat_walk_up` 12, `cat_walk_side` 17, `cat_sit` 15,
+`cat_sleep` 8 — усі заввишки 48, ширина кадру в кожній позі своя.
 
 *Дрони:* `mini_drone`, `racing_drone`, `cinematic_drone`, `longrange_drone`,
 `fixedwing_drone`, `heavy_drone`, `proto_drone` — усі 96×52.
