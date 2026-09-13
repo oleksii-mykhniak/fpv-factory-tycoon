@@ -9,6 +9,7 @@
 //   cx/cy + w/h  → Excalibur actors (centre-based)
 //   x/y + w/h    → AABB collision and grid rasterisation (top-left)
 import { u } from '../../state/config.js'
+import { footprintOf } from './footprints.js'
 
 export function rect(cx, cy, w, h) {
   return { cx, cy, w, h, x: cx - w / 2, y: cy - h / 2 }
@@ -119,22 +120,37 @@ export function buildLayout({
 
   // Decor (V3) — things that make a room a room and have no rules attached.
   // No zone, no interaction, no entry in the manifest of things the sim knows
-  // about: the only question it ever answers is `solid`.
+  // about: the only question it ever answers is "what does it stand on".
   //
-  // `solid: false` is the default on purpose. A rug or a poster that quietly
-  // narrowed a doorway would break pathing in the one way that never shows up
-  // on screen — the courier just stops.
+  // І відповідає на нього не розстановка, а `footprints.js` — по спрайту.
+  // Раніше тут був прапорець `solid` при кожному записі, і він означав «уся
+  // картинка — перешкода»: єдине, що можна було сказати про дерево, це «крізь
+  // нього ходять» або «крізь його крону не ходять». Тепер перешкода — це слід,
+  // тобто низ спрайта, і за високий предмет можна зайти.
+  //
+  // Прохідність за замовчуванням лишилась прохідністю: спрайта немає в
+  // таблиці — крізь нього ходять. Килим чи плакат, який тихо звузив прохід,
+  // ламає навігацію в єдиний спосіб, якого не видно на екрані, — кур'єр просто
+  // спиняється.
+  //
   // Street dressing is decor that happens to stand outside. Same rules, same
   // rendering — keeping it a separate argument only so a floor plan reads as
   // "inside" then "outside" rather than as one long list.
-  const decorRects = [...decor, ...street].map((d, i) => ({
-    id:     d.id ?? `decor-${i}`,
-    ...rect(d.x, d.y, d.w, d.h),
-    sprite: d.sprite,
-    color:  d.color,
-    z:      d.z ?? 2,
-    solid:  d.solid === true,
-  }))
+  const decorRects = [...decor, ...street].map((d, i) => {
+    const box  = rect(d.x, d.y, d.w, d.h)
+    const foot = footprintOf(d.sprite, box)
+    return {
+      id:     d.id ?? `decor-${i}`,
+      ...box,
+      sprite: d.sprite,
+      color:  d.color,
+      z:      d.z ?? 2,
+      // Малюється прямокутником спрайта, зупиняє — слідом. Це різні речі, і
+      // саме тому вони тут різні поля.
+      foot,
+      solid:  !!foot,
+    }
+  })
 
   const propRects = Object.fromEntries(
     Object.entries(props).map(([name, p]) => [
@@ -180,7 +196,8 @@ export function buildLayout({
     door:   { ...door, y: roomH - WALL_HORIZ },
     walls,
     // Stations are added to `obstacles` at runtime from stationSlots.
-    obstacles: [...walls, ...decorRects.filter(d => d.solid)],
+    // Перешкода — СЛІД предмета, а не його картинка (див. footprints.js).
+    obstacles: [...walls, ...decorRects.filter(d => d.foot).map(d => d.foot)],
     decor: decorRects,
     // Painted gaps in the walls. An array because the factory has one per
     // hall divider as well as the street door (F2).

@@ -66,8 +66,8 @@ function fenceRun({ axis, at, from, to, gaps = [] }) {
   const out  = []
   const inGap = (c) => gaps.some(g => c > g.at - g.size / 2 && c < g.at + g.size / 2)
   const section = (centre) => axis === 'h'
-    ? { sprite: 'o_fence_h', x: centre, y: at, w: T, h: T * 0.55, z: 2, solid: true }
-    : { sprite: 'o_fence_v', x: at, y: centre, w: T * 0.34, h: T, z: 2, solid: true }
+    ? { sprite: 'o_fence_h', x: centre, y: at, w: T, h: T * 0.55, z: 2 }
+    : { sprite: 'o_fence_v', x: at, y: centre, w: T * 0.34, h: T, z: 2 }
 
   let p = from
   for (; p + step <= to + 1; p += step) {
@@ -193,15 +193,15 @@ export function buildApartmentLayout(roomIds) {
     // sprite to a different shape is what made the first pass look smeared.
     decor: [
       { sprite: 'f_rug',       x: 300, y: 430, w: T*2.4, h: T*1.6, z: 0.6 },
-      { sprite: 'f_bed',       x: 500, y: 150, w: T,     h: T*1.9, z: 2, solid: true },
-      { sprite: 'f_sofa',      x: 160, y: 690, w: T*1.9, h: T*0.9, z: 2, solid: true },
+      { sprite: 'f_bed',       x: 500, y: 150, w: T,     h: T*1.9, z: 2 },
+      { sprite: 'f_sofa',      x: 160, y: 690, w: T*1.9, h: T*0.9, z: 2 },
       { sprite: 'f_plant',     x: 560, y: 545, w: T*0.7, h: T*0.9, z: 2 },
       { sprite: 'f_painting',  x: 210, y: 55,  w: T*0.9, h: T*0.7, z: 1 },
       // Kitchen nook
-      { sprite: 'f_counter',   x: 930, y: 100, w: T,     h: T*0.9, z: 2, solid: true },
-      { sprite: 'f_sink',      x: 850, y: 100, w: T*0.9, h: T*0.9, z: 2, solid: true },
-      { sprite: 'f_stove',     x: 770, y: 100, w: T*0.9, h: T*0.9, z: 2, solid: true },
-      { sprite: 'f_fridge',    x: 690, y: 110, w: T*0.8, h: T*1.2, z: 2, solid: true },
+      { sprite: 'f_counter',   x: 930, y: 100, w: T,     h: T*0.9, z: 2 },
+      { sprite: 'f_sink',      x: 850, y: 100, w: T*0.9, h: T*0.9, z: 2 },
+      { sprite: 'f_stove',     x: 770, y: 100, w: T*0.9, h: T*0.9, z: 2 },
+      { sprite: 'f_fridge',    x: 690, y: 110, w: T*0.8, h: T*1.2, z: 2 },
       { sprite: 'f_chair',     x: 820, y: 420, w: T*0.7, h: T*0.8, z: 2 },
       { sprite: 'f_plant',     x: 950, y: 520, w: T*0.7, h: T*0.9, z: 2 },
       // Hallway
@@ -212,22 +212,22 @@ export function buildApartmentLayout(roomIds) {
       // внутрішнього маршруту. Робітники ходили з гаража до квартири через
       // ВУЛИЦЮ — і виглядало це як помилка навігації, хоч навігація була права.
       // Тест на досяжність мовчав, бо шлях справді був, просто надворі.
-      { sprite: 'f_bookshelf', x: 620, y: 660, w: T,     h: T*1.3, z: 2, solid: true },
-      { sprite: 'f_crate',     x: 380, y: 900, w: T*0.8, h: T*0.8, z: 2, solid: true },
-      { sprite: 'f_crate',     x: 300, y: 880, w: T*0.8, h: T*0.8, z: 2, solid: true },
+      { sprite: 'f_bookshelf', x: 620, y: 660, w: T,     h: T*1.3, z: 2 },
+      { sprite: 'f_crate',     x: 380, y: 900, w: T*0.8, h: T*0.8, z: 2 },
+      { sprite: 'f_crate',     x: 300, y: 880, w: T*0.8, h: T*0.8, z: 2 },
       { sprite: 'f_chair',     x: 250, y: 690, w: T*0.7, h: T*0.8, z: 2 },
       { sprite: 'f_painting',  x: 430, y: 55,  w: T*0.9, h: T*0.7, z: 1 },
       { sprite: 'f_plant',     x: 60,  y: 120, w: T*0.7, h: T*0.9, z: 2 },
       { sprite: 'f_rug',       x: 500, y: 800, w: T*2.4, h: T*1.6, z: 0.6 },
       // Гараж: те саме житло, тільки без житла — полиці, ящики, піддони.
       ...(garage ? [
-        { sprite: 'o_shelf',    x: X0 + 480, y: 70,  w: T*1.6, h: T,     z: 2, solid: true },
-        { sprite: 'f_crate',    x: X0 + 810, y: 150, w: T*0.8, h: T*0.8, z: 2, solid: true },
-        { sprite: 'f_crate',    x: X0 + 810, y: 240, w: T*0.8, h: T*0.8, z: 2, solid: true },
-        { sprite: 'f_pallet',   x: X0 + 120, y: 620, w: T,     h: T*0.7, z: 2, solid: true },
-        { sprite: 'f_pallet',   x: X0 + 120, y: 720, w: T,     h: T*0.7, z: 2, solid: true },
-        { sprite: 'f_table',    x: X0 + 720, y: 640, w: T*1.7, h: T*0.9, z: 2, solid: true },
-        { sprite: 'o_vending',  x: X0 + 830, y: 480, w: T*0.8, h: T*1.1, z: 2, solid: true },
+        { sprite: 'o_shelf',    x: X0 + 480, y: 70,  w: T*1.6, h: T,     z: 2 },
+        { sprite: 'f_crate',    x: X0 + 810, y: 150, w: T*0.8, h: T*0.8, z: 2 },
+        { sprite: 'f_crate',    x: X0 + 810, y: 240, w: T*0.8, h: T*0.8, z: 2 },
+        { sprite: 'f_pallet',   x: X0 + 120, y: 620, w: T,     h: T*0.7, z: 2 },
+        { sprite: 'f_pallet',   x: X0 + 120, y: 720, w: T,     h: T*0.7, z: 2 },
+        { sprite: 'f_table',    x: X0 + 720, y: 640, w: T*1.7, h: T*0.9, z: 2 },
+        { sprite: 'o_vending',  x: X0 + 830, y: 480, w: T*0.8, h: T*1.1, z: 2 },
         { sprite: 'f_plant',    x: X0 + 60,  y: 640, w: T*0.7, h: T*0.9, z: 2 },
         { sprite: 'f_rug',      x: X0 + 300, y: 470, w: T*2.4, h: T*1.6, z: 0.6 },
       ] : []),
@@ -273,9 +273,9 @@ export function buildApartmentLayout(roomIds) {
       // Хвіртка. Стулки закриті — двір замкнений, і паркан тримає це не
       // виглядом, а тим, що хвіртка теж перешкода. Отвір у прогоні пробитий
       // рівно під неї (`gap` у fenceRun), щоб ці два малюнки не наклались.
-      { sprite: 'o_gate', x: frontGate.at, y: FENCE_Y, w: frontGate.size, h: T*0.55, z: 2, solid: true },
+      { sprite: 'o_gate', x: frontGate.at, y: FENCE_Y, w: frontGate.size, h: T*0.55, z: 2 },
       ...(garage
-        ? [{ sprite: 'o_gate', x: driveGate.at, y: FENCE_Y, w: driveGate.size, h: T*0.55, z: 2, solid: true }]
+        ? [{ sprite: 'o_gate', x: driveGate.at, y: FENCE_Y, w: driveGate.size, h: T*0.55, z: 2 }]
         : []),
 
       // Паркан по периметру ділянки.

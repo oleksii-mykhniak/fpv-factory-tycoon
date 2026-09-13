@@ -22,6 +22,7 @@
 // instead of a special case.
 
 import { rect, partitionRects, SIZES, WALL_SIDE, WALL_HORIZ } from './buildLayout.js'
+import { footprintOf } from './footprints.js'
 import { u, ENDLESS_CAP_HALL, MK_CAP_HALL } from '../../state/config.js'
 
 // ── Типи кімнат (К1.1) ────────────────────────────────────
@@ -339,15 +340,16 @@ function furnishAssembly(hall) {
       { id: `mailbox_${hall.id}`,  kind: 'mailbox',  from: `mailbox_${hall.id}`,  w: 150, h: 150 },
       { id: `jobboard_${hall.id}`, kind: 'jobboard', from: `jobboard_${hall.id}`, w: 150, h: 150 },
     ],
-    // Decor (V3): what a working floor has lying about. Pallets and crates are
-    // solid — you walk round them; markings and shadows are not.
+    // Decor (V3): what a working floor has lying about. Крізь що з цього можна
+    // пройти, вирішує `footprints.js` по спрайту: піддони й ящики стоять на
+    // підлозі, розмітка лежить на ній.
     decor: [
       { sprite: 'floor_mark', x: w / 2, y: 300, w: w * 0.7, h: 8, color: '#d2c25e', z: 0.4 },
-      { sprite: 'f_pallet',   x: 120, y: h - 160, w: T, h: T, color: '#b58d55', z: 2, solid: true },
-      { sprite: 'f_pallet',   x: 120, y: h - 250, w: T, h: T, color: '#b58d55', z: 2, solid: true },
-      { sprite: 'f_crate',    x: w - 140, y: 250, w: T, h: T, color: '#9e7c4c', z: 2, solid: true },
-      { sprite: 'f_crate',    x: w - 220, y: 250, w: T, h: T, color: '#8a6b40', z: 2, solid: true },
-      { sprite: 'o_shelf',    x: w / 2 + 240, y: 120, w: T * 1.4, h: T, color: '#8e8eae', z: 2, solid: true },
+      { sprite: 'f_pallet',   x: 120, y: h - 160, w: T, h: T, color: '#b58d55', z: 2 },
+      { sprite: 'f_pallet',   x: 120, y: h - 250, w: T, h: T, color: '#b58d55', z: 2 },
+      { sprite: 'f_crate',    x: w - 140, y: 250, w: T, h: T, color: '#9e7c4c', z: 2 },
+      { sprite: 'f_crate',    x: w - 220, y: 250, w: T, h: T, color: '#8a6b40', z: 2 },
+      { sprite: 'o_shelf',    x: w / 2 + 240, y: 120, w: T * 1.4, h: T, color: '#8e8eae', z: 2 },
     ],
     // Кур'єр чекає між ящиком прийому і верстаками — на своєму маршруті, а не
     // в його кінці. Продавець — МІЖ ВЕРСТАКАМИ (П4), а не біля скриньки:
@@ -388,10 +390,10 @@ function furnishLab(hall) {
       { id: `jobboard_${hall.id}`, kind: 'jobboard', from: `jobboard_${hall.id}`, w: 150, h: 150 },
     ],
     decor: [
-      { sprite: 'o_shelf',  x: w - 200, y: 140, w: T * 1.4, h: T, color: '#7fa8b8', z: 2, solid: true },
-      { sprite: 'o_shelf',  x: w - 200, y: 240, w: T * 1.4, h: T, color: '#7fa8b8', z: 2, solid: true },
+      { sprite: 'o_shelf',  x: w - 200, y: 140, w: T * 1.4, h: T, color: '#7fa8b8', z: 2 },
+      { sprite: 'o_shelf',  x: w - 200, y: 240, w: T * 1.4, h: T, color: '#7fa8b8', z: 2 },
       { sprite: 'floor_mark', x: w / 2, y: 340, w: w * 0.6, h: 8, color: '#46c7d8', z: 0.4 },
-      { sprite: 'f_crate',  x: 170, y: 200, w: T, h: T, color: '#3f7f8a', z: 2, solid: true },
+      { sprite: 'f_crate',  x: 170, y: 200, w: T, h: T, color: '#3f7f8a', z: 2 },
     ],
     posts: {
       // Перед стендом, з боку підходу — інженер чекає там, де працює.
@@ -420,8 +422,8 @@ function furnishContracts(hall) {
         w: u(2.0), h: u(1.24), offsetY: u(1.02) },
     ],
     decor: [
-      { sprite: 'f_bookshelf', x: 180, y: 200, w: T, h: T * 1.4, color: '#7a5a3a', z: 2, solid: true },
-      { sprite: 'f_bookshelf', x: w - 180, y: 200, w: T, h: T * 1.4, color: '#7a5a3a', z: 2, solid: true },
+      { sprite: 'f_bookshelf', x: 180, y: 200, w: T, h: T * 1.4, color: '#7a5a3a', z: 2 },
+      { sprite: 'f_bookshelf', x: w - 180, y: 200, w: T, h: T * 1.4, color: '#7a5a3a', z: 2 },
       { sprite: 'floor_mark', x: w / 2, y: 340, w: w * 0.6, h: 8, color: '#e0c48f', z: 0.4 },
     ],
     posts: {},
@@ -445,9 +447,9 @@ function furnishFlight(hall) {
         w: u(2.4), h: u(1.4), offsetY: u(1.1) },
     ],
     decor: [
-      { sprite: 'f_crate', x: 160, y: 200, w: T, h: T, color: '#4f8f6f', z: 2, solid: true },
-      { sprite: 'f_crate', x: w - 160, y: 200, w: T, h: T, color: '#4f8f6f', z: 2, solid: true },
-      { sprite: 'o_shelf', x: w - 200, y: h - 200, w: T * 1.4, h: T, color: '#7fb8a0', z: 2, solid: true },
+      { sprite: 'f_crate', x: 160, y: 200, w: T, h: T, color: '#4f8f6f', z: 2 },
+      { sprite: 'f_crate', x: w - 160, y: 200, w: T, h: T, color: '#4f8f6f', z: 2 },
+      { sprite: 'o_shelf', x: w - 200, y: h - 200, w: T * 1.4, h: T, color: '#7fb8a0', z: 2 },
     ],
     posts: {
       // Продавець майданчика чекає збоку від кола, а не в ньому: стояти на
@@ -468,8 +470,8 @@ function furnishStorage(hall) {
   }
   const racks = []
   for (let y = 260; y < h - 260; y += 190) {
-    racks.push({ sprite: 'o_shelf', x: 190, y, w: T * 1.4, h: T, color: '#9b8258', z: 2, solid: true })
-    racks.push({ sprite: 'o_shelf', x: w - 190, y, w: T * 1.4, h: T, color: '#9b8258', z: 2, solid: true })
+    racks.push({ sprite: 'o_shelf', x: 190, y, w: T * 1.4, h: T, color: '#9b8258', z: 2 })
+    racks.push({ sprite: 'o_shelf', x: w - 190, y, w: T * 1.4, h: T, color: '#9b8258', z: 2 })
   }
   return {
     stationSlots: [],
@@ -477,8 +479,8 @@ function furnishStorage(hall) {
     zones: [],
     decor: [
       ...racks,
-      { sprite: 'f_pallet', x: w / 2 - 120, y: h - 200, w: T, h: T, color: '#b58d55', z: 2, solid: true },
-      { sprite: 'f_pallet', x: w / 2 + 120, y: h - 200, w: T, h: T, color: '#b58d55', z: 2, solid: true },
+      { sprite: 'f_pallet', x: w / 2 - 120, y: h - 200, w: T, h: T, color: '#b58d55', z: 2 },
+      { sprite: 'f_pallet', x: w / 2 + 120, y: h - 200, w: T, h: T, color: '#b58d55', z: 2 },
     ],
     posts: {
       courier: { x: w / 2, y: h - 380 },
@@ -613,14 +615,23 @@ export function buildFactoryLayout(hallIds) {
     { x: doorX + 110, y: roomH + 120 },
   ]
 
-  const decorRects = decor.map((d, i) => ({
-    id:     `decor-${i}`,
-    ...rect(d.x, d.y, d.w, d.h),
-    sprite: d.sprite,
-    color:  d.color,
-    z:      d.z ?? 2,
-    solid:  d.solid === true,
-  }))
+  // Той самий закон, що й у buildLayout: перешкода — це СЛІД предмета, а не
+  // його картинка (див. footprints.js). Фабрика будує декор власним проходом,
+  // тому правило доводиться повторити тут; розходитись їм не дає тест, який
+  // питає таблицю, а не розкладку.
+  const decorRects = decor.map((d, i) => {
+    const box  = rect(d.x, d.y, d.w, d.h)
+    const foot = footprintOf(d.sprite, box)
+    return {
+      id:     `decor-${i}`,
+      ...box,
+      sprite: d.sprite,
+      color:  d.color,
+      z:      d.z ?? 2,
+      foot,
+      solid:  !!foot,
+    }
+  })
 
   const propRects = Object.fromEntries(
     Object.entries(props).map(([name, p]) => [
@@ -646,7 +657,7 @@ export function buildFactoryLayout(hallIds) {
     street: { y: roomH, h: STREET_H },
     door:   { x: doorX, w: DOOR_W, y: roomH - WALL_HORIZ },
     walls,
-    obstacles: [...walls, ...decorRects.filter(d => d.solid)],
+    obstacles: [...walls, ...decorRects.filter(d => d.foot).map(d => d.foot)],
     decor: decorRects,
     doorVoids,
     stationSlots,
