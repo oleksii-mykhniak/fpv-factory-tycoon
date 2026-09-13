@@ -681,11 +681,17 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
     })
 
     // Opened box + drone that sit on this station's surface.
+    //
+    // Розгорнута коробка — власний спрайт, а не жовтий прямокутник. Комплект,
+    // який РОЗПАКУВАЛИ, і комплект, який несуть, — різні речі, і поки на столі
+    // лежала пляма кольору кришки, верстак читався як «коробка стоїть на
+    // столі», хоч у грі її саме там і розбирають.
     const boxOpen = new ex.Actor({
       pos: ex.vec(placed.surface.x, placed.surface.y),
-      width: layout.sizes.box.w * 1.3, height: layout.sizes.box.h * 0.5,
+      width: layout.sizes.boxOpen.w, height: layout.sizes.boxOpen.h,
       z: 3, color: ex.Color.fromHex('#e8c870'),
     })
+    applySprite(boxOpen, 'delivery_box_open')
     boxOpen.graphics.visible = false
     scene.add(track(boxOpen))
 

@@ -296,34 +296,6 @@ function drawPrototype(pixels, w, h) {
   drawLine(pixels, w, cx + 18, cy + 6, cx + 14, cy + 10, ...PRODUCT.proto.led, 2)
 }
 
-// Delivery box — cardboard with tape X. 96×64.
-function drawBox(pixels, w, h) {
-  // Body
-  fillRect(pixels, w, 0, 0, w - 1, h - 1,  ...ACCENT.hot)
-  fillRect(pixels, w, 2, 2, w - 3, h - 3,  ...P.accent)
-
-  // Top flap seam (horizontal line ~1/3 from top)
-  const seam = Math.round(h * 0.32)
-  fillRect(pixels, w, 2, seam, w - 3, seam,  ...P.wood)
-
-  // Tape X across the whole box
-  drawLine(pixels, w, 4, 4, w - 5, h - 5,  ...SIGNAL.glow, 2)
-  drawLine(pixels, w, w - 5, 4, 4, h - 5,  ...SIGNAL.glow, 2)
-
-  // Смуги скотча вздовж осей. Були власним відтінком, близьким до картону, і
-  // після квантизації стали самим картоном — тобто зникли (П3). Тепер той
-  // самий світлий скотч, що й хрест: одна стрічка має виглядати як одна
-  // стрічка, а не як дві різні.
-  drawLine(pixels, w, w >> 1, 2, w >> 1, h - 3,  ...SIGNAL.glow, 1)
-  drawLine(pixels, w, 2, h >> 1, w - 3, h >> 1,  ...SIGNAL.glow, 1)
-
-  // Border
-  fillRect(pixels, w, 0, 0, w - 1, 1,  ...P.woodLo)
-  fillRect(pixels, w, 0, h - 2, w - 1, h - 1,  ...P.woodLo)
-  fillRect(pixels, w, 0, 0, 1, h - 1,  ...P.woodLo)
-  fillRect(pixels, w, w - 2, 0, w - 1, h - 1,  ...P.woodLo)
-}
-
 // Workbench — top-down wooden bench with PCBs and tools. 192×64.
 // Стадія 15 / П3: верстак мав п'ять власних відтінків коричневого, і після
 // квантизації всі вони злились у два — стіл став пласкою плитою без дощок,
@@ -1405,7 +1377,6 @@ const sprites = [
   { name: 'fixedwing_drone',  wu: u(1.5),  hu: u(0.81), draw: drawFixedWing       },
   { name: 'heavy_drone',      wu: u(1.5),  hu: u(0.81), draw: drawHeavyLifter     },
   { name: 'proto_drone',      wu: u(1.5),  hu: u(0.81), draw: drawPrototype       },
-  { name: 'delivery_box',     wu: u(1.5),  hu: u(1.0),  draw: drawBox             },
   { name: 'workbench',        wu: u(3.0),  hu: u(1.0),  draw: drawWorkbench       },
   { name: 'soldering_iron',   wu: u(1.0),  hu: u(0.25), draw: drawSolderingIron   },
   // Персонажі — чотири кадри ходьби в рядок, кожен на зріст персонажа.

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { pickPose } from './pose.js'
+import { carrySpriteKey } from '../defs/interactions.js'
 
 // Риг із ШІ-аркушів: що показуємо і куди дивимось.
 const full = { hasSide: true, hasIdleUp: true, hasUpCarry: true, sideFacesRight: false }
@@ -86,5 +87,30 @@ describe('pickPose — предмет у руках', () => {
     const w = walk({ vy: -40, carrying: true })
     expect(w.facedAway).toBe(true)
     expect(stop(true).name).toBe('idleUp')
+  })
+})
+
+// Який РАКУРС коробки показати — частина того самого рішення, що й поза: арт
+// завезено з трьох боків (див. scripts/imported-art.js), і вибирає між ними
+// поза того, хто несе. Тест тут, а не поруч із interactions.js, бо перевіряє
+// саме зв'язку «поза → картинка», а не правила взаємодії.
+describe('ракурс коробки в руках', () => {
+  const kit = { type: 'kit_box' }
+
+  it('бічна хода — три чверті: фас у профіль не влучає', () => {
+    expect(carrySpriteKey(kit, 'side')).toBe('delivery_box_45')
+  })
+
+  it.each(['idle', 'idleUp', 'down', 'up', 'upCarry'])('%s — фас', (pose) => {
+    expect(carrySpriteKey(kit, pose)).toBe('delivery_box')
+  })
+
+  it('без пози (риг найманого робітника) — фас, а не порожнеча', () => {
+    expect(carrySpriteKey(kit)).toBe('delivery_box')
+  })
+
+  it('дрон ракурсів не має — поза його не чіпає', () => {
+    const drone = { type: 'drone', kitId: 'mini_drone' }
+    expect(carrySpriteKey(drone, 'side')).toBe(carrySpriteKey(drone, 'down'))
   })
 })

@@ -45,6 +45,23 @@ function applySprite(actor, key) {
   actor.graphics.use(sprite)
 }
 
+// Те саме, але картинка ВПИСУЄТЬСЯ в актора, а не розтягується на нього.
+//
+// Потрібно там, де один актор показує спрайти різної форми. Слот перенесення —
+// саме такий: у ньому буває майже квадратна коробка (67×64) і витягнутий дрон
+// (96×52). Розтягнута на спільний прямокутник, одна з двох завжди бреше: або
+// коробка сплющена, або дрон роздутий. Вписування лишає обом їхню пропорцію й
+// платить за це полем з боків — його не видно, бо воно прозоре.
+function applySpriteFitted(actor, key) {
+  const src = getSprite(key)
+  if (!src) return
+  const sprite = src.toSprite()
+  const scale = Math.min(actor.width / src.width, actor.height / src.height)
+  sprite.width  = src.width  * scale
+  sprite.height = src.height * scale
+  actor.graphics.use(sprite)
+}
+
 export function resetSceneSync() {
   _lastDroneSpriteKey = null
   _prevCarryingId     = null
@@ -175,7 +192,7 @@ export function syncScene(refs, world) {
       player.moving, player.facing > 0, player.vy ?? 0, player.vx ?? 0,
       (player.carrying?.length ?? 0) > 0,
     )
-    syncCarryStack(refs.carrySlotActors, refs.player, player, pose === 'upCarry')
+    syncCarryStack(refs.carrySlotActors, refs.player, player, pose)
     syncDwell(refs, world, player)
     syncArrow(refs, world, player)
   }
@@ -285,11 +302,20 @@ function syncWorkers(refs, world) {
 
 // Items float above the head, stacked upward in pickup order. Shared by the
 // player and every hired worker.
-// `inHands` — персонаж у позі з руками вперед (йде від глядача). Тоді предмет
-// сидить на рівні пояса ЗА фігурою, і назовні видно самі його краї. У решті
-// випадків стек висить над головою, як і раніше.
-function syncCarryStack(slots, bodyActor, agent, inHands = false) {
+// `pose` — поза того, хто несе (`pickPose`), або null у рига без поз (наймані
+// робітники). Від неї залежать дві речі, і обидві — про те, як предмет сидить
+// у кадрі, а не про те, що це за предмет:
+//
+//   'upCarry' — руки вперед (йде від глядача). Предмет сидить на рівні пояса
+//   ЗА фігурою, і назовні видно самі його краї. У решті поз стек висить над
+//   головою, як і раніше.
+//
+//   'side' — профіль. Коробка показує ракурс у три чверті (`carrySpriteKey`) і
+//   дзеркалиться разом із фігурою, інакше людина йде вліво, а ящик у неї в
+//   руках повернутий вправо.
+function syncCarryStack(slots, bodyActor, agent, pose = null) {
   const items = agent.carrying ?? []
+  const inHands = pose === 'upCarry'
   const baseY = inHands
     ? bodyActor.pos.y + bodyActor.height * CARRY_IN_HANDS_Y
     : bodyActor.pos.y - bodyActor.height * 0.55
@@ -302,11 +328,15 @@ function syncCarryStack(slots, bodyActor, agent, inHands = false) {
       actor.pos.y = -9999
       return
     }
-    const key = carrySpriteKey(item)
+    const key = carrySpriteKey(item, pose)
     if (actor._carryKey !== key) {
-      applySprite(actor, key)
+      applySpriteFitted(actor, key)
       actor._carryKey = key
     }
+    // Дзеркалимо разом із фігурою — і лише те, що має бік. Фас і розгортка
+    // симетричні, тож для них це порожня операція; три чверті без цього
+    // дивилися б назустріч ході.
+    actor.graphics.flipHorizontal = pose === 'side' && bodyActor.graphics.flipHorizontal
     actor.pos.x = bodyActor.pos.x
     // Другий і третій предмети стають НА перший — і в руках, і над головою це
     // та сама стопка, лише з різною точкою опори. Сьогодні це недосяжна гілка:

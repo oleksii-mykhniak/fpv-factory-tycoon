@@ -501,8 +501,18 @@ function arrivedIn(world, zone) {
 }
 
 // Convenience for the view: what the carried item should look like.
-export function carrySpriteKey(item) {
-  if (item.type === 'kit_box') return 'delivery_box'
+//
+// `pose` — назва пози того, хто несе (`pickPose`). Коробка завезена з трьох
+// ракурсів, і бічна хода — єдиний випадок, коли фас бреше: людина йде профілем,
+// а ящик у неї в руках дивиться в камеру. Три чверті збігаються з профілем
+// рівно так само, як бічний аркуш персонажа збігається з фасом у решті поз.
+//
+// Дрон ракурсів не має: він один і той самий з усіх боків, і додавати йому
+// «бічний» спрайт означало б малювати сім нових картинок заради пози, у якій
+// його видно чверть секунди.
+export function carrySpriteKey(item, pose = null) {
+  if (item.type === 'kit_box')
+    return pose === 'side' ? 'delivery_box_45' : 'delivery_box'
   if (item.type === 'drone' || item.type === 'burnt')
     return KIT_TYPES[item.kitId]?.spriteKey ?? 'mini_drone'
   return 'delivery_box'

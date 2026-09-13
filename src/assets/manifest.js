@@ -20,8 +20,20 @@ export const SPRITES = Object.freeze({
     },
   },
 
+  // Коробка з трьох ракурсів (див. scripts/imported-art.js). Який із них
+  // показати, вирішує поза того, хто її несе: `carrySpriteKey`.
   delivery_box: {
     url: `${BASE}sprites/delivery_box.png`,
+    anchors: {},
+  },
+
+  delivery_box_45: {
+    url: `${BASE}sprites/delivery_box_45.png`,
+    anchors: {},
+  },
+
+  delivery_box_open: {
+    url: `${BASE}sprites/delivery_box_open.png`,
     anchors: {},
   },
 

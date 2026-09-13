@@ -245,8 +245,13 @@ top-down у наборі) — три кадри ходьби, сидить, сп
 `o_vending` 51×70.
 
 *Робота:* `workbench` 192×64, `desk` 104×64, `soldering_iron` 64×16,
-`delivery_box` 96×64, `jobboard` 56×64, `rack` 56×80, `trashbin` 48×58,
-`piggy` 64×64, `lamp` 48×48, `mailbox` 64×52.
+`jobboard` 56×64, `rack` 56×80, `trashbin` 48×58, `piggy` 64×64, `lamp` 48×48,
+`mailbox` 64×52.
+
+*Коробка — не з генератора* (завезена, див. `scripts/imported-art.js`):
+`delivery_box` 67×64 (фас), `delivery_box_45` 61×64 (три чверті, для бічної
+ходи), `delivery_box_open` 84×56 (розгортка на верстаку). Ракурс вибирає поза
+того, хто несе, — `carrySpriteKey`.
 
 *Плитка:* `tile_wood`, `tile_concrete`, `tile_asphalt` (по 3 варіації кожна),
 `wall_tile`, `door_tile` — усі 64×64.

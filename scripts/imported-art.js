@@ -17,4 +17,10 @@ export const IMPORTED_SPRITES = Object.freeze([
   'player_walk_up.png',
   'player_walk_side.png',
   'player_walk_up_carry.png',
+  // Коробка в трьох виглядах: фас, три чверті для бічної ходи, розгортка на
+  // столі. Генератор малював один фас і розтягував його на всі три випадки —
+  // тобто коробка під кутом і коробка на верстаку були тим самим прямокутником.
+  'delivery_box.png',
+  'delivery_box_45.png',
+  'delivery_box_open.png',
 ])

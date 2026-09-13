@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { SPRITES, getManifestEntry, spriteKeys } from './manifest.js'
 import { KIT_TYPES } from '../state/kits.js'
 
@@ -49,5 +51,20 @@ describe('manifest helpers', () => {
 
   it('spriteKeys returns all registered keys', () => {
     expect(spriteKeys()).toEqual(Object.keys(SPRITES))
+  })
+})
+
+// Маніфест обіцяє файл, і ця обіцянка нічим не підкріплена: завантажувач ловить
+// 404 і мовчки лишає актора без графіки, тому друкарка в імені виглядає точно
+// як «спрайт не намалювали». Для генерованого набору це ловив
+// scripts/sprites.test.js — він звіряє public/sprites зі скриптом; для
+// завезеного ззовні (imported-art.js) не ловило НІЩО.
+describe('manifest points at files that exist', () => {
+  const PUBLIC = new URL('../../public/', import.meta.url).pathname
+
+  it.each(Object.entries(SPRITES))('%s', (key, entry) => {
+    // BASE_URL підставляється збіркою; у тесті нас цікавить шлях під public/.
+    const rel = entry.url.replace(/^.*sprites\//, 'sprites/')
+    expect(existsSync(join(PUBLIC, rel)), `${key} → ${rel}`).toBe(true)
   })
 })
