@@ -16,7 +16,7 @@ import {
   u,
 } from '../state/config.js'
 import { loadSprites, getSprite } from './loader.js'
-import { followAxis } from './camera.js'
+import { followAxis, clampFocus } from './camera.js'
 import { createCharacterSprite, createTileCharacter, createSheetCharacter } from './character.js'
 import { frameMs } from './frame.js'
 import { floatPose } from './floatGain.js'
@@ -1386,22 +1386,31 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
   // Strategies accumulate, so a move would otherwise stack a second follow and
   // keep the old room's bounds.
   scene.camera.clearAllStrategies()
-  // Власна стратегія замість `elasticToActor`: рушієва крокує раз на кадр і
-  // на 144–165 Гц розхитує камеру навколо персонажа (див. scene/camera.js).
+  // ОДНА власна стратегія замість двох рушієвих, і обидві замінено не з
+  // примхи (див. scene/camera.js):
+  //
+  //   `elasticToActor`     крокує пружину раз на кадр, тож на 144–165 Гц
+  //                        розхитує камеру навколо персонажа;
+  //   `limitCameraBounds`  на екрані, ширшому за світ, має дві межі, що
+  //                        суперечать одна одній, і щокадру кидає камеру то до
+  //                        однієї, то до другої — світ двоїться.
+  //
+  // Разом, а не двома стратегіями поспіль, щоб обмеження гарантовано було
+  // ОСТАННІМ словом: згладжування, яке відпрацювало після обмеження, знову
+  // вивело б камеру за край.
   scene.camera.addStrategy({
     target: player,
-    action: (target, cam, _eng, elapsed) => {
+    action: (target, cam, eng, elapsed) => {
       const to = target.center
       const f  = cam.getFocus()
       return ex.vec(
-        followAxis(f.x, to.x, elapsed, CAMERA_FOLLOW_RATE),
-        followAxis(f.y, to.y, elapsed, CAMERA_FOLLOW_RATE),
+        clampFocus(followAxis(f.x, to.x, elapsed, CAMERA_FOLLOW_RATE),
+                   eng.halfDrawWidth, 0, layout.world.w),
+        clampFocus(followAxis(f.y, to.y, elapsed, CAMERA_FOLLOW_RATE),
+                   eng.halfDrawHeight, 0, layout.world.h),
       )
     },
   })
-  scene.camera.strategy.limitCameraBounds(
-    new ex.BoundingBox(0, 0, layout.world.w, layout.world.h),
-  )
 
   // ── Pulse controllers ──────────────────────────────────
   const boxPulse      = addPulse(box)

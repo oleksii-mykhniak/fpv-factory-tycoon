@@ -42,3 +42,33 @@ export function followFraction(dtMs, ratePerSec) {
 export function followAxis(focus, target, dtMs, ratePerSec) {
   return focus + (target - focus) * followFraction(dtMs, ratePerSec)
 }
+
+// Не показувати нічого за краєм світу — і НЕ смикатись, коли світ вужчий за
+// екран.
+//
+// Це і є те «роздвоєння на широкому екрані». Рушієва `limitCameraBounds`
+// (excalibur 0.32, `LimitCameraBoundsStrategy`) робить так:
+//
+//   if      (focus < left + half)  focus = left + half
+//   else if (focus > right - half) focus = right - half
+//
+// Поки світ ШИРШИЙ за екран, `left + half < right - half` і межі не
+// суперечать одна одній. Щойно екран стає ширшим за світ — а це рівно випадок
+// «вікно ширше за будинок із гаражем», 1900 одиниць, — вони міняються місцями:
+//
+//   екран 2560×1080 → видима ширина 2323, half 1161.5
+//   left + half  = 1161.5
+//   right - half = 1900 - 1161.5 = 738.5
+//
+// і кожен кадр спрацьовує ІНША гілка: 738.5 менше за 1161.5 → стрибок на
+// 1161.5; наступного кадру 1161.5 більше за 738.5 → стрибок назад на 738.5.
+// Виміряно рівно ці числа. Камера метляється на 423 одиниці щокадру, і на
+// екрані це два зображення світу поперемінно — тобто все двоїться.
+//
+// Правильна відповідь для світу, який не заповнює екран, — ЦЕНТРУВАТИ його.
+// Тоді функція стає ідемпотентною (застосуй її двічі — результат той самий), а
+// саме ідемпотентності рушієвій версії й бракувало.
+export function clampFocus(focus, halfView, min, max) {
+  if (max - min <= halfView * 2) return (min + max) / 2
+  return Math.min(Math.max(focus, min + halfView), max - halfView)
+}

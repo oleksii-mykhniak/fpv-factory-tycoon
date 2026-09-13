@@ -10,7 +10,7 @@
 // якщо порізати її на різну кількість кадрів.
 
 import { describe, it, expect } from 'vitest'
-import { followFraction, followAxis } from './camera.js'
+import { followFraction, followAxis, clampFocus } from './camera.js'
 import { CAMERA_FOLLOW_RATE } from '../state/config.js'
 
 // Проганяє секунду руху камери, порізану на `fps` кадрів.
@@ -62,5 +62,51 @@ describe('стеження камери', () => {
   it('швидкість задана в 1/секунду: за 1/rate проходить ~63% шляху', () => {
     const focus = followAxis(0, 1000, 1000 / CAMERA_FOLLOW_RATE, CAMERA_FOLLOW_RATE)
     expect(focus).toBeCloseTo(1000 * (1 - Math.E ** -1), 6)
+  })
+})
+
+// Друга половина тієї самої історії: «на широкому екрані все двоїться».
+//
+// Рушієва `limitCameraBounds` на екрані, ширшому за світ, отримує дві межі, що
+// суперечать одна одній (`left + half > right - half`), і щокадру спрацьовує
+// інша гілка — камера метляється між ними. Тому головний тест тут не «не
+// вилазить за край», а ІДЕМПОТЕНТНІСТЬ: другий виклик не має нічого міняти.
+describe('обмеження камери краєм світу', () => {
+  const WORLD = 1900
+
+  it('світ ширший за екран — тримає край і нічого не показує за ним', () => {
+    const half = 700          // видима ширина 1400 < 1900
+    expect(clampFocus(0, half, 0, WORLD)).toBe(700)
+    expect(clampFocus(WORLD, half, 0, WORLD)).toBe(1200)
+    expect(clampFocus(950, half, 0, WORLD)).toBe(950)   // всередині — не чіпає
+  })
+
+  it('світ вужчий за екран — центрує його, а не притискає до краю', () => {
+    const half = 1161.5       // видима ширина 2323 — виміряно на 2560×1080
+    expect(clampFocus(738.5, half, 0, WORLD)).toBe(950)
+    expect(clampFocus(1161.5, half, 0, WORLD)).toBe(950)
+  })
+
+  it('ідемпотентне — саме цього бракувало рушієвій версії', () => {
+    // 1161.5 і 738.5 — рівно ті два числа, між якими метлялась камера на
+    // 2560×1080. Стара логіка кидала перше в друге, а друге в перше; нова
+    // мусить обидва привести в одну точку й там лишити.
+    for (const half of [300, 700, 949, 950, 951, 1161.5, 5000]) {
+      for (const focus of [-500, 0, 738.5, 950, 1161.5, WORLD, 9000]) {
+        const once  = clampFocus(focus, half, 0, WORLD)
+        const twice = clampFocus(once, half, 0, WORLD)
+        expect(twice, `half=${half} focus=${focus}`).toBe(once)
+      }
+    }
+  })
+
+  it('результат ніколи не виходить за світ', () => {
+    for (const half of [100, 700, 1161.5, 5000]) {
+      for (const focus of [-9999, 0, 950, 9999]) {
+        const f = clampFocus(focus, half, 0, WORLD)
+        expect(f).toBeGreaterThanOrEqual(0)
+        expect(f).toBeLessThanOrEqual(WORLD)
+      }
+    }
   })
 })
