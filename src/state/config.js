@@ -116,9 +116,14 @@ export const INTAKE_CAPACITY = 3
 export const VIEW_HEIGHT_UNITS = 980
 export const CAMERA_ZOOM_MIN   = 0.55
 export const CAMERA_ZOOM_MAX   = 1.60
-// Elastic follow — higher elasticity snaps harder, higher friction damps sooner.
-export const CAMERA_ELASTICITY = 0.20
-export const CAMERA_FRICTION   = 0.28
+// Як швидко камера доганяє персонажа, у 1/секунду: за `1/rate` секунди вона
+// проходить ~63% відстані до нього, за `3/rate` — ~95%.
+//
+// Було дві сталі пружини (`CAMERA_ELASTICITY` 0.20 і `CAMERA_FRICTION` 0.28),
+// які рушій застосовував РАЗ НА КАДР і які через це працювали лише на 60 Гц —
+// див. `src/scene/camera.js`. Одне число замість двох саме тому, що перельоту
+// тут немає й ніколи не було задумано.
+export const CAMERA_FOLLOW_RATE = 9
 
 // Which art the people are drawn with (V6 revert).
 //

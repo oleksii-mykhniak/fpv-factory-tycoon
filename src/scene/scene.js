@@ -2,7 +2,7 @@ import * as ex from 'excalibur'
 import { Phase, DeliveryStatus, KIT_TYPES } from '../state/gameState.js'
 import {
   VIEW_HEIGHT_UNITS, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX,
-  CAMERA_ELASTICITY, CAMERA_FRICTION,
+  CAMERA_FOLLOW_RATE,
   PIGGY_COOLDOWN_MS,
   PULSE_FREQ_HZ, PULSE_SCALE_AMP,
   FLOAT_GAIN_POOL,
@@ -16,6 +16,7 @@ import {
   u,
 } from '../state/config.js'
 import { loadSprites, getSprite } from './loader.js'
+import { followAxis } from './camera.js'
 import { createCharacterSprite, createTileCharacter, createSheetCharacter } from './character.js'
 import { frameMs } from './frame.js'
 import { floatPose } from './floatGain.js'
@@ -1385,7 +1386,19 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
   // Strategies accumulate, so a move would otherwise stack a second follow and
   // keep the old room's bounds.
   scene.camera.clearAllStrategies()
-  scene.camera.strategy.elasticToActor(player, CAMERA_ELASTICITY, CAMERA_FRICTION)
+  // Власна стратегія замість `elasticToActor`: рушієва крокує раз на кадр і
+  // на 144–165 Гц розхитує камеру навколо персонажа (див. scene/camera.js).
+  scene.camera.addStrategy({
+    target: player,
+    action: (target, cam, _eng, elapsed) => {
+      const to = target.center
+      const f  = cam.getFocus()
+      return ex.vec(
+        followAxis(f.x, to.x, elapsed, CAMERA_FOLLOW_RATE),
+        followAxis(f.y, to.y, elapsed, CAMERA_FOLLOW_RATE),
+      )
+    },
+  })
   scene.camera.strategy.limitCameraBounds(
     new ex.BoundingBox(0, 0, layout.world.w, layout.world.h),
   )
