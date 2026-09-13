@@ -1,8 +1,13 @@
 // The cat (V5).
 //
-// Wanders, sits, grooms, sleeps, and now and then sprints across the flat for
-// no reason. Does no work, carries nothing, blocks nobody. It exists so the
+// Wanders, sits, sleeps, and now and then sprints across the flat for no
+// reason. Does no work, carries nothing, blocks nobody. It exists so the
 // shop has something alive in it that is not an employee.
+//
+// Умивання звідси пішло разом із кадром, який його малював: настрій, який на
+// екрані не відрізнити від сидіння, — це рядок у таблиці, а не поведінка.
+// Правило на майбутнє просте: настрій заводиться ПІД аркуш, а не навпаки, і
+// `pose.test.js` це стереже.
 //
 // It IS an agent rather than an animation, because it has to respect walls and
 // world bounds — and moveSystem already does that for everyone. Writing a

@@ -24,9 +24,10 @@ import { dwellProgress } from '../sim/systems/zone.js'
 import { piggyShouldShow, nextObjective } from '../sim/derive.js'
 import { ruleAt } from '../state/locations.js'
 import { CARRY_STACK_OFFSET_Y, VIEW_SMOOTHING, SALVAGE_RATE,
-         CARRY_IN_HANDS_Y, CARRY_IN_HANDS_SIDE_X,
-         CARRY_OVER_HEAD_Y } from '../state/config.js'
-import { carryPlacement } from '../scene/pose.js'
+         CARRY_IN_HANDS_Y, CARRY_IN_HANDS_SIDE_X, CARRY_OVER_HEAD_Y,
+         CAT_WALK_MOODS, CAT_SIDE_FACES_RIGHT,
+         CAT_STILL_SPEED } from '../state/config.js'
+import { carryPlacement, catPose } from '../scene/pose.js'
 import * as ex from 'excalibur'
 
 // Purely presentational memo: which sprite is on the drone actor right now, and
@@ -225,15 +226,28 @@ export function syncScene(refs, world) {
       actor.graphics.visible = true
       follow(actor, catAgent.x, catAgent.y)
       if (anim) {
-        // The sim owns the mood; the view only knows which picture goes with it.
-        const want = anim[catAgent.mood] ? catAgent.mood : 'sit'
+        // Настрій належить симуляції, картинка — вигляду. Кіт тепер ходить у
+        // три боки, тож картинку більше не можна взяти за іменем настрою:
+        // `stroll` — це «іде», а не «іде боком».
+        const pose = catPose({
+          mood: catAgent.mood, vx: catAgent.vx, vy: catAgent.vy,
+          walkMoods: CAT_WALK_MOODS, sideFacesRight: CAT_SIDE_FACES_RIGHT,
+          stillSpeed: CAT_STILL_SPEED,
+        })
+        // Біг — той самий напрямок швидшим циклом. Немає швидкого варіанта
+        // (аркуш не завантажився) — грає звичайний, і кіт просто біжить, ніби
+        // йде: це гірше за задум, але краще за зниклого кота.
+        const fast = `${pose.name}Run`
+        const want = (catAgent.mood === 'run' && anim[fast]) ? fast
+          : anim[pose.name] ? pose.name : 'sit'
         if (anim.current !== want) {
           actor.graphics.use(anim[want])
           anim.current = want
         }
-        // Facing is only meaningful while moving — a sleeping cat should not
-        // flip because its last velocity happened to point right.
-        if (Math.abs(catAgent.vx) > 1) actor.graphics.flipHorizontal = catAgent.vx > 0
+        // Дзеркалення каже сама поза: стоячи кіт не дзеркалиться ніколи, тож
+        // сплячий більше не перевертається через те, що остання швидкість
+        // випадково дивилась управо.
+        actor.graphics.flipHorizontal = pose.flip
       }
     }
   }

@@ -298,10 +298,15 @@ export const CAT_WANDER_RADIUS = u(4)
 export const CAT_ROAM_RADIUS   = u(9)   // where a run can take it
 
 // How long each mood lasts, in ms [min, max].
+//
+// `groom` звідси прибрано разом із кадром, який його малював. Кіт умивався
+// рівно тому, що в аркуші генератора був сьомий кадр із опущеною головою;
+// завезений кіт (`CAT_SHEETS`) уміє сидіти, спати й ходити в три боки, і
+// вмивання довелося б показувати кадром сидіння. Настрій, якого не видно, —
+// це не поведінка, а рядок у таблиці.
 export const CAT_MOOD_MS = {
   sit:    [3000, 9000],
   sleep:  [12000, 26000],
-  groom:  [3000, 6000],
   stroll: [1200, 2600],
   run:    [900, 1800],
   follow: [3000, 6000],
@@ -310,14 +315,50 @@ export const CAT_MOOD_MS = {
 // What a mood turns into next, as weights. Sleep is sticky, running is not:
 // a cat that sprints twice in a row looks broken, one that sleeps twice does
 // not look like anything at all.
+//
+// Вага вмивання розійшлася по сусідах у тому ж рядку, а не влилась у сидіння
+// одним числом: інакше кіт, який раніше третину часу вмивався, тепер стільки
+// ж просто сидів би — і квартира стала б помітно нуднішою, ніж була.
 export const CAT_MOODS = {
-  sit:    { stroll: 4, groom: 3, sleep: 2, run: 1, follow: 1 },
-  sleep:  { sleep: 3, sit: 4, groom: 2 },
-  groom:  { sit: 4, stroll: 3, sleep: 2 },
-  stroll: { sit: 5, stroll: 2, groom: 2, run: 1, follow: 1 },
+  sit:    { stroll: 5, sleep: 3, run: 2, follow: 2 },
+  sleep:  { sleep: 3, sit: 5, stroll: 2 },
+  stroll: { sit: 5, stroll: 3, sleep: 2, run: 1, follow: 1 },
   run:    { sit: 6, stroll: 3 },
-  follow: { sit: 4, stroll: 3, groom: 1 },
+  follow: { sit: 4, stroll: 4 },
 }
+
+// Настрої, в яких кіт ІДЕ. Решта — стоїть, і тоді картинку вибирає сам настрій.
+export const CAT_WALK_MOODS = Object.freeze(['stroll', 'run', 'follow'])
+
+// Аркуші кота (завезені, див. scripts/imported-art.js та docs/ai_sheet_workflow.md).
+//
+// `frames` МУСИТЬ збігатися з тим, що надрукував імпортер: ширина кадру в грі
+// виводиться діленням ширини файлу на це число.
+//
+// `h` — зріст кота В ЦІЙ позі, часткою зросту людини; ширину рушій бере з
+// пропорції самого аркуша, тому жодна поза не сплющується. Числа різні не з
+// примхи: кіт, який сидить, ВИЩИЙ за кота, який іде, а згорнутий клубком
+// удвічі нижчий за обох. Один розмір на всі пʼять поз означав би або
+// розплющеного сплячого кота, або надутого сидячого.
+//
+// Числа підібрані з пропорцій аркушів, а не зміряні в грі. Дивитись на них
+// треба знімком зі СПРАВЖНЬОЇ гри — той самий урок, що й з предметом у руках.
+export const CAT_SHEETS = Object.freeze({
+  down:  { key: 'cat_walk_down', frames: 12, frameMs: 70,  h: u(0.34) },
+  up:    { key: 'cat_walk_up',   frames: 12, frameMs: 70,  h: u(0.34) },
+  side:  { key: 'cat_walk_side', frames: 17, frameMs: 60,  h: u(0.30) },
+  sit:   { key: 'cat_sit',       frames: 15, frameMs: 110, h: u(0.36) },
+  sleep: { key: 'cat_sleep',     frames: 8,  frameMs: 180, h: u(0.20) },
+})
+
+// У який бік дивиться кіт на бічному аркуші — ЛІВОРУЧ, як і людина.
+export const CAT_SIDE_FACES_RIGHT = false
+
+// Нижче цієї швидкості кіт вважається нерухомим, хоч настрій і каже йти:
+// щойно вибрав ціль, або вперся в стіну. Без порога нульова швидкість дає
+// нуль по обох осях, і вибір напрямку падає на бічну ходу — кіт перебирає
+// лапами на місці, стоячи боком.
+export const CAT_STILL_SPEED = 6
 
 // ── Navigation (C4) ──────────────────────────────────────
 // Grid cell size. Smaller = more accurate paths and a more expensive search;

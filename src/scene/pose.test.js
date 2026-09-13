@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { pickPose, carryPlacement } from './pose.js'
+import { pickPose, carryPlacement, catPose, CAT_STILL_POSES } from './pose.js'
+import { CAT_SHEETS, CAT_WALK_MOODS, CAT_MOODS, CAT_MOOD_MS,
+         CAT_SIDE_FACES_RIGHT, CAT_STILL_SPEED } from '../state/config.js'
 import { carrySpriteKey } from '../defs/interactions.js'
 
 // Риг із ШІ-аркушів: що показуємо і куди дивимось.
@@ -148,5 +150,89 @@ describe('куди кладемо ношу', () => {
     expect(carryPlacement(null)).toEqual({
       inHands: false, behind: false, sideways: false,
     })
+  })
+})
+
+// Кіт. Вхід у нього інший, ніж у людини: напрямок задає не гравець, а настрій
+// плюс швидкість, яку цей настрій породив.
+describe('кіт — яку позу показати', () => {
+  const cp = (o) => catPose({
+    walkMoods: CAT_WALK_MOODS, sideFacesRight: CAT_SIDE_FACES_RIGHT,
+    stillSpeed: CAT_STILL_SPEED, ...o,
+  })
+
+  it('спить — окремий аркуш, а не сидить із заплющеними очима', () => {
+    expect(cp({ mood: 'sleep' }).name).toBe('sleep')
+  })
+
+  it('усе нерухоме, крім сну, — сидить', () => {
+    expect(cp({ mood: 'sit' }).name).toBe('sit')
+  })
+
+  it('нерухомий кіт не дзеркалиться — хоч би куди він щойно біг', () => {
+    // Через це сплячий кіт раніше перевертався: риг брав останню швидкість.
+    expect(cp({ mood: 'sleep', vx: 900 }).flip).toBe(false)
+    expect(cp({ mood: 'sit', vx: 900 }).flip).toBe(false)
+  })
+
+  it('іде вниз, угору й убік — за швидкістю, а не за настроєм', () => {
+    expect(cp({ mood: 'stroll', vy: 50 }).name).toBe('down')
+    expect(cp({ mood: 'stroll', vy: -50 }).name).toBe('up')
+    expect(cp({ mood: 'stroll', vx: 50 }).name).toBe('side')
+  })
+
+  it('усі три настрої ходьби беруть ті самі аркуші', () => {
+    for (const mood of CAT_WALK_MOODS)
+      expect(cp({ mood, vy: 50 }).name, mood).toBe('down')
+  })
+
+  it('бічний аркуш дзеркалиться лише праворуч — намальований ліворуч', () => {
+    expect(cp({ mood: 'run', vx: 50 }).flip).toBe(true)
+    expect(cp({ mood: 'run', vx: -50 }).flip).toBe(false)
+  })
+
+  it('чистий горизонтальний хід не зривається у вид ззаду через дрібний зсув', () => {
+    expect(cp({ mood: 'stroll', vx: 80, vy: -3 }).name).toBe('side')
+  })
+
+  it('настрій каже йти, а швидкості немає — хід до глядача, не боком', () => {
+    // Нульова швидкість не каже про напрямок нічого, і |vy| > |vx| дає false:
+    // без цієї гілки кіт буксував би боком, стоячи на місці.
+    expect(cp({ mood: 'stroll', vx: 0, vy: 0 }).name).toBe('down')
+    expect(cp({ mood: 'stroll', vx: 1, vy: 1 }).name).toBe('down')
+  })
+
+  it('кожна поза, яку може повернути catPose, має свій аркуш', () => {
+    // Те, через що кіт зник би в одному з напрямків: `anim[name]` — undefined.
+    const poses = new Set([...CAT_STILL_POSES])
+    for (const mood of CAT_WALK_MOODS)
+      for (const v of [{ vy: 50 }, { vy: -50 }, { vx: 50 }])
+        poses.add(cp({ mood, ...v }).name)
+    for (const name of poses) expect(CAT_SHEETS[name], name).toBeDefined()
+  })
+
+  it('кожен НЕходячий настрій названий так само, як його аркуш', () => {
+    // Саме за це вилетів `groom`: настрій був, кадру під нього не стало.
+    //
+    // Перевірка навмисне НЕ через `catPose`: невідомий настрій він чемно
+    // зводить до сидіння, тож «показатись уміє» будь-що, і тест, побудований
+    // на його відповіді, пропустив би вмивання назад не помітивши. Питання
+    // тут інше й строгіше: чи є в кота аркуш, який ЦЕЙ настрій називає.
+    const moods = new Set([
+      ...Object.keys(CAT_MOODS), ...Object.keys(CAT_MOOD_MS),
+      ...Object.values(CAT_MOODS).flatMap(row => Object.keys(row)),
+    ])
+    const still = [...moods].filter(m => !CAT_WALK_MOODS.includes(m))
+    expect(still.sort()).toEqual([...CAT_STILL_POSES].sort())
+    for (const mood of still) expect(CAT_SHEETS[mood], mood).toBeDefined()
+  })
+
+  it('а настрій ходьби показується котом, що йде', () => {
+    // Дзеркальна половина: ходячі настрої не мають аркуша ВЛАСНОГО імені
+    // (`stroll.png` не існує), і не повинні — їх показує напрямок.
+    for (const mood of CAT_WALK_MOODS) {
+      expect(CAT_SHEETS[mood], mood).toBeUndefined()
+      expect(CAT_STILL_POSES).not.toContain(cp({ mood, vy: 50 }).name)
+    }
   })
 })

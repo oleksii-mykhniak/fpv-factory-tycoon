@@ -10,6 +10,7 @@ import {
   CHARACTER_U as TILE_U,
   CHARACTER_ART,
   AI_SHEETS, AI_SIDE_FACES_RIGHT,
+  CAT_SHEETS, CAT_SPEED, CAT_RUN_SPEED,
   INTAKE_CAPACITY,
   u,
 } from '../state/config.js'
@@ -17,6 +18,7 @@ import { loadSprites, getSprite } from './loader.js'
 import { createCharacterSprite, createTileCharacter, createSheetCharacter } from './character.js'
 import { frameMs } from './frame.js'
 import { floatPose } from './floatGain.js'
+import { CAT_STILL_POSES } from './pose.js'
 import { roleColor, roleBadge } from '../defs/roles.js'
 
 // How many carried items the stack can show at once. The gameplay limit is
@@ -1202,44 +1204,53 @@ function buildFloor({ getWorld, onIntent, layout, world }) {
   const { actor: player, rig: playerRig } = makeCharacter('player_walk', '#1f9e92', { tiles: 'player' })
 
   // ── The cat (V5) ───────────────────────────────────────
-  // Its own tiny rig: five cells (four walking, one sitting) rather than the
-  // four-frame character sheet, so it gets its own slicing instead of pretending
-  // to be a person.
+  // Свій риг, і тепер уже свої аркуші: п'ять поз, кожна окремим файлом
+  // (`CAT_SHEETS`). Був один аркуш 32×32 на сім клітинок — чотири кроки й три
+  // нерухомі пози, — і з нього кіт умів рівно одне: іти боком. У який бік він
+  // насправді прямує, малюнок не казав ніколи.
+  //
+  // Розмір актора тут НОМІНАЛЬНИЙ: справжній розмір кожної пози задає масштаб
+  // її анімації, бо пози різні за формою. Сплячий кіт удвічі нижчий і вдвічі
+  // ширший за сидячого, і розтягнути обох на один прямокутник — це або
+  // розплющити одного, або надути іншого.
   const catActor = new ex.Actor({
     pos:    ex.vec(-9999, -9999),
-    width:  sizes.character * 0.50,
-    height: sizes.character * 0.34,
+    width:  CAT_SHEETS.sit.h,
+    height: CAT_SHEETS.sit.h,
     z: 6,
     color:  ex.Color.fromHex('#d88a40'),
   })
   scene.add(track(catActor))
   catActor.graphics.visible = false
 
-  // One graphic per mood (V5). The sheet is four walk frames then sit, sleep
-  // and groom; running is the walk cycle played faster, which is enough of a
-  // difference at this size and costs no extra art.
-  const catImage = getSprite('cat_walk')
-  let catAnim = null
-  if (catImage) {
+  // Біг — той самий цикл швидше, і наскільки саме швидше, ВИВОДИТЬСЯ зі
+  // швидкості бігу. Було три підібрані вручну темпи (170/80/140 мс), і вони
+  // розійшлися б із землею тихо, щойно хтось зачепить CAT_RUN_SPEED: лапи
+  // ковзали б, а причину довелося б шукати в двох різних файлах.
+  const runTempo = CAT_SPEED / CAT_RUN_SPEED
+  const catAnim = { current: null }
+  for (const [pose, def] of Object.entries(CAT_SHEETS)) {
+    const image = getSprite(def.key)
+    if (!image) continue
+    const fw = Math.round(image.width / def.frames)
     const sheet = ex.SpriteSheet.fromImageSource({
-      image: catImage,
-      grid: { rows: 1, columns: 7, spriteWidth: 32, spriteHeight: 32 },
+      image,
+      grid: { rows: 1, columns: def.frames, spriteWidth: fw, spriteHeight: image.height },
     })
-    const scale = ex.vec(catActor.width / 32, catActor.height / 32)
-    const make = (frames, ms) => {
+    // Один множник на обидві осі: висота — з `CAT_SHEETS`, ширина сама
+    // випливає з пропорції аркуша, і поза не може сплющитись у принципі.
+    const k = def.h / image.height
+    const frames = [...Array(def.frames).keys()]
+    const make = (ms) => {
       const a = ex.Animation.fromSpriteSheet(sheet, frames, ms)
-      a.scale = scale
+      a.scale = ex.vec(k, k)
       return a
     }
-    catAnim = {
-      stroll: make([0, 1, 2, 3], 170),
-      run:    make([0, 1, 2, 3], 80),
-      follow: make([0, 1, 2, 3], 140),
-      sit:    make([4], 1000),
-      sleep:  make([5], 1000),
-      groom:  make([6], 1000),
-      current: null,
-    }
+    catAnim[pose] = make(def.frameMs)
+    // Швидкий варіант — лише в ходи: сидіти й спати швидше нема як.
+    if (!CAT_STILL_POSES.includes(pose)) catAnim[`${pose}Run`] = make(def.frameMs * runTempo)
+  }
+  if (catAnim.sit) {
     catActor.graphics.use(catAnim.sit)
     catAnim.current = 'sit'
   }
