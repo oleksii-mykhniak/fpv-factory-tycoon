@@ -24,7 +24,9 @@ import { dwellProgress } from '../sim/systems/zone.js'
 import { piggyShouldShow, nextObjective } from '../sim/derive.js'
 import { ruleAt } from '../state/locations.js'
 import { CARRY_STACK_OFFSET_Y, VIEW_SMOOTHING, SALVAGE_RATE,
-         CARRY_IN_HANDS_Y } from '../state/config.js'
+         CARRY_IN_HANDS_Y, CARRY_IN_HANDS_SIDE_X,
+         CARRY_OVER_HEAD_Y } from '../state/config.js'
+import { carryPlacement } from '../scene/pose.js'
 import * as ex from 'excalibur'
 
 // Purely presentational memo: which sprite is on the drone actor right now, and
@@ -300,25 +302,36 @@ function syncWorkers(refs, world) {
 }
 
 
-// Items float above the head, stacked upward in pickup order. Shared by the
-// player and every hired worker.
-// `pose` — поза того, хто несе (`pickPose`), або null у рига без поз (наймані
-// робітники). Від неї залежать дві речі, і обидві — про те, як предмет сидить
-// у кадрі, а не про те, що це за предмет:
+// Предмет, який персонаж несе. Shared by the player and every hired worker.
 //
-//   'upCarry' — руки вперед (йде від глядача). Предмет сидить на рівні пояса
-//   ЗА фігурою, і назовні видно самі його краї. У решті поз стек висить над
-//   головою, як і раніше.
+// `pose` — поза того, хто несе (`pickPose`), або null у рига без поз. Саме
+// розміщення виводить `carryPlacement`: воно читає лише напрямок погляду й
+// тому живе поруч із вибором пози, а не тут. Тут лишається переклад його
+// відповіді в координати.
 //
-//   'side' — профіль. Коробка показує ракурс у три чверті (`carrySpriteKey`) і
-//   дзеркалиться разом із фігурою, інакше людина йде вліво, а ящик у неї в
-//   руках повернутий вправо.
+// Раніше предмет ішов у руки ЛИШЕ в позі `upCarry` (хода від глядача) — рівно
+// там, де аркуш намальований із виставленими руками. У решті поз він висів над
+// головою, і одна й та сама коробка на шляху від дверей до верстака двічі
+// стрибала з голови в руки й назад — на кожному повороті.
+//
+// Тепер у руках вона в БУДЬ-ЯКІЙ позі. Ціна відома й прийнята: аркуші ходьби
+// вбік і до глядача намальовані з опущеними руками, тож коробка поки висить
+// там, де руки МАЮТЬ бути. Це виглядає неточно рівно доти, доки аркуші не
+// перемалюють, — і все одно читається як ноша, чого «над головою» не робило
+// ніколи.
 function syncCarryStack(slots, bodyActor, agent, pose = null) {
   const items = agent.carrying ?? []
-  const inHands = pose === 'upCarry'
+  const { inHands, behind, sideways } = carryPlacement(pose)
   const baseY = inHands
     ? bodyActor.pos.y + bodyActor.height * CARRY_IN_HANDS_Y
-    : bodyActor.pos.y - bodyActor.height * 0.55
+    : bodyActor.pos.y - bodyActor.height * CARRY_OVER_HEAD_Y
+  // Знак зсуву — з напрямку, яким іде сам персонаж, а не з прапорця дзеркалення
+  // актора: дзеркалення залежить ще й від того, в який бік намальований аркуш
+  // (`AI_SIDE_FACES_RIGHT`), і виводити з нього напрямок ходи означало б
+  // зав'язати розміщення на те, як художник повернув персонажа.
+  const facing = (agent.facing ?? 1) >= 0 ? 1 : -1
+  const baseX = bodyActor.pos.x +
+    (sideways ? facing * bodyActor.width * CARRY_IN_HANDS_SIDE_X : 0)
 
   ;(slots ?? []).forEach((actor, i) => {
     const item = items[i]
@@ -333,21 +346,29 @@ function syncCarryStack(slots, bodyActor, agent, pose = null) {
       applySpriteFitted(actor, key)
       actor._carryKey = key
     }
-    // Дзеркалимо разом із фігурою — і лише те, що має бік. Фас і розгортка
-    // симетричні, тож для них це порожня операція; три чверті без цього
-    // дивилися б назустріч ході.
-    actor.graphics.flipHorizontal = pose === 'side' && bodyActor.graphics.flipHorizontal
-    actor.pos.x = bodyActor.pos.x
+    // Три чверті намальовані на один бік, тож у профіль їх дзеркалить напрямок
+    // ходи: інакше людина йде вліво, а ящик у неї в руках повернутий вправо.
+    // Фас і розгортка симетричні — для них це порожня операція, і вмикати її
+    // там нема потреби.
+    actor.graphics.flipHorizontal = sideways && facing > 0
+    actor.pos.x = baseX
     // Другий і третій предмети стають НА перший — і в руках, і над головою це
     // та сама стопка, лише з різною точкою опори. Сьогодні це недосяжна гілка:
     // CARRY_CAPACITY === 1. Якщо місткість колись виросте, стопку В РУКАХ
     // доведеться переглянути: три коробки заввишки третину людини кожна
     // ховають голову, і над головою вони читаються краще, ніж у руках.
     actor.pos.y = baseY - i * CARRY_STACK_OFFSET_Y
-    // У руках предмет ЗА фігурою: він далі від камери, ніж спина того, хто
-    // його несе. Тому персонаж перекриває його, а з боків видно краї — саме це
-    // й читається як «несе перед собою», а не «тримає замість тулуба».
-    actor.z = inHands
+    // Глибина — єдина помилка розміщення, яку видно з першого погляду.
+    //
+    // Йдучи ВІД глядача, людина несе предмет по ТОЙ бік себе: фігура його
+    // перекриває, назовні видно самі краї, і це читається як «несе перед
+    // собою». Йдучи ДО глядача — по цей: предмет затуляє ноги, і це читається
+    // так само. Переставити їх місцями — і персонаж або тримає коробку замість
+    // тулуба, або йде повз неї.
+    //
+    // Над головою (`!inHands`) предмет попереду завжди: там перекривати нема
+    // чого.
+    actor.z = inHands && behind
       ? bodyActor.pos.y * 0.01 - 0.5 + i * 0.01
       : bodyActor.pos.y * 0.01 + 1 + i * 0.01
     actor.graphics.visible = true

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pickPose } from './pose.js'
+import { pickPose, carryPlacement } from './pose.js'
 import { carrySpriteKey } from '../defs/interactions.js'
 
 // Риг із ШІ-аркушів: що показуємо і куди дивимось.
@@ -112,5 +112,41 @@ describe('ракурс коробки в руках', () => {
   it('дрон ракурсів не має — поза його не чіпає', () => {
     const drone = { type: 'drone', kitId: 'mini_drone' }
     expect(carrySpriteKey(drone, 'side')).toBe(carrySpriteKey(drone, 'down'))
+  })
+})
+
+// Розміщення ноші. Перевіряємо не координати (їх дає сцена), а рішення: на
+// поясі чи над головою, ближче до камери чи далі, зсунуте по ходу чи ні.
+describe('куди кладемо ношу', () => {
+  it('у кожній позі — в руки, а не над головою', () => {
+    for (const p of ['idle', 'idleUp', 'down', 'up', 'side', 'upCarry'])
+      expect(carryPlacement(p).inHands, p).toBe(true)
+  })
+
+  it('без пози (риг найманих робітників) — над головою', () => {
+    // Там чотири кадри без натяку на напрямок: класти в руки нема куди.
+    expect(carryPlacement(null).inHands).toBe(false)
+    expect(carryPlacement(undefined).inHands).toBe(false)
+  })
+
+  it.each(['up', 'upCarry', 'idleUp'])('%s — ноша ЗА фігурою', (p) => {
+    expect(carryPlacement(p).behind).toBe(true)
+  })
+
+  it.each(['idle', 'down', 'side'])('%s — ноша ПЕРЕД фігурою', (p) => {
+    expect(carryPlacement(p).behind).toBe(false)
+  })
+
+  it('зсув по ходу — лише в профіль', () => {
+    expect(carryPlacement('side').sideways).toBe(true)
+    for (const p of ['idle', 'idleUp', 'down', 'up', 'upCarry'])
+      expect(carryPlacement(p).sideways, p).toBe(false)
+  })
+
+  it('над головою ноша не буває ні за фігурою, ні зсунутою', () => {
+    // Інакше сцена зсувала б те, що ні з чим не перетинається.
+    expect(carryPlacement(null)).toEqual({
+      inHands: false, behind: false, sideways: false,
+    })
   })
 })
