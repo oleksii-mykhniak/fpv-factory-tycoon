@@ -26,7 +26,7 @@ import { ruleAt } from '../state/locations.js'
 import { CARRY_STACK_OFFSET_Y, VIEW_SMOOTHING, SALVAGE_RATE,
          CARRY_IN_HANDS_Y, CARRY_IN_HANDS_SIDE_X, CARRY_OVER_HEAD_Y,
          CAT_WALK_MOODS, CAT_SIDE_FACES_RIGHT,
-         CAT_STILL_SPEED } from '../state/config.js'
+         CAT_STILL_SPEED, ARROW_ORBIT_R, ARROW_ORBIT_DY } from '../state/config.js'
 import { carryPlacement, catPose } from '../scene/pose.js'
 import * as ex from 'excalibur'
 
@@ -431,10 +431,12 @@ function syncArrow(refs, world, player) {
   if (d < 90) { arrow.graphics.visible = false; return }
 
   // Ride just outside the character, in the direction of travel, bobbing so it
-  // reads as a hint rather than part of the scenery.
+  // reads as a hint rather than part of the scenery. Орбіта рахується від
+  // центру персонажа, а не від голови: інакше стрілка «вбік» висить на висоті
+  // чола й читається як вказівка вгору-вбік.
   const bob = Math.sin(Date.now() / 260) * 4
-  arrow.pos.x = refs.player.pos.x + (dx / d) * 76
-  arrow.pos.y = refs.player.pos.y + (dy / d) * 76 - 30 + bob
+  arrow.pos.x = refs.player.pos.x + (dx / d) * ARROW_ORBIT_R
+  arrow.pos.y = refs.player.pos.y + (dy / d) * ARROW_ORBIT_R + ARROW_ORBIT_DY + bob
   // Стрілка намальована вістрям УГОРУ, тому +π/2: `atan2` міряє від осі X, а
   // верхнє вістря дивиться на -π/2. Знак тут не косметика — з нього стрілка
   // або веде до цілі, або рівно від неї, і на екрані це однаково схоже на
